@@ -96,3 +96,104 @@ model-based splitter, keeping determinism and zero downloads.
 - Budget boundary rule (stop-before-exceed) biases against large-chunk
   configs at small B; consider also reporting "truncate-final-chunk" variant
   as a robustness check.
+
+---
+
+## 2026-07-03 — Day 2: data pipeline, span metrics, paired bootstrap, BM25
+
+### Environment re-survey (network policy CHANGED since day 1)
+
+Re-probed the day-1 blocklist today; two hosts flipped to open:
+
+| Endpoint | Day 1 | Today | Consequence |
+|---|---|---|---|
+| huggingface.co | 403 | **OPEN** (200, HF_TOKEN present in env) | small dense retrievers + HF datasets now feasible |
+| openaipublic.blob.core.windows.net | blocked | **OPEN** (206) | tiktoken BPE vocab downloadable → real BPE robustness check |
+| codeload.github.com | 403 | 403 | still no tarballs/release assets |
+
+Design update recorded in ROADMAP + README: phase 2 adds a CPU-sized
+sentence-transformer dense retriever (all-MiniLM-L6-v2, 22M params) to cover
+the lexical-vs-dense axis, and the tokenizer robustness check uses real
+tiktoken BPE. The regex tokenizer stays the primary unit (deterministic,
+dependency-free) — this was always the design, not just a workaround.
+
+### Built today (all of day 1's plan, including the stretch item)
+
+- `TokenIndex.tokens_overlapping(start, end)` — gold spans need not be
+  token-aligned, so metrics count tokens by character overlap, not
+  containment. Chunk queries keep using containment (`tokens_in`).
+- `src/data.py` — SQuAD loader. Articles rebuilt by joining paragraph
+  contexts with `\n\n`; every answer span remapped to article coordinates
+  and verified verbatim (mismatch = hard error, never a skip). Unanswerable
+  v2 questions dropped; duplicate (article, question-text) pairs dropped;
+  identical annotated spans collapsed. Gold representation:
+  `gold_alternatives: tuple[tuple[GoldSpan, ...], ...]` — alternatives of
+  jointly-required span sets. SQuAD = one singleton alternative per distinct
+  annotation (max-over-answers); Chroma corpora later = one alternative with
+  all references. One scoring path handles both. Downloads pinned by URL +
+  SHA256 (`python -m src.data`); payloads gitignored.
+  `sample_questions(ds, cap, seed)` seeds per-document (`f"{seed}:{doc_id}"`)
+  so a document's sample is independent of which other documents are in the
+  run — subset grids stay comparable.
+- `src/metrics.py` — `take_until_budget` (stop-before-exceed; budget charges
+  per-chunk prompt tokens, duplicates included), `span_scores` (recall /
+  precision / IoU on token-index sets, union for scoring so redundant overlap
+  costs budget without earning recall; independent max over alternatives),
+  `hit_at_k` (interval-intersection on contiguous token ranges), and
+  `paired_bootstrap` (numpy percentile CI over per-question diffs, fixed
+  seed, vectorized resampling).
+- `src/retrievers.py` — BM25 from scratch (Okapi, Lucene-smoothed
+  non-negative idf `ln(1 + (N-df+.5)/(df+.5))`, k1=1.5, b=0.75, unique query
+  terms, deterministic index tie-break). Tested against a fully
+  hand-computed 3-doc example (expected scores derived independently of the
+  implementation) plus property tests (b=0 kills length normalization,
+  duplicate docs tie, unseen terms → identity order).
+- Tests: 80 → **134 passing** (~0.5 s). Includes a real-data integration
+  test (skipped gracefully when `data/` is empty).
+
+### Real-data numbers (recorded facts, not results)
+
+- dev-v1.1: 48 articles, **10,533** questions after dedup (10,570 − 37 dup
+  texts). Doc lengths (regex tokens): min 2,751 / median 6,157 / max 16,764.
+- dev-v2.0 (answerable only): 35 articles, 5,923 questions, median 4,704.
+
+### End-to-end smoke (8 articles × 25 q/article, BM25, NOT README results)
+
+| chunker (128 tok) | SpanRecall@200 | SpanRecall@400 | hit@5 |
+|---|---|---|---|
+| fixed | 0.700 | 0.847 | 0.920 |
+| sentence | 0.780 | 0.880 | 0.930 |
+| recursive | 0.741 | 0.884 | 0.940 |
+
+Pipeline runs ~0.15 s per config on this slice → full grid (3 chunkers × 4
+sizes × 3 overlaps × 48 articles × 50 q) is minutes on CPU, so no question
+cap compromise needed. The sentence-vs-fixed gap at B=200 (+0.08 recall) is
+exactly the kind of effect the benchmark exists to pin down with CIs —
+promising, but smoke-scale; do not cite.
+
+### Next steps (Day 3, in order)
+
+1. `experiments/run_grid.py`: experiment runner — config dataclass (dataset,
+   chunker, size, overlap, retriever, budgets, seed, question cap), writes
+   one JSON per config into `results/raw/` with per-question scores +
+   config + git-describable metadata. Deterministic; resumable (skip
+   existing result files).
+2. First real grid on dev-v1.1: chunkers {fixed, sentence, recursive} ×
+   sizes {64, 128, 256, 512} × overlap 0, BM25, budgets {200, 400, 800,
+   1600}, per-doc cap 50 seed 0 (~2,400 questions). Save raw scores.
+3. `experiments/summarize.py`: aggregate raw scores → markdown table with
+   means + 95% paired bootstrap CIs vs. a designated baseline (fixed-256).
+4. Start populating README Experiments with the first real table.
+5. If time: Chroma corpora loader (verify gold excerpt offsets against
+   corpus files first — day-1 open question still stands).
+
+### Open questions (carried + new)
+
+- Chroma corpora reference offsets still unverified (day-1 item).
+- Overlap ablation: overlap fractions {0, 12.5%, 25%} of chunk size — run
+  after the size grid so the baseline table stays small.
+- Budget boundary rule: also report truncate-final-chunk variant as
+  robustness check (day-1 item, unresolved).
+- Dense retriever: embed chunks once per (chunker, size) config — cache
+  embeddings to disk to keep the grid fast; sizing pass needed (48 docs ×
+  ~50-260 chunks × 384 dims ≈ fine for RAM, check disk).

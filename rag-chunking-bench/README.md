@@ -53,9 +53,19 @@ exhausted (the first chunk that would exceed *B* stops accumulation). With
 - **SpanPrecision@B** = |C ∩ G| / |C|
 - **SpanIoU@B**   = |C ∩ G| / |C ∪ G|
 
+Two accounting rules make the comparison fair. The budget charges *prompt*
+tokens — each retrieved chunk costs its own token count, duplicates included,
+because that is what a generator would be handed — while scoring uses the
+*union* of retrieved tokens, so redundant overlap spends budget without
+earning recall. And when a dataset annotates several alternative gold spans
+for one question (SQuAD's multiple annotations), each metric takes the max
+over alternatives, the standard max-over-answers convention; corpora whose
+references are jointly required score against their union through the same
+code path.
+
 Metrics are computed per question and aggregated with means and 95% paired
 bootstrap confidence intervals (fixed seed). Budgets sweep
-B ∈ {200, 400, 800, 1600} tokens; classic Recall@k is also reported for
+B ∈ {200, 400, 800, 1600} tokens; classic hit@k is also reported for
 comparability with prior work.
 
 Token counting uses a deterministic regex word/punctuation tokenizer
@@ -79,19 +89,22 @@ scoring exact rather than fuzzy-matched.
 
 ### Retrievers
 
-BM25 (lexical), TF-IDF cosine (sparse), and LSA (low-rank dense, TruncatedSVD
-over TF-IDF). BEIR (Thakur et al., 2021) established BM25 as a robust
-zero-shot baseline; the chunking effect is measured holding each retriever
-fixed, and retriever × chunker interaction is itself a studied variable.
-Neural dense retrievers are excluded by environment constraints (see
-Limitations).
+BM25 (lexical, implemented from scratch in `src/retrievers.py` and tested
+against a hand-computed example), TF-IDF cosine (sparse), and LSA (low-rank
+dense, TruncatedSVD over TF-IDF). BEIR (Thakur et al., 2021) established BM25
+as a robust zero-shot baseline; the chunking effect is measured holding each
+retriever fixed, and retriever × chunker interaction is itself a studied
+variable. A neural dense retriever (a small sentence-transformer running on
+CPU) is planned for phase 2 to cover the lexical-vs-dense axis.
 
 ### Datasets
 
-- **SQuAD-derived long documents**: Wikipedia articles reconstructed by
-  concatenating each article's paragraphs, with answer spans mapped into
-  article coordinates — natural questions with exact gold spans in ~3–6k-token
-  documents.
+- **SQuAD-derived long documents** (`src/data.py`): Wikipedia articles
+  reconstructed by concatenating each article's paragraphs, with answer spans
+  remapped into article coordinates and verified verbatim at load time.
+  dev-v1.1 yields 48 documents (2.7k–16.8k tokens, median 6.2k) and 10,533
+  answerable questions after deduplication. Raw JSON is fetched from pinned
+  URLs with SHA256 checks (`python -m src.data`).
 - **Chroma chunking-evaluation corpora** (Smith & Troynikov, 2024): five
   heterogeneous corpora (state-of-the-union, Wikitexts, chat logs, finance,
   PubMed) with question/gold-excerpt pairs; queries are LLM-generated, which
@@ -109,8 +122,11 @@ runs checked into `experiments/` and `results/`.**
 
 ## Status
 
-- [x] Phase 1 (harness): offset-preserving chunkers + tokenization, 80 tests
-- [ ] Phase 1 (harness): dataset loaders, span metrics, budget-matched retrieval loop
+- [x] Phase 1 (harness): offset-preserving chunkers + tokenization
+- [x] Phase 1 (harness): SQuAD loader with verified spans, span metrics,
+      budget-matched accumulation, paired bootstrap, BM25 (134 tests)
+- [ ] Phase 1 (harness): Chroma corpora loader, TF-IDF/LSA retrievers,
+      experiment runner
 - [ ] Phase 2: baseline grid runs
 - [ ] Phase 3: ablations, error analysis, significance testing
 - [ ] Phase 4: full writeup
@@ -119,11 +135,11 @@ Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).
 
 ## Limitations
 
-- CPU-only environment without access to model hosts: retrievers are
-  lexical/sparse/low-rank-dense; findings about chunking × *neural* retriever
-  interaction are out of scope and flagged as future work.
+- CPU-only environment: neural retrieval is limited to small
+  sentence-transformer models; findings may not transfer to large dense
+  retrievers or cross-encoder rerankers.
 - The regex tokenizer approximates BPE token counts; budget conclusions are
-  in "word-token" units (a BPE robustness check is planned).
+  in "word-token" units (a tiktoken BPE robustness check is planned).
 - Chroma corpora queries are LLM-generated (dataset provenance, not ours);
   SQuAD questions are human-written but crowd-sourced over single paragraphs.
 

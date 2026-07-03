@@ -4,10 +4,10 @@ Every downstream component (chunkers, span-level metrics, budget-matched
 retrieval) counts tokens with the same tokenizer, so the choice only needs to
 be consistent and reproducible, not identical to any particular model's BPE.
 The default is a regex word/punctuation tokenizer: it requires no downloaded
-vocabulary (this environment cannot reach BPE vocab hosts), is stable across
-platforms, and its counts correlate strongly with BPE counts on English prose.
-The `Tokenizer` protocol lets a BPE tokenizer slot in later without touching
-the chunkers or metrics.
+vocabulary, is stable across platforms and library versions, and its counts
+correlate strongly with BPE counts on English prose. The `Tokenizer` protocol
+lets a BPE tokenizer (e.g. tiktoken) slot in as a robustness check without
+touching the chunkers or metrics.
 """
 
 from __future__ import annotations
@@ -75,3 +75,14 @@ class TokenIndex:
 
     def count_in(self, start: int, end: int) -> int:
         return len(self.tokens_in(start, end))
+
+    def tokens_overlapping(self, start: int, end: int) -> range:
+        """Indices of tokens overlapping [start, end) by at least one character.
+
+        Chunk boundaries are token-aligned, but gold answer spans need not be;
+        scoring uses overlap so a span that starts or ends mid-token still
+        claims that token.
+        """
+        lo = bisect.bisect_right(self._ends, start)
+        hi = bisect.bisect_left(self._starts, end)
+        return range(lo, max(lo, hi))

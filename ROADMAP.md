@@ -32,11 +32,13 @@ rigorously. It also feeds directly back into my `financial-rag-chatbot`.
    structural chunking, per-dataset error analysis, significance testing.
 4. **Writeup** — README as a full research report with real tables and limitations.
 
-**Environment constraints (recorded so results are honest).** CPU-only, no
-HuggingFace access from this environment. Retrievers are therefore lexical (BM25),
-sparse (TF-IDF), and low-rank dense (LSA) — BEIR (Thakur et al., 2021) showed BM25
-is a robust baseline, and the chunking effect is measured holding the retriever
-fixed. Neural dense retrievers are listed as a limitation, not silently faked.
+**Environment constraints (recorded so results are honest).** CPU-only (4 cores,
+16 GB RAM). Network access widened on 2026-07-03: HuggingFace and the tiktoken
+vocab host are now reachable (both were blocked on day 1), so phase 2 adds a
+small CPU-sized sentence-transformer dense retriever (e.g. all-MiniLM-L6-v2)
+alongside BM25 / TF-IDF / LSA, and the BPE tokenizer robustness check becomes
+real rather than hypothetical. Large dense retrievers and cross-encoder
+rerankers remain out of scope on this hardware and are listed as limitations.
 
 ## Backlog (next flagships, roughly prioritized)
 
