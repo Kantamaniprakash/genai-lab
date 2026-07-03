@@ -1,0 +1,2 @@
+# Python 3.11. Dependencies are added the day they are first used.
+pytest==9.1.1
