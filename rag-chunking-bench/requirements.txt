@@ -1,3 +1,4 @@
 # Python 3.11. Dependencies are added the day they are first used.
 pytest==9.1.1
 numpy==2.3.1
+matplotlib==3.11.0

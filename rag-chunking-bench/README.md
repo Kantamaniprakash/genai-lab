@@ -112,23 +112,111 @@ CPU) is planned for phase 2 to cover the lexical-vs-dense axis.
 
 ## Experiments
 
-Phase 2+ will populate this section with real tables. Planned grid: chunker ×
-chunk size {64, 128, 256, 512} × overlap {0%, 12.5%, 25%} × retriever ×
-budget, plus ablations (sentence-boundary alignment, separator hierarchy,
-tokenizer robustness) and per-dataset error analysis.
+Every number below comes from runs checked into `results/raw/` (per-question
+scores, gzipped JSON, with config + git commit embedded) and is regenerable:
 
-**No results are reported yet; every number that appears here will come from
-runs checked into `experiments/` and `results/`.**
+```bash
+python -m experiments.run_grid        # 12 configs, ~25 s on 4 CPU cores
+python -m experiments.summarize       # tables incl. paired CIs -> results/summary_*.md
+python -m experiments.make_figures    # figures -> results/figures/
+```
+
+### Baseline grid (phase 2, first slice)
+
+Setup: SQuAD dev-v1.1 as 48 reconstructed articles; 2,400 questions
+(50/article, seeded sampling); BM25; chunkers {fixed, sentence, recursive} ×
+sizes {64, 128, 256, 512} tokens, no overlap; budgets B ∈ {200, 400, 800,
+1600}; stop-before-exceed budget rule. 95% CIs are paired bootstrap over
+questions (10,000 resamples). Full tables: [`results/summary_dev-v1.1_bm25.md`](results/summary_dev-v1.1_bm25.md).
+
+**SpanRecall@B (mean over 2,400 questions)**
+
+| config | B=200 | B=400 | B=800 | B=1600 |
+|---|---|---|---|---|
+| fixed-64 | 0.812 | 0.879 | 0.919 | 0.958 |
+| fixed-128 | 0.700 | 0.867 | 0.925 | 0.961 |
+| fixed-256 | 0.012 | 0.744 | 0.895 | 0.952 |
+| fixed-512 | 0.006 | 0.023 | 0.757 | 0.928 |
+| sentence-64 | **0.865** | **0.919** | **0.952** | 0.971 |
+| sentence-128 | 0.745 | 0.886 | 0.940 | **0.975** |
+| sentence-256 | 0.029 | 0.763 | 0.908 | 0.956 |
+| sentence-512 | 0.008 | 0.033 | 0.767 | 0.933 |
+| recursive-64 | 0.805 | 0.873 | 0.917 | 0.953 |
+| recursive-128 | 0.741 | 0.880 | 0.930 | 0.966 |
+| recursive-256 | 0.359 | 0.835 | 0.925 | 0.966 |
+| recursive-512 | 0.009 | 0.203 | 0.810 | 0.928 |
+
+![SpanRecall vs. budget for each chunker and chunk size](results/figures/recall_budget_curves_dev-v1.1_bm25.png)
+
+*Budget curves per chunker family. Under budget matching, smaller chunks
+dominate at every budget: 64-token chunks are never worse than larger ones,
+and configs whose chunks exceed the budget collapse to ~0 (stop-before-exceed
+retrieves nothing — see finding 4). CI bands are barely visible at n=2,400.*
+
+### Findings so far
+
+**1. Under budget matching, smaller chunks win — significantly.** At B=400,
+fixed-64 beats the fixed-256 baseline by **+0.134 [+0.117, +0.152]**
+SpanRecall; fixed-128 by +0.122 [+0.107, +0.138]. The advantage shrinks as
+the budget grows (+0.024 [+0.012, +0.036] at B=800; n.s. at B=1600) but
+never reverses: with a finite context budget, many small high-precision
+pieces beat few large diluted ones on this corpus.
+
+**2. Fixed-k evaluation reverses that ranking — the confound is real and
+large.** hit@5 *increases* monotonically with chunk size (fixed: 0.873 →
+0.917 → 0.944 → 0.969 for 64 → 512), simply because a bigger retrieved unit
+contains more text; budget-matched SpanRecall@400 moves the opposite way
+(0.879 → 0.023). A fixed-k comparison would conclude "use 512-token chunks";
+a budget-matched one concludes the reverse at practical budgets. This is the
+central methodological claim of the project, now measured:
+
+![hit@5 rises with chunk size while SpanRecall@400 falls](results/figures/metric_reversal_dev-v1.1_bm25.png)
+
+*The same 12 runs scored two ways. Left: classic fixed-k hit rate rewards
+larger chunks. Right: holding retrieved tokens constant instead of k, the
+ordering reverses.*
+
+**3. Sentence alignment gives a consistent, modest, significant edge at
+matched size.** Paired same-size comparisons of sentence vs. fixed at B=400:
++0.041 [+0.029, +0.052] at size 64, +0.020 [+0.008, +0.031] at 128, +0.018
+[+0.004, +0.033] at 256, +0.010 [+0.003, +0.017] at 512 — all significant,
+all small relative to the size effect. Respecting sentence boundaries helps;
+it does not rescue an oversized chunk.
+
+**4. "Matched nominal size" is itself confounded by chunk under-filling.**
+The recursive chunker's apparent wins at larger sizes (e.g. +0.348 [+0.329,
++0.367] over fixed-256 at B=200) trace to its realized chunks being smaller
+than nominal (mean 189 tokens at size 256, vs. 250 for the fixed chunker —
+see the chunk-statistics table in the summary). Its effective operating
+point is simply further down the size axis, where recall is higher. Chunking
+comparisons should report realized chunk-size distributions, not just the
+configured maximum.
+
+**5. Stop-before-exceed makes size > budget configs retrieve nothing** —
+utilization is ~0 when the smallest chunk exceeds B (e.g. fixed-512 at
+B≤400), which reads as SpanRecall ≈ 0. This is a protocol artifact worth
+keeping visible rather than hiding: it is exactly the deployment failure of
+pairing a large-chunk index with a small context window. A
+truncate-final-chunk variant is planned as a robustness check.
+
+A note on the other span metrics: on SQuAD, gold answers average ~3 tokens,
+so SpanPrecision@B is dominated by 1/|retrieved| and is nearly identical
+across configs at a given budget (see summary tables). Recall is the
+informative span metric here; precision/IoU become discriminative on corpora
+with long gold references (Chroma corpora, phase 2).
 
 ## Status
 
 - [x] Phase 1 (harness): offset-preserving chunkers + tokenization
 - [x] Phase 1 (harness): SQuAD loader with verified spans, span metrics,
       budget-matched accumulation, paired bootstrap, BM25 (134 tests)
-- [ ] Phase 1 (harness): Chroma corpora loader, TF-IDF/LSA retrievers,
-      experiment runner
-- [ ] Phase 2: baseline grid runs
-- [ ] Phase 3: ablations, error analysis, significance testing
+- [x] Phase 1 (harness): deterministic resumable grid runner, summarizer
+      with paired CIs, figure generation (150 tests)
+- [x] Phase 2: baseline size grid on dev-v1.1 with BM25 (12 configs — tables
+      and figures above)
+- [ ] Phase 2: overlap ablation, TF-IDF/LSA + dense (MiniLM) retrievers,
+      Chroma corpora loader, truncate-final-chunk robustness check
+- [ ] Phase 3: ablations, error analysis, tokenizer (BPE) robustness
 - [ ] Phase 4: full writeup
 
 Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).
@@ -138,6 +226,17 @@ Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).
 - CPU-only environment: neural retrieval is limited to small
   sentence-transformer models; findings may not transfer to large dense
   retrievers or cross-encoder rerankers.
+- Results so far are one retriever (BM25) on one dataset (SQuAD dev-v1.1
+  articles) with one sampling seed; the grid protocol supports more of each,
+  and retriever × chunker interaction is explicitly untested until TF-IDF /
+  LSA / dense runs land.
+- SQuAD gold answers are short spans inside single paragraphs, which makes
+  SpanPrecision/IoU nearly uninformative here (see Experiments note) and may
+  favor small chunks more than corpora with long, multi-sentence evidence
+  would.
+- The stop-before-exceed budget rule zeroes configs whose chunks exceed the
+  budget; a truncate-final-chunk variant is a planned robustness check, and
+  the budget-utilization table makes the affected cells explicit.
 - The regex tokenizer approximates BPE token counts; budget conclusions are
   in "word-token" units (a tiktoken BPE robustness check is planned).
 - Chroma corpora queries are LLM-generated (dataset provenance, not ours);
@@ -172,7 +271,13 @@ Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).
 
 ```bash
 pip install -r requirements.txt
-python -m pytest tests/ -q
+python -m pytest tests/ -q          # 150 tests
+python -m src.data                  # fetch SQuAD (pinned URLs + SHA256)
+python -m experiments.run_grid      # rerun the grid (results are resumable)
+python -m experiments.summarize
+python -m experiments.make_figures
 ```
 
-Python 3.11. Experiment run scripts land in `experiments/` in phase 2.
+Python 3.11. Runs are deterministic end-to-end (seeded sampling,
+deterministic retrievers with index tie-breaks, fixed bootstrap seeds), so
+the tables and figures above reproduce bit-for-bit.

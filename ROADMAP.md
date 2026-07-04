@@ -22,12 +22,14 @@ chunkers, chunk sizes, and retrievers — with paired bootstrap confidence inter
 on span-level metrics — is a genuine gap at a scale one person can execute
 rigorously. It also feeds directly back into my `financial-rag-chatbot`.
 
-**Phase.** 1 of 4 — harness construction.
+**Phase.** 2 of 4 — baselines (first grid landed 2026-07-04: 12 configs on
+dev-v1.1 with BM25; headline result = fixed-k vs budget-matched ranking
+reversal, see project README).
 
 1. **Harness** — offset-preserving chunkers, tokenization, span-level metrics,
-   budget-matched retrieval protocol, dataset loaders. *(current)*
+   budget-matched retrieval protocol, dataset loaders. *(done except Chroma loader)*
 2. **Baselines** — BM25 / TF-IDF / LSA retrievers over all chunker x size x overlap
-   configs on SQuAD-derived long documents + Chroma eval corpora.
+   configs on SQuAD-derived long documents + Chroma eval corpora. *(current)*
 3. **Ablations & analysis** — budget curves, overlap ablation, semantic vs.
    structural chunking, per-dataset error analysis, significance testing.
 4. **Writeup** — README as a full research report with real tables and limitations.

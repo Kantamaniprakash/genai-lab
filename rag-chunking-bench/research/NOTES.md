@@ -197,3 +197,78 @@ promising, but smoke-scale; do not cite.
 - Dense retriever: embed chunks once per (chunker, size) config — cache
   embeddings to disk to keep the grid fast; sizing pass needed (48 docs ×
   ~50-260 chunks × 384 dims ≈ fine for RAM, check disk).
+
+---
+
+## 2026-07-04 — Day 3: first real grid, paired CIs, figures — phase 2 opens
+
+### Built today
+
+- `experiments/run_grid.py` — deterministic, resumable grid runner. One
+  gzipped JSON per config in `results/raw/` with per-question scores AND
+  per-budget `chunks`/`tokens` spent (that last field turned out to be the
+  key to interpreting two findings — always store utilization). Configs
+  embed git commit (+dirty flag), library versions. Code was committed
+  *before* running so result files reference a clean commit (52ac809).
+- `experiments/aggregate.py` — result loading, qid-alignment check (paired
+  comparisons refuse to run on mismatched question sets), mean/diff
+  bootstrap CIs.
+- `experiments/summarize.py` — full markdown summary with 10k-resample
+  paired CIs vs. fixed-256 baseline → `results/summary_dev-v1.1_bm25.md`.
+- `experiments/make_figures.py` — two README figures regenerated purely
+  from `results/raw/`; CVD-validated palette; CI bands.
+- Tests 134 → 150 (synthetic 3-paragraph dataset with distinctive vocab so
+  BM25 behavior is predictable; determinism, resume/skip/force, alignment
+  rejection, degenerate-CI sanity checks).
+
+### The grid (12 configs × 2,400 q, ~22 s total)
+
+Results in README + summary. Findings, with numbers I'd defend:
+
+1. **Small chunks dominate under budget matching.** fixed-64 vs fixed-256 at
+   B=400: +0.134 [+0.117, +0.152] SpanRecall. Monotone in size at every
+   budget; effect shrinks with budget (n.s. by B=1600 for 64 vs 256).
+2. **Metric reversal (headline).** hit@5 rises with size (fixed: .873→.969
+   for 64→512) while SpanRecall@400 falls (.879→.023). The confound the
+   project was built to expose, now measured with CIs. This is the figure
+   to lead any writeup with (`metric_reversal_*.png`).
+3. **Sentence packing > fixed windows at matched size** (paired, B=400):
+   +0.041/+0.020/+0.018/+0.010 for sizes 64/128/256/512, all significant.
+   Computed ad hoc — same-size pairwise diffs are NOT in summarize.py yet.
+4. **Nominal size ≠ realized size.** recursive-256 "beats" fixed-256
+   (+0.348 at B=200) but its chunks average 189 tokens vs 250 — it just
+   operates further down the size axis. Chunk-stats table is essential
+   context for any chunker comparison; papers comparing "at chunk size X"
+   without realized distributions are suspect.
+5. **Stop-before-exceed zeroes size>budget cells** (utilization ~0 for
+   fixed-512 at B≤400). Honest protocol artifact, kept visible; truncation
+   variant still owed.
+6. SQuAD precision/IoU ≈ 1/|C| (gold ~3 tokens) — uninformative here;
+   recall is the metric on this dataset. Precision needs long-reference
+   corpora (Chroma).
+
+### Next steps (Day 4, in order)
+
+1. **Overlap ablation**: fixed {8, 16, 32} overlap at sizes 64/128/256
+   (12.5/25/50% where valid) + sentence overlap_sentences {1, 2}. Runner
+   already takes --overlaps; just run + summarize. Hypothesis: budget
+   accounting (duplicates charged, union scored) makes overlap a net
+   NEGATIVE under budget matching — would be a nice counter-folklore result
+   if it holds.
+2. **Same-size pairwise table** in summarize.py (sentence vs fixed,
+   recursive vs fixed at each size) — I computed these ad hoc today; they
+   belong in the generated summary.
+3. **Truncate-final-chunk budget rule** as a `take_until_budget` variant +
+   rerun grid under it (results to `results/raw/` with a rule field —
+   NOTE: config_id must encode the rule to avoid clobbering; add it to
+   GridConfig with default "stop").
+4. If time: TF-IDF + LSA retrievers (scikit-learn, pin version) → first
+   retriever × chunker interaction numbers.
+
+### Open questions (carried)
+
+- Chroma corpora reference offsets still unverified (day-1 item; needed
+  before precision-focused phase).
+- Dense retriever (MiniLM) embedding cache design (day-2 item).
+- Multi-seed sampling (seed sensitivity of the 50/doc cap) — cheap to run
+  (~22 s/grid), worth doing before the writeup phase claims robustness.
