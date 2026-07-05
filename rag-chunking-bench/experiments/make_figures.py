@@ -195,7 +195,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
-    results = load_raw(args.raw_dir, dataset=args.dataset, retriever=args.retriever)
+    results = load_raw(
+        args.raw_dir,
+        dataset=args.dataset,
+        retriever=args.retriever,
+        budget_rule="stop",
+        overlap=0,
+    )
     if not results:
         raise SystemExit(f"no results for {args.dataset}/{args.retriever} in {args.raw_dir}")
     check_aligned(results)

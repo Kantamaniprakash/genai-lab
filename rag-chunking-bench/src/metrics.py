@@ -41,21 +41,39 @@ class SpanScores:
 
 
 def take_until_budget(
-    ranked: list[Chunk], index: TokenIndex, budget: int
+    ranked: list[Chunk], index: TokenIndex, budget: int, rule: str = "stop"
 ) -> list[Chunk]:
     """Prefix of `ranked` whose summed token counts fit within `budget`.
 
-    Accumulation stops at the first chunk that would exceed the budget
-    (stop-before-exceed); later, smaller chunks are not pulled forward, since
-    that would change the retriever's ranking.
+    Accumulation stops at the first chunk that would exceed the budget. Two
+    rules govern that final chunk:
+
+    - ``"stop"`` (stop-before-exceed, the default): the overflowing chunk is
+      dropped entirely. Later, smaller chunks are not pulled forward, since
+      that would change the retriever's ranking. Under this rule a
+      configuration whose smallest chunk exceeds the budget retrieves nothing.
+    - ``"truncate"`` (truncate-final-chunk): the overflowing chunk is cut,
+      token-aligned, to exactly the remaining budget, so the full budget is
+      always spent when the ranking offers enough text. This is the
+      robustness-check variant: it removes the retrieve-nothing artifact at
+      the price of handing the generator a chunk prefix rather than a chunk.
     """
     if budget < 1:
         raise ValueError("budget must be >= 1")
+    if rule not in ("stop", "truncate"):
+        raise ValueError(f"unknown budget rule {rule!r}")
     taken: list[Chunk] = []
     used = 0
     for chunk in ranked:
         cost = index.count_in(chunk.start, chunk.end)
         if used + cost > budget:
+            remaining = budget - used
+            if rule == "truncate" and remaining > 0:
+                tokens = index.tokens_in(chunk.start, chunk.end)
+                end = index.spans[tokens[remaining - 1]].end
+                taken.append(
+                    Chunk(text=index.text[chunk.start : end], start=chunk.start, end=end)
+                )
             break
         taken.append(chunk)
         used += cost

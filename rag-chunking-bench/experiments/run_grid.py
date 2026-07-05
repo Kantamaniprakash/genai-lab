@@ -57,7 +57,9 @@ class GridConfig:
 
     ``overlap`` is interpreted per chunker family: tokens for ``fixed``,
     sentences for ``sentence``. ``recursive`` has no overlap knob in v1 and
-    accepts only 0.
+    accepts only 0. ``budget_rule`` selects how the budget boundary is
+    handled (see ``metrics.take_until_budget``); the default ``"stop"`` is
+    the primary protocol, ``"truncate"`` the robustness variant.
     """
 
     dataset: str
@@ -69,12 +71,16 @@ class GridConfig:
     hit_ks: tuple[int, ...]
     per_doc_cap: int
     seed: int
+    budget_rule: str = "stop"
 
     @property
     def config_id(self) -> str:
+        # The default rule is omitted so ids (and result filenames) from
+        # grids run before the rule existed remain valid.
+        rule = "" if self.budget_rule == "stop" else f"_{self.budget_rule}"
         return (
             f"{self.dataset}_{self.chunker}{self.chunk_size}_o{self.overlap}"
-            f"_{self.retriever}_cap{self.per_doc_cap}_seed{self.seed}"
+            f"_{self.retriever}_cap{self.per_doc_cap}_seed{self.seed}{rule}"
         )
 
 
@@ -146,7 +152,7 @@ def run_config(
             ranked = [chunks[i] for i in retriever.rank(question.text)]
             budgets: dict[str, dict] = {}
             for budget in cfg.budgets:
-                taken = take_until_budget(ranked, index, budget)
+                taken = take_until_budget(ranked, index, budget, rule=cfg.budget_rule)
                 scores = span_scores(taken, question.gold_alternatives, index)
                 budgets[str(budget)] = {
                     "recall": round(scores.recall, 6),
@@ -221,6 +227,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--hit-ks", nargs="+", type=int, default=[1, 5, 10])
     parser.add_argument("--per-doc-cap", type=int, default=50)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument(
+        "--budget-rule",
+        default="stop",
+        choices=("stop", "truncate"),
+        help="budget boundary handling (see metrics.take_until_budget)",
+    )
     parser.add_argument("--raw-dir", type=Path, default=ROOT / "results" / "raw")
     parser.add_argument(
         "--force", action="store_true", help="rerun configs whose result files exist"
@@ -246,6 +258,7 @@ def main(argv: list[str] | None = None) -> None:
             hit_ks=tuple(args.hit_ks),
             per_doc_cap=args.per_doc_cap,
             seed=args.seed,
+            budget_rule=args.budget_rule,
         )
         for chunker in args.chunkers
         for size in args.sizes

@@ -3,8 +3,10 @@
     python -m experiments.summarize --dataset dev-v1.1 --retriever bm25
 
 writes ``results/summary_<dataset>_<retriever>.md`` and prints it. The
-summary carries the full grid; the README quotes a curated subset of these
-tables (never numbers from anywhere else).
+summary carries the baseline grid (zero overlap, stop budget rule); the
+overlap and budget-rule ablations are rendered by
+``experiments.summarize_ablations``. The README quotes a curated subset of
+these tables (never numbers from anywhere else).
 """
 
 from __future__ import annotations
@@ -43,6 +45,38 @@ def _table(header: list[str], rows: list[list[str]]) -> list[str]:
     lines += ["| " + " | ".join(row) + " |" for row in rows]
     lines.append("")
     return lines
+
+
+def pairwise_same_size_rows(
+    results: list[RunResult], budgets: list[int], metric: str = "recall"
+) -> list[list[str]]:
+    """Δmetric rows for sentence-vs-fixed and recursive-vs-fixed at each size.
+
+    Same-size comparisons isolate the chunk-boundary policy from the size
+    effect; only zero-overlap stop-rule runs qualify (one run per
+    (chunker, size) key, same protocol on both sides).
+    """
+    by = {
+        (rr.config["chunker"], rr.config["chunk_size"]): rr
+        for rr in results
+        if rr.config["overlap"] == 0 and rr.config["budget_rule"] == "stop"
+    }
+    rows = []
+    for challenger in ("sentence", "recursive"):
+        for size in sorted({size for _, size in by}):
+            if (challenger, size) not in by or ("fixed", size) not in by:
+                continue
+            a, b = by[(challenger, size)], by[("fixed", size)]
+            rows.append(
+                [
+                    f"{a.label} vs {b.label}",
+                    *(
+                        fmt_diff(diff_ci(a.metric(metric, bud), b.metric(metric, bud)))
+                        for bud in budgets
+                    ),
+                ]
+            )
+    return rows
 
 
 def render_summary(results: list[RunResult], baseline_label: str) -> str:
@@ -112,6 +146,14 @@ def render_summary(results: list[RunResult], baseline_label: str) -> str:
             )
     lines += _table(["config", *budget_cols], diff_rows)
 
+    pairwise = pairwise_same_size_rows(results, budgets)
+    if pairwise:
+        lines += [
+            "## Same-size pairwise ΔSpanRecall (chunk-boundary policy, size held fixed)",
+            "",
+        ]
+        lines += _table(["comparison", *budget_cols], pairwise)
+
     lines += ["## hit@k (fraction of questions with any gold overlap in top-k)", ""]
     lines += _table(
         ["config", *(f"k={k}" for k in hit_ks)],
@@ -156,7 +198,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
-    results = load_raw(args.raw_dir, dataset=args.dataset, retriever=args.retriever)
+    results = load_raw(
+        args.raw_dir,
+        dataset=args.dataset,
+        retriever=args.retriever,
+        budget_rule="stop",
+        overlap=0,
+    )
     if not results:
         raise SystemExit(f"no results for {args.dataset}/{args.retriever} in {args.raw_dir}")
     text = render_summary(results, args.baseline)

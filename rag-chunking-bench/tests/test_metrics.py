@@ -56,6 +56,44 @@ class TestTakeUntilBudget:
         with pytest.raises(ValueError):
             take_until_budget([], index, budget=0)
 
+    def test_rejects_unknown_rule(self, index):
+        with pytest.raises(ValueError, match="budget rule"):
+            take_until_budget([], index, budget=5, rule="round-up")
+
+
+class TestTruncateRule:
+    def test_final_chunk_truncated_token_aligned(self, index):
+        ranked = [chunk_of_tokens(0, 2), chunk_of_tokens(3, 9)]
+        taken = take_until_budget(ranked, index, budget=5, rule="truncate")
+        # 3 tokens fit whole; the 7-token chunk is cut to its first 2 tokens
+        # ("dd ee"), ending exactly at a token boundary.
+        assert taken[0] == ranked[0]
+        assert (taken[1].start, taken[1].end) == (9, 14)
+        assert taken[1].text == DOC[9:14] == "dd ee"
+        assert sum(index.count_in(c.start, c.end) for c in taken) == 5
+
+    def test_first_chunk_over_budget_is_truncated_not_dropped(self, index):
+        taken = take_until_budget(
+            [chunk_of_tokens(0, 9)], index, budget=4, rule="truncate"
+        )
+        assert len(taken) == 1
+        assert index.count_in(taken[0].start, taken[0].end) == 4
+        assert taken[0].text == "aa bb cc dd"
+
+    def test_no_partial_chunk_when_budget_exactly_spent(self, index):
+        ranked = [chunk_of_tokens(0, 4), chunk_of_tokens(5, 9)]
+        # First chunk spends the whole budget; nothing remains to truncate.
+        taken = take_until_budget(ranked, index, budget=5, rule="truncate")
+        assert taken == ranked[:1]
+
+    def test_exact_fit_needs_no_truncation(self, index):
+        ranked = [chunk_of_tokens(0, 4), chunk_of_tokens(5, 9)]
+        assert take_until_budget(ranked, index, budget=10, rule="truncate") == ranked
+
+    def test_stop_is_the_default_rule(self, index):
+        ranked = [chunk_of_tokens(0, 2), chunk_of_tokens(3, 9)]
+        assert take_until_budget(ranked, index, budget=5) == ranked[:1]
+
 
 class TestTokenSets:
     def test_retrieved_union_deduplicates_overlap(self, index):

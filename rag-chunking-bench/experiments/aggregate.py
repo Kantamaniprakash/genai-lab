@@ -34,7 +34,11 @@ class RunResult:
     @property
     def label(self) -> str:
         base = f"{self.config['chunker']}-{self.config['chunk_size']}"
-        return f"{base}/o{self.config['overlap']}" if self.config["overlap"] else base
+        if self.config["overlap"]:
+            base = f"{base}/o{self.config['overlap']}"
+        if self.config["budget_rule"] != "stop":
+            base = f"{base}/{self.config['budget_rule']}"
+        return base
 
     def qids(self) -> tuple[str, ...]:
         return tuple(r["qid"] for r in self.records)
@@ -52,17 +56,32 @@ class RunResult:
 
 def sort_key(rr: RunResult) -> tuple:
     cfg = rr.config
-    return (_CHUNKER_ORDER.get(cfg["chunker"], 99), cfg["chunk_size"], cfg["overlap"])
+    return (
+        _CHUNKER_ORDER.get(cfg["chunker"], 99),
+        cfg["chunk_size"],
+        cfg["overlap"],
+        cfg["budget_rule"],
+    )
 
 
 def load_raw(
-    raw_dir: Path, dataset: str | None = None, retriever: str | None = None
+    raw_dir: Path,
+    dataset: str | None = None,
+    retriever: str | None = None,
+    budget_rule: str | None = None,
+    overlap: int | None = None,
 ) -> list[RunResult]:
-    """Parse all raw result files, optionally filtered, in presentation order."""
+    """Parse all raw result files, optionally filtered, in presentation order.
+
+    ``None`` filters match everything. Files written before ``budget_rule``
+    existed are stop-rule runs by construction; the key is filled in on load
+    so downstream code never special-cases them.
+    """
     results = []
     for path in sorted(raw_dir.glob("*.json.gz")):
         with gzip.open(path, "rt", encoding="utf-8") as f:
             payload = json.load(f)
+        payload["config"].setdefault("budget_rule", "stop")
         rr = RunResult(
             config=payload["config"],
             meta=payload["meta"],
@@ -72,6 +91,10 @@ def load_raw(
         if dataset is not None and rr.config["dataset"] != dataset:
             continue
         if retriever is not None and rr.config["retriever"] != retriever:
+            continue
+        if budget_rule is not None and rr.config["budget_rule"] != budget_rule:
+            continue
+        if overlap is not None and rr.config["overlap"] != overlap:
             continue
         results.append(rr)
     results.sort(key=sort_key)

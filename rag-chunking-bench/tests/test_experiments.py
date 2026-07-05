@@ -22,7 +22,12 @@ from experiments.run_grid import (
     run_and_save,
     run_config,
 )
-from experiments.summarize import find_baseline, render_summary
+from experiments.summarize import (
+    find_baseline,
+    pairwise_same_size_rows,
+    render_summary,
+)
+from experiments.summarize_ablations import render_ablations
 from src.data import Document, GoldSpan, QADataset, Question
 
 PARA_ZEBRA = (
@@ -98,6 +103,14 @@ class TestFactories:
         cfg = _config(dataset="dev-v1.1", chunker="sentence", chunk_size=128)
         assert cfg.config_id == "dev-v1.1_sentence128_o0_bm25_cap50_seed0"
 
+    def test_config_id_encodes_nondefault_budget_rule(self):
+        # The stop rule is omitted so pre-existing result filenames stay
+        # valid; any other rule must be encoded or files would clobber.
+        stop = _config(dataset="dev-v1.1")
+        trunc = _config(dataset="dev-v1.1", budget_rule="truncate")
+        assert stop.config_id == "dev-v1.1_fixed32_o0_bm25_cap50_seed0"
+        assert trunc.config_id == "dev-v1.1_fixed32_o0_bm25_cap50_seed0_truncate"
+
 
 class TestRunConfig:
     def test_record_shape(self, tiny_dataset):
@@ -142,6 +155,17 @@ class TestRunConfig:
             assert cell["chunks"] == 0
             assert cell["recall"] == 0.0
 
+    def test_truncate_rule_spends_full_budget(self, tiny_dataset):
+        # Same oversized-chunk setup as above: under truncate the first
+        # chunk is cut to exactly the budget instead of dropped.
+        dataset, questions = tiny_dataset
+        cfg = _config(chunk_size=60, budgets=(20,), budget_rule="truncate")
+        result = run_config(cfg, dataset, questions)
+        for record in result["records"]:
+            cell = record["budgets"]["20"]
+            assert cell["tokens"] == 20
+            assert cell["chunks"] == 1
+
 
 class TestRunAndSave:
     def test_write_skip_force(self, tiny_dataset, tmp_path):
@@ -178,6 +202,32 @@ class TestAggregate:
         self._saved_results(tiny_dataset, tmp_path)
         assert load_raw(tmp_path, dataset="other") == []
         assert len(load_raw(tmp_path, retriever="bm25")) == 2
+
+    def test_load_raw_budget_rule_and_overlap_filters(self, tiny_dataset, tmp_path):
+        dataset, questions = tiny_dataset
+        run_and_save(_config(), dataset, questions, tmp_path)
+        run_and_save(_config(budget_rule="truncate"), dataset, questions, tmp_path)
+        run_and_save(_config(overlap=8), dataset, questions, tmp_path)
+        assert len(load_raw(tmp_path)) == 3
+        stop = load_raw(tmp_path, budget_rule="stop", overlap=0)
+        assert [rr.label for rr in stop] == ["fixed-32"]
+        trunc = load_raw(tmp_path, budget_rule="truncate")
+        assert [rr.label for rr in trunc] == ["fixed-32/truncate"]
+        assert [rr.label for rr in load_raw(tmp_path, overlap=8)] == ["fixed-32/o8"]
+
+    def test_load_raw_fills_missing_budget_rule(self, tiny_dataset, tmp_path):
+        # Result files written before the budget_rule field existed are
+        # stop-rule runs by construction; loading fills the key in.
+        dataset, questions = tiny_dataset
+        path, _ = run_and_save(_config(), dataset, questions, tmp_path)
+        with gzip.open(path, "rt", encoding="utf-8") as f:
+            payload = json.load(f)
+        del payload["config"]["budget_rule"]
+        with gzip.open(path, "wt", encoding="utf-8") as f:
+            json.dump(payload, f)
+        (rr,) = load_raw(tmp_path)
+        assert rr.config["budget_rule"] == "stop"
+        assert rr.label == "fixed-32"
 
     def test_check_aligned_rejects_mismatch(self, tiny_dataset, tmp_path):
         results = self._saved_results(tiny_dataset, tmp_path)
@@ -223,3 +273,34 @@ class TestSummarize:
         run_and_save(_config(), dataset, questions, tmp_path)
         with pytest.raises(ValueError, match="baseline"):
             find_baseline(load_raw(tmp_path), "fixed-256")
+
+    def test_pairwise_same_size_rows(self, tiny_dataset, tmp_path):
+        dataset, questions = tiny_dataset
+        for chunker in ("fixed", "sentence"):
+            run_and_save(_config(chunker=chunker), dataset, questions, tmp_path)
+        run_and_save(_config(overlap=8), dataset, questions, tmp_path)
+        rows = pairwise_same_size_rows(load_raw(tmp_path), budgets=[40, 80])
+        # Only zero-overlap stop-rule runs pair up: one comparison, one cell
+        # per budget.
+        assert len(rows) == 1
+        assert rows[0][0] == "sentence-32 vs fixed-32"
+        assert len(rows[0]) == 3
+
+
+class TestSummarizeAblations:
+    def test_render_ablations(self, tiny_dataset, tmp_path):
+        dataset, questions = tiny_dataset
+        run_and_save(_config(), dataset, questions, tmp_path)
+        run_and_save(_config(overlap=8), dataset, questions, tmp_path)
+        run_and_save(_config(budget_rule="truncate"), dataset, questions, tmp_path)
+        text = render_ablations("tiny", "bm25", tmp_path)
+        assert "## Overlap ablation" in text
+        assert "fixed-32/o8" in text
+        assert "## Budget rule" in text
+        assert "ΔSpanRecall, truncate − stop" in text
+
+    def test_render_ablations_requires_ablation_runs(self, tiny_dataset, tmp_path):
+        dataset, questions = tiny_dataset
+        run_and_save(_config(), dataset, questions, tmp_path)
+        with pytest.raises(SystemExit, match="no ablation results"):
+            render_ablations("tiny", "bm25", tmp_path)
