@@ -22,16 +22,20 @@ chunkers, chunk sizes, and retrievers — with paired bootstrap confidence inter
 on span-level metrics — is a genuine gap at a scale one person can execute
 rigorously. It also feeds directly back into my `financial-rag-chatbot`.
 
-**Phase.** 2 of 4 — baselines (first grid landed 2026-07-04: 12 configs on
-dev-v1.1 with BM25; headline result = fixed-k vs budget-matched ranking
-reversal, see project README).
+**Phase.** 2 of 4 — baselines (first grid 2026-07-04: fixed-k vs
+budget-matched ranking reversal; overlap ablation + truncate-rule robustness
+check 2026-07-05: overlap = boundary repair, size ordering survives the rule
+change — findings 6–7 in the project README).
 
 1. **Harness** — offset-preserving chunkers, tokenization, span-level metrics,
    budget-matched retrieval protocol, dataset loaders. *(done except Chroma loader)*
 2. **Baselines** — BM25 / TF-IDF / LSA retrievers over all chunker x size x overlap
-   configs on SQuAD-derived long documents + Chroma eval corpora. *(current)*
-3. **Ablations & analysis** — budget curves, overlap ablation, semantic vs.
-   structural chunking, per-dataset error analysis, significance testing.
+   configs on SQuAD-derived long documents + Chroma eval corpora. *(current:
+   BM25 grid + overlap and budget-rule ablations done; next = TF-IDF/LSA +
+   dense retriever, Chroma corpora)*
+3. **Ablations & analysis** — budget curves, overlap ablation *(done)*, semantic vs.
+   structural chunking, per-dataset error analysis, multi-seed sampling,
+   significance testing.
 4. **Writeup** — README as a full research report with real tables and limitations.
 
 **Environment constraints (recorded so results are honest).** CPU-only (4 cores,

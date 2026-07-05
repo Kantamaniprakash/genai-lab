@@ -24,7 +24,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.ticker import ScalarFormatter
 
-from experiments.aggregate import RunResult, check_aligned, load_raw, mean_ci
+from experiments.aggregate import RunResult, check_aligned, diff_ci, load_raw, mean_ci
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -181,6 +181,150 @@ def fig_metric_reversal(results: list[RunResult], out: Path) -> None:
     plt.close(fig)
 
 
+def fig_overlap_ablation(
+    stop_runs: list[RunResult], out: Path, budgets: tuple[int, int] = (400, 1600)
+) -> None:
+    """ΔSpanRecall vs. overlap, paired against the same config at zero overlap.
+
+    One panel per chunker family that has an overlap knob; error bars are 95%
+    paired bootstrap CIs, so a bar clear of the zero line is a significant
+    effect of overlap alone (size, question set, and rule held fixed).
+    """
+    runs = {
+        (rr.config["chunker"], rr.config["chunk_size"], rr.config["overlap"]): rr
+        for rr in stop_runs
+    }
+    families = (
+        ("fixed", "overlap (fraction of chunk size)", lambda size, o: o / size),
+        ("sentence", "overlap (sentences)", lambda size, o: o),
+    )
+    sizes = sorted({size for c, size, o in runs if o > 0 and (c, size, 0) in runs})
+    # Error bars of different sizes share x positions; a small deterministic
+    # jitter keeps them legible without lying about the x value.
+    jitter = {size: (i - (len(sizes) - 1) / 2) for i, size in enumerate(sizes)}
+    fig, axes = plt.subplots(
+        len(budgets), len(families), figsize=(8.6, 5.6), sharex="col", sharey=True
+    )
+    for row, budget in enumerate(budgets):
+        for col, (chunker, xlabel, xval) in enumerate(families):
+            ax = axes[row][col]
+            overlaps = sorted({o for c, s, o in runs if c == chunker and o > 0})
+            step = (max(overlaps) - min(overlaps)) / 60 if chunker == "sentence" else 0.008
+            for size in sizes:
+                base = runs[(chunker, size, 0)]
+                # Zero overlap is the paired control: Δ = 0 by definition.
+                xs, ys, lo, hi = [0.0], [0.0], [0.0], [0.0]
+                for o in overlaps:
+                    if (chunker, size, o) not in runs:
+                        continue
+                    ci = diff_ci(
+                        runs[(chunker, size, o)].metric("recall", budget),
+                        base.metric("recall", budget),
+                    )
+                    xs.append(xval(size, o) + jitter[size] * step)
+                    ys.append(ci.mean_diff)
+                    lo.append(ci.ci_low)
+                    hi.append(ci.ci_high)
+                ax.errorbar(
+                    xs,
+                    ys,
+                    yerr=[
+                        [y - l for y, l in zip(ys, lo)],
+                        [h - y for y, h in zip(ys, hi)],
+                    ],
+                    color=SIZE_RAMP[size],
+                    linewidth=1.8,
+                    marker="o",
+                    markersize=4.5,
+                    markeredgecolor=SURFACE,
+                    markeredgewidth=0.9,
+                    capsize=2.5,
+                    elinewidth=1.0,
+                    label=f"{size}",
+                )
+            ax.axhline(0, color=INK_MUTED, linewidth=0.9)
+            ax.set_title(f"{chunker} chunker, B={budget}")
+            ax.grid(axis="y")
+            ax.set_axisbelow(True)
+            if row == len(budgets) - 1:
+                ax.set_xlabel(xlabel)
+                if chunker == "fixed":
+                    ax.set_xticks([0, 0.125, 0.25, 0.5], ["0", "12.5%", "25%", "50%"])
+                else:
+                    ax.set_xticks([0, *overlaps])
+        axes[row][0].set_ylabel(f"ΔSpanRecall@{budget}\nvs. zero overlap (paired)")
+    axes[0][0].legend(
+        title="chunk size (tokens)", loc="upper left", ncols=3, title_fontsize=8,
+        labelcolor=INK_SECONDARY,
+    )
+    fig.suptitle(
+        "Overlap earns back its token cost for fixed windows at tight budgets; "
+        "for sentence packing it is mostly cost (bars: 95% paired CI)",
+        fontsize=10.5,
+        color=INK,
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.985))
+    fig.savefig(out, bbox_inches="tight")
+    plt.close(fig)
+
+
+def fig_budget_rule(
+    stop_runs: list[RunResult], trunc_runs: list[RunResult], out: Path, budget: int = 200
+) -> None:
+    """SpanRecall@budget vs. chunk size under both budget rules.
+
+    Same rankings on both sides; only the handling of the budget-straddling
+    chunk differs. The figure shows the stop rule's retrieve-nothing collapse
+    disappearing under truncation while the size ordering persists.
+    """
+    stop = _by_config(stop_runs)
+    trunc = _by_config(trunc_runs)
+    sizes = sorted({rr.config["chunk_size"] for rr in stop_runs})
+    fig, axes = plt.subplots(1, len(CHUNKER_ORDER), figsize=(9.6, 3.2), sharey=True)
+    for ax, chunker in zip(axes, CHUNKER_ORDER):
+        color = CHUNKER_COLORS[chunker]
+        for grid, style, marker, label in (
+            (trunc, "-", "o", "truncate-final-chunk"),
+            (stop, (0, (4, 2)), "s", "stop-before-exceed"),
+        ):
+            cis = [mean_ci(grid[(chunker, s)].metric("recall", budget)) for s in sizes]
+            ax.fill_between(
+                sizes,
+                [c.ci_low for c in cis],
+                [c.ci_high for c in cis],
+                color=color,
+                alpha=0.16,
+                linewidth=0,
+            )
+            ax.plot(
+                sizes,
+                [c.mean_diff for c in cis],
+                color=color,
+                linestyle=style,
+                linewidth=2,
+                marker=marker,
+                markersize=5,
+                markerfacecolor=color if marker == "o" else SURFACE,
+                markeredgecolor=SURFACE if marker == "o" else color,
+                markeredgewidth=1.0,
+                label=label,
+            )
+        ax.set_title(f"{chunker} chunker")
+        ax.set_ylim(0, 1.0)
+        _log2_axis(ax, sizes, "chunk size (tokens, log scale)")
+    axes[0].set_ylabel(f"SpanRecall@{budget} (mean, 2,400 questions)")
+    axes[0].legend(title="budget rule", loc="lower left", title_fontsize=8, labelcolor=INK_SECONDARY)
+    fig.suptitle(
+        f"Truncating the final chunk removes the stop rule's collapse at B={budget}, "
+        "but small chunks still win (bands: 95% CI)",
+        fontsize=10.5,
+        color=INK,
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.99))
+    fig.savefig(out, bbox_inches="tight")
+    plt.close(fig)
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Render README figures from raw results.",
@@ -195,22 +339,48 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
-    results = load_raw(
+    baseline = load_raw(
         args.raw_dir,
         dataset=args.dataset,
         retriever=args.retriever,
         budget_rule="stop",
         overlap=0,
     )
-    if not results:
+    if not baseline:
         raise SystemExit(f"no results for {args.dataset}/{args.retriever} in {args.raw_dir}")
-    check_aligned(results)
+    check_aligned(baseline)
     args.out_dir.mkdir(parents=True, exist_ok=True)
+    written = []
+
     curves = args.out_dir / f"recall_budget_curves_{args.dataset}_{args.retriever}.png"
     reversal = args.out_dir / f"metric_reversal_{args.dataset}_{args.retriever}.png"
-    fig_budget_curves(results, curves)
-    fig_metric_reversal(results, reversal)
-    for path in (curves, reversal):
+    fig_budget_curves(baseline, curves)
+    fig_metric_reversal(baseline, reversal)
+    written += [curves, reversal]
+
+    stop_all = load_raw(
+        args.raw_dir, dataset=args.dataset, retriever=args.retriever, budget_rule="stop"
+    )
+    if any(rr.config["overlap"] > 0 for rr in stop_all):
+        check_aligned(stop_all)
+        overlap = args.out_dir / f"overlap_ablation_{args.dataset}_{args.retriever}.png"
+        fig_overlap_ablation(stop_all, overlap)
+        written.append(overlap)
+
+    trunc = load_raw(
+        args.raw_dir,
+        dataset=args.dataset,
+        retriever=args.retriever,
+        budget_rule="truncate",
+        overlap=0,
+    )
+    if trunc:
+        check_aligned(baseline + trunc)
+        rule = args.out_dir / f"budget_rule_{args.dataset}_{args.retriever}.png"
+        fig_budget_rule(baseline, trunc, rule)
+        written.append(rule)
+
+    for path in written:
         print(f"wrote {path.relative_to(ROOT)}")
 
 

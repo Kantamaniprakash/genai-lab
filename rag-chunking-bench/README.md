@@ -116,9 +116,12 @@ Every number below comes from runs checked into `results/raw/` (per-question
 scores, gzipped JSON, with config + git commit embedded) and is regenerable:
 
 ```bash
-python -m experiments.run_grid        # 12 configs, ~25 s on 4 CPU cores
-python -m experiments.summarize       # tables incl. paired CIs -> results/summary_*.md
-python -m experiments.make_figures    # figures -> results/figures/
+python -m experiments.run_grid                # baseline: 12 configs, ~25 s on 4 CPU cores
+python -m experiments.run_grid --budget-rule truncate   # budget-rule ablation
+python -m experiments.run_grid --chunkers fixed --sizes 64 --overlaps 8 16 32   # overlap ablation (see NOTES)
+python -m experiments.summarize               # baseline tables incl. paired CIs -> results/summary_*.md
+python -m experiments.summarize_ablations     # overlap + budget-rule tables -> results/summary_*_ablations.md
+python -m experiments.make_figures            # figures -> results/figures/
 ```
 
 ### Baseline grid (phase 2, first slice)
@@ -196,14 +199,82 @@ configured maximum.
 utilization is ~0 when the smallest chunk exceeds B (e.g. fixed-512 at
 B≤400), which reads as SpanRecall ≈ 0. This is a protocol artifact worth
 keeping visible rather than hiding: it is exactly the deployment failure of
-pairing a large-chunk index with a small context window. A
-truncate-final-chunk variant is planned as a robustness check.
+pairing a large-chunk index with a small context window. The
+truncate-final-chunk robustness check below confirms the size ordering is
+not an artifact of this rule.
 
 A note on the other span metrics: on SQuAD, gold answers average ~3 tokens,
 so SpanPrecision@B is dominated by 1/|retrieved| and is nearly identical
 across configs at a given budget (see summary tables). Recall is the
 informative span metric here; precision/IoU become discriminative on corpora
 with long gold references (Chroma corpora, phase 2).
+
+### Overlap ablation: overlap is boundary repair, not free recall
+
+Setup: fixed chunker at sizes {64, 128, 256} × overlap {12.5%, 25%, 50% of
+chunk size}; sentence chunker at sizes {64, 128, 256} × overlap {1, 2}
+sentences; BM25; stop rule; same 2,400 questions. Every configuration is
+compared *paired* against the same chunker and size at zero overlap, so the
+only manipulated variable is overlap. Under this protocol overlap has to earn
+back its cost: the budget charges every retrieved chunk in full (duplicated
+text included) while scoring counts each gold token once. Full tables:
+[`results/summary_dev-v1.1_bm25_ablations.md`](results/summary_dev-v1.1_bm25_ablations.md).
+
+![Overlap ablation: paired deltas vs zero overlap](results/figures/overlap_ablation_dev-v1.1_bm25.png)
+
+*Paired ΔSpanRecall vs. zero overlap (positive = overlap helps). Left column:
+fixed windows gain significantly at practical budgets, with the gain fading —
+and at 50% overlap reversing — as the budget grows. Right column: sentence
+packing gets little to nothing from overlap and pays for it at loose budgets.*
+
+**6. Overlap helps precisely where chunk boundaries do damage — and is pure
+cost where they don't.** For fixed windows, moderate (~25%) overlap is a
+significant win at tight budgets: at B=400 it gains **+0.036 [+0.026,
++0.047]** / +0.022 [+0.011, +0.032] / +0.019 [+0.005, +0.032] SpanRecall for
+sizes 64 / 128 / 256, and fixed-64 gains +0.046 [+0.033, +0.059] at B=200.
+The gain shrinks monotonically with budget, and heavy overlap eventually
+inverts: fixed-256 at 50% overlap is
+**−0.013 [−0.021, −0.005]** at B=1600, and its hit@5 also drops significantly
+(−0.014) as near-duplicates crowd the top ranks. For the sentence chunker the
+picture is null-to-negative at practical budgets (2-sentence overlap:
+−0.011 [−0.019, −0.004] at B≥800 for size 128), with only isolated small
+positives at each size's tightest non-degenerate budget. The mechanism reads clearly: fixed windows
+cut sentences and evidence spans mid-stream, and overlap repairs those cuts;
+sentence packing rarely makes them, so duplication just spends budget.
+Consistent with that, sentence-64 at *zero* overlap is statistically
+indistinguishable from fixed-64 at 25% overlap (+0.007 [−0.004, +0.019] at
+B=200) — boundary-aware packing achieves what overlap buys, without paying
+for it in index size or retrieved duplicates. Practical reading: if you use
+fixed windows with a tight context budget, ~25% overlap is worth it; if you
+chunk on sentence boundaries, skip overlap entirely.
+
+### Budget-rule robustness: the size effect is not a stop-rule artifact
+
+Setup: the 12 baseline configurations rerun with the truncate-final-chunk
+rule — the chunk that straddles the budget is cut, token-aligned, to exactly
+fill it, so utilization is 1.00 everywhere and the stop rule's
+retrieve-nothing cells become meaningful measurements. Rankings are identical
+on both sides; only boundary handling differs.
+
+![Budget rule comparison: stop vs truncate](results/figures/budget_rule_dev-v1.1_bm25.png)
+
+*SpanRecall@200 under both budget rules. Truncation (solid) removes the
+collapse of large-chunk configs under stop-before-exceed (dashed), but recall
+still falls monotonically with chunk size in every family.*
+
+**7. Small chunks still win when every config spends its full budget.**
+Truncation can only add tokens, so its per-question effect is mechanically
+non-negative; it is large exactly in the artifact cells (fixed-256 at B=200:
++0.589) and ≤ +0.075 everywhere else. The finding that matters: under
+truncate at B=200, fixed recall is 0.819 / 0.770 / 0.601 / 0.299 for sizes
+64 / 128 / 256 / 512 — fixed-64 beats fixed-256 by **+0.218 [+0.198,
++0.239]** and fixed-512 by +0.519 [+0.497, +0.541], all with full budget
+utilization. The sentence-over-fixed edge also survives the rule change
+(+0.040 [+0.029, +0.051] at size 64, B=400). Both headline effects are
+properties of chunking, not of the budget-boundary convention. The residual
+size penalty under truncation has a clean interpretation: a large top-ranked
+chunk enters the prompt as a prefix, and evidence sitting past the cut is
+lost — which is also what happens when production stacks truncate contexts.
 
 ## Status
 
@@ -214,9 +285,11 @@ with long gold references (Chroma corpora, phase 2).
       with paired CIs, figure generation (150 tests)
 - [x] Phase 2: baseline size grid on dev-v1.1 with BM25 (12 configs — tables
       and figures above)
-- [ ] Phase 2: overlap ablation, TF-IDF/LSA + dense (MiniLM) retrievers,
-      Chroma corpora loader, truncate-final-chunk robustness check
-- [ ] Phase 3: ablations, error analysis, tokenizer (BPE) robustness
+- [x] Phase 2: overlap ablation (15 configs, paired vs zero overlap) and
+      truncate-final-chunk robustness check (12 configs) — findings 6–7
+- [ ] Phase 2: TF-IDF/LSA + dense (MiniLM) retrievers, Chroma corpora loader
+- [ ] Phase 3: further ablations, error analysis, multi-seed sampling,
+      tokenizer (BPE) robustness
 - [ ] Phase 4: full writeup
 
 Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).
@@ -235,8 +308,9 @@ Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).
   favor small chunks more than corpora with long, multi-sentence evidence
   would.
 - The stop-before-exceed budget rule zeroes configs whose chunks exceed the
-  budget; a truncate-final-chunk variant is a planned robustness check, and
-  the budget-utilization table makes the affected cells explicit.
+  budget; the truncate-final-chunk rerun (finding 7) shows the size ordering
+  is robust to this choice, and the budget-utilization table makes the
+  affected cells explicit in both protocols.
 - The regex tokenizer approximates BPE token counts; budget conclusions are
   in "word-token" units (a tiktoken BPE robustness check is planned).
 - Chroma corpora queries are LLM-generated (dataset provenance, not ours);
@@ -271,10 +345,11 @@ Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).
 
 ```bash
 pip install -r requirements.txt
-python -m pytest tests/ -q          # 150 tests
+python -m pytest tests/ -q          # 163 tests
 python -m src.data                  # fetch SQuAD (pinned URLs + SHA256)
 python -m experiments.run_grid      # rerun the grid (results are resumable)
 python -m experiments.summarize
+python -m experiments.summarize_ablations
 python -m experiments.make_figures
 ```
 

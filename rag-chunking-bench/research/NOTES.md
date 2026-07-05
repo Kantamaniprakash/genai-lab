@@ -272,3 +272,84 @@ Results in README + summary. Findings, with numbers I'd defend:
 - Dense retriever (MiniLM) embedding cache design (day-2 item).
 - Multi-seed sampling (seed sensitivity of the 50/doc cap) — cheap to run
   (~22 s/grid), worth doing before the writeup phase claims robustness.
+
+---
+
+## 2026-07-05 — Day 4: overlap ablation + truncate rule — both hypotheses tested, one refuted
+
+### Built today
+
+- `take_until_budget(..., rule="stop"|"truncate")` — truncate-final-chunk
+  cuts the budget-straddling chunk token-aligned to exactly fill B, using
+  `TokenIndex.text` to keep `document[start:end] == chunk.text` true for the
+  partial chunk. Only the first overflowing chunk is cut; scoring needs no
+  changes because truncated chunks live in document coordinates.
+- `GridConfig.budget_rule` (default "stop", **omitted from config_id for the
+  default** so day-3 result filenames stay valid; non-default rules append
+  `_truncate`). `load_raw` backfills `budget_rule="stop"` into old payloads
+  and grew `budget_rule`/`overlap` filters; labels append `/truncate`.
+- `experiments/summarize_ablations.py` — renders overlap ablation (each
+  config paired vs. its own zero-overlap control, incl. a hit@5 column) and
+  budget-rule sections → `results/summary_dev-v1.1_bm25_ablations.md`.
+- Same-size pairwise ΔSpanRecall table now generated in `summarize.py`
+  (day-3 ad hoc numbers reproduced exactly).
+- Two new figures in `make_figures.py` (overlap 2×2 paired-delta panels with
+  deterministic x-jitter for error-bar legibility; budget-rule 3-panel
+  stop-vs-truncate curves). `make_figures`/`summarize` now filter to the
+  baseline grid explicitly so ablation files don't pollute them.
+- Tests 150 → **163** (truncate token-alignment/exact-spend/empty-remainder,
+  config_id rule encoding, load_raw filters + old-payload backfill, pairwise
+  rows, ablation renderer incl. no-data SystemExit).
+
+### Ran (27 new configs, ~60 s total, code committed first at ecbb1b6)
+
+1. Overlap grid: fixed {64,128,256} × overlap {12.5%,25%,50% of size},
+   sentence {64,128,256} × {1,2} sentences (15 configs, stop rule).
+2. Truncate rerun of the 12 baseline o0 configs.
+
+### Findings (all in README §6–7 with CIs)
+
+1. **Day-3 hypothesis ("overlap is net negative under budget matching")
+   REFUTED for fixed windows, upheld for sentence packing.** Fixed + ~25%
+   overlap is significantly positive at tight budgets (fixed-64/o16: +0.046
+   [+0.033,+0.059] @B=200, +0.036 @B=400; 25% column significant for all
+   three sizes @B=400). Gains fade with budget; 50% overlap at size 256
+   turns significantly negative by B=1600 (−0.013) and hurts hit@5 (−0.014).
+   Sentence overlap: null-to-negative at practical budgets.
+2. **Mechanism: overlap = boundary repair.** Sentence-64 at zero overlap is
+   statistically indistinguishable from fixed-64 at 25% overlap (+0.007
+   [−0.004,+0.019] @B=200, computed ad hoc — worth adding to a generated
+   table later). Boundary-aware packing gets overlap's benefit for free.
+3. **Truncate rule: headline size effect is NOT a stop-rule artifact.**
+   Utilization 1.00 everywhere; truncate−stop deltas mechanically ≥ 0, big
+   only in artifact cells (fixed-256@B=200 +0.589), ≤ +0.075 elsewhere.
+   Under truncate at B=200: fixed 0.819/0.770/0.601/0.299 for 64→512;
+   fixed-64 > fixed-256 by +0.218 [+0.198,+0.239]. Sentence>fixed same-size
+   also survives (+0.040 @64/B=400). Both headline claims are properties of
+   chunking, not the boundary convention.
+
+### Next steps (Day 5, in order)
+
+1. **TF-IDF + LSA retrievers** (`src/retrievers.py`, scikit-learn — pin in
+   requirements the day it lands): TF-IDF cosine over chunk term vectors;
+   LSA = TruncatedSVD(k≈128) over TF-IDF, both deterministic
+   (`random_state=0`, note TruncatedSVD randomized solver → check
+   determinism across runs, else use arpack). Add to RETRIEVERS in
+   run_grid, hand-computed unit tests like BM25's.
+2. Run baseline 12-config grid × {tfidf, lsa} → first retriever × chunker
+   interaction numbers; extend summarize to render per-retriever summaries
+   (already parameterized by --retriever, should just work).
+3. If time: figure comparing size effect across retrievers at B=400
+   (does "small chunks win" transfer from BM25 to TF-IDF/LSA?).
+4. Multi-seed sampling check (seeds 1,2 for the 12-config BM25 grid) is
+   still owed before writeup-phase robustness claims; cheap, slot it in
+   whenever a day has slack.
+
+### Open questions (carried + new)
+
+- Chroma corpora reference offsets still unverified (day-1 item).
+- Dense retriever (MiniLM) embedding cache design (day-2 item).
+- Should the "sentence-o0 ≈ fixed+25%-overlap" cross-family comparison get
+  its own generated table? (Currently an ad hoc number quoted in README §6.)
+- Overlap ablation used the stop rule; if a reviewer asks, the truncate ×
+  overlap cross is one `run_grid` invocation away (config space supports it).
