@@ -1,0 +1,35 @@
+[project]
+name = "rag-chunking-bench"
+version = "0.1.0"
+description = "Token-budget-controlled benchmark of chunking strategies for RAG retrieval, with span-level metrics and paired bootstrap confidence intervals"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Prakash Kantamani" }]
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=2.3.1",
+    "matplotlib>=3.11.0",
+]
+
+[project.urls]
+Repository = "https://github.com/Kantamaniprakash/genai-lab"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.12.0",
+]
+
+[tool.uv]
+# Research repo: src/ and experiments/ are used in place, never built/installed.
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
