@@ -353,3 +353,104 @@ Results in README + summary. Findings, with numbers I'd defend:
   its own generated table? (Currently an ad hoc number quoted in README §6.)
 - Overlap ablation used the stop rule; if a reviewer asks, the truncate ×
   overlap cross is one `run_grid` invocation away (config space supports it).
+
+---
+
+## 2026-07-06 — Day 5: TF-IDF + LSA — retriever × chunker interaction, findings 8–9
+
+### Repo state note
+
+Main moved since day 4: Prakash merged a "Tier 2" PR (uv migration with
+committed lockfile, hero figure + `make_hero_figure`, CI now runs
+`uv sync --locked` + non-blocking ruff). Consequence for future sessions:
+**any new dependency must go through `uv add` (or edit pyproject + `uv lock`)
+so `uv.lock` stays in sync, or CI breaks.** `uv sync` needed several retries
+today (PyPI download timeouts; `UV_HTTP_TIMEOUT=300` + retry loop worked).
+Ruff runs with `--exit-zero`; main had 16 pre-existing lint errors — I fixed
+the ones my diff would have added, left the rest (not my scope today).
+
+### Built today (day-4 plan items 1–3, plus rank instrumentation)
+
+- `TfidfRetriever` + `LSARetriever` (scikit-learn 1.9.0, pinned in
+  requirements + pyproject + lock). Both share `query_terms` with BM25 via
+  `TfidfVectorizer(analyzer=query_terms)` — retrievers differ ONLY in
+  scoring, which is what makes the cross-retriever deltas clean. TF-IDF
+  verified against a hand-computed cosine example (sklearn conventions:
+  smooth idf ln((1+N)/(1+df))+1, raw tf, l2 rows). LSA: TruncatedSVD over
+  TF-IDF, `algorithm="arpack"`, `random_state=0` — verified bit-identical
+  across fits (day-4 determinism worry resolved; no need for the randomized
+  solver). Empty-vocabulary corpora (pure punctuation) degrade to all-zero
+  scores like BM25 instead of raising.
+- **LSA rank capping was the key design issue.** Per-document indexes cap
+  the SVD rank at n_chunks − 1: with the day-4 suggestion k≈128, LSA would
+  have been (nearly) full-rank ≈ TF-IDF almost everywhere — an uninformative
+  retriever. Chose n_components=64 and instrumented `run_config` to record
+  realized per-document ranks (`retriever_stats` in raw payloads;
+  `RunResult.retriever_stats`, backfills None for old files). The rank table
+  is in the cross-retriever summary and it mattered for interpretation
+  (finding 9).
+- `experiments/summarize_retrievers.py` — per-budget side-by-side means,
+  paired Δ vs bm25 per challenger, hit@5, LSA rank table →
+  `results/summary_dev-v1.1_retrievers.md`. Refuses mismatched grids.
+- `fig_retriever_comparison` in make_figures (3 family panels, retriever
+  lines, CI bands) → `results/figures/retriever_comparison_dev-v1.1.png`.
+  Existing four figures reproduced **bit-identically** after regeneration —
+  end-to-end determinism holds.
+- Tests 163 → **193** (hand-computed TF-IDF cosines; LSA row-space
+  equivalence with TF-IDF via a rank-deficient corpus, latent bridging on a
+  two-topic corpus, determinism, rank caps, degenerate corpora; grid runs
+  for all three retrievers; retriever_stats roundtrip; renderer error paths).
+
+### Ran (24 configs: baseline 12 × {tfidf, lsa}, ~90 s; code committed first at 5cf7650)
+
+### Findings (README §8–9, cross-retriever summary has full tables)
+
+1. **Everything transfers.** Size ordering (TF-IDF @B400: .868/.846/.679/.019
+   for fixed 64→512; LSA .848/.835/.667/.019), sentence>fixed at matched
+   size (+0.042 tfidf / +0.032 lsa @64,B400), and the hit@5-vs-SpanRecall
+   reversal all hold under all three retrievers. Size effect within
+   TF-IDF/LSA (64 vs 256 @B400: +0.189/+0.182) is LARGER than BM25's
+   (+0.134) because weaker retrievers degrade more inside big chunks.
+2. **Chunking effect > retriever effect.** Largest retriever gap at any
+   size ≤128 config: 0.053; size effect at practical budgets: 0.13–0.19.
+3. **BM25 ≥ TF-IDF ≥ LSA nearly everywhere** (paired: 43/48 and 45/48 cells
+   significant vs bm25), and the retriever gap GROWS with chunk size
+   (≤0.019 at size 64; 0.065–0.077 at 256–512) — tf saturation + length
+   normalization matter inside long chunks. Retriever comparisons run at
+   large chunk sizes overstate retriever differences.
+4. **LSA never helps here.** Loses most where the k=64 cap binds (size 64:
+   35/48 docs component-bounded), converges toward TF-IDF where data-bounded
+   (size 512: 48/48, median rank 12). Within-document retrieval with
+   questions written over the document's own vocabulary gives topical
+   smoothing no upside. Kept honest in README limitations: this regime also
+   caps what LSA could ever show; cross-corpus retrieval might differ.
+
+### Next steps (Day 6, in order)
+
+1. **Multi-seed robustness check** (owed since day 3, cheap): rerun the
+   12-config BM25 baseline grid with `--seed 1` and `--seed 2` (~25 s each;
+   config_id already encodes seed so no clobbering). Verify the headline
+   CIs (fixed-64 vs fixed-256 @B400; sentence-64 vs fixed-64 @B400) are
+   stable across seeds. Report as a short README robustness note + NOTES
+   table. Consider whether summarize needs a --seed flag (load_raw currently
+   has no seed filter — check before running; add one if needed).
+2. **Dense retriever (MiniLM)**: `uv add sentence-transformers` (watch the
+   lockfile + CI; torch CPU wheels are big — check disk), implement
+   `DenseRetriever` with per-(chunker,size) embedding cache under a
+   gitignored `cache/` dir, batch-encode chunks once per config. all-MiniLM-
+   L6-v2, 22M params, CPU. Expect minutes-per-config, not seconds — time one
+   config before committing to the grid. This completes the lexical-vs-dense
+   axis and is the most-cited gap in the current writeup.
+3. If dense runs land: extend summarize_retrievers/figure with the dense
+   column (both already iterate over retriever lists; RETRIEVER_STYLES needs
+   a 4th validated color+marker).
+4. Chroma corpora loader remains the gateway to precision/IoU results
+   (SQuAD's 3-token golds make precision uninformative — day-3 finding 6).
+
+### Open questions (carried)
+
+- Chroma corpora reference offsets still unverified (day-1 item).
+- Cross-family overlap table (sentence-o0 vs fixed+25%) still ad hoc.
+- Truncate × overlap cross unrun (one invocation away if a reviewer asks).
+- Seed sensitivity: addressed for BM25 tomorrow; decide whether tfidf/lsa
+  need it too or whether BM25 stability generalizes (argue, don't assume).

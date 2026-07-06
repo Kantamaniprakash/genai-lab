@@ -24,9 +24,9 @@ for the day-by-day research log.
 ## Results at a glance
 
 Measured on SQuAD dev-v1.1 reconstructed articles (48 documents, 2,400
-sampled questions) with BM25 retrieval, against a classic fixed-k evaluation
-as the baseline protocol. Every number comes from per-question score files
-checked into
+sampled questions) with BM25, TF-IDF, and LSA retrieval, against a classic
+fixed-k evaluation as the baseline protocol. Every number comes from
+per-question score files checked into
 [`rag-chunking-bench/results/raw/`](rag-chunking-bench/results/raw/) and
 carries a 95% paired bootstrap confidence interval:
 
@@ -40,8 +40,12 @@ carries a 95% paired bootstrap confidence interval:
 - **Sentence alignment adds a small significant edge** (+0.041 [+0.029,
   +0.052] at size 64, B=400); ~25% overlap pays off for fixed windows at
   tight budgets but is pure cost for sentence packing.
+- **None of it is a BM25 artifact.** The size ordering, the reversal, and
+  the sentence edge all hold under TF-IDF and LSA — and the chunking effect
+  (+0.13–0.19 SpanRecall at B=400) outweighs the retriever effect at small
+  chunk sizes (≤ 0.053) several times over.
 
-Full tables, figures, findings 1–7, and an honest
-[Limitations](rag-chunking-bench/README.md#limitations) section (single
-retriever/dataset/seed so far, regex tokenizer, CPU-only scale) live in the
-[project README](rag-chunking-bench/README.md).
+Full tables, figures, findings 1–9, and an honest
+[Limitations](rag-chunking-bench/README.md#limitations) section (lexical
+retrievers only so far, single dataset/seed, regex tokenizer, CPU-only
+scale) live in the [project README](rag-chunking-bench/README.md).

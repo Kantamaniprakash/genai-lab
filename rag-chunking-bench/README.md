@@ -96,13 +96,18 @@ scoring exact rather than fuzzy-matched.
 
 ### Retrievers
 
-BM25 (lexical, implemented from scratch in `src/retrievers.py` and tested
-against a hand-computed example), TF-IDF cosine (sparse), and LSA (low-rank
-dense, TruncatedSVD over TF-IDF). BEIR (Thakur et al., 2021) established BM25
-as a robust zero-shot baseline; the chunking effect is measured holding each
-retriever fixed, and retriever × chunker interaction is itself a studied
-variable. A neural dense retriever (a small sentence-transformer running on
-CPU) is planned for phase 2 to cover the lexical-vs-dense axis.
+Three deterministic retrievers in `src/retrievers.py`, sharing one retrieval
+tokenizer so they differ only in scoring: BM25 (implemented from scratch,
+tested against a hand-computed example), TF-IDF cosine (scikit-learn,
+likewise hand-verified), and LSA (TruncatedSVD over TF-IDF, ARPACK solver
+with fixed seed; the latent rank is capped per document at
+min(64, n_chunks − 1, n_terms − 1), and runs record where that cap actually
+binds). BEIR (Thakur et al., 2021) established BM25 as a robust zero-shot
+baseline; the chunking effect is measured holding each retriever fixed, and
+retriever × chunker interaction is itself a studied variable (see the
+cross-retriever results below). A neural dense retriever (a small
+sentence-transformer running on CPU) is planned to cover the
+lexical-vs-dense axis.
 
 ### Datasets
 
@@ -124,10 +129,12 @@ scores, gzipped JSON, with config + git commit embedded) and is regenerable:
 
 ```bash
 python -m experiments.run_grid                # baseline: 12 configs, ~25 s on 4 CPU cores
+python -m experiments.run_grid --retrievers tfidf lsa   # cross-retriever grid (~90 s)
 python -m experiments.run_grid --budget-rule truncate   # budget-rule ablation
 python -m experiments.run_grid --chunkers fixed --sizes 64 --overlaps 8 16 32   # overlap ablation (see NOTES)
 python -m experiments.summarize               # baseline tables incl. paired CIs -> results/summary_*.md
 python -m experiments.summarize_ablations     # overlap + budget-rule tables -> results/summary_*_ablations.md
+python -m experiments.summarize_retrievers    # retriever x chunker tables -> results/summary_*_retrievers.md
 python -m experiments.make_figures            # figures -> results/figures/
 python -m experiments.make_hero_figure        # headline figure -> assets/
 ```
@@ -284,6 +291,51 @@ size penalty under truncation has a clean interpretation: a large top-ranked
 chunk enters the prompt as a prefix, and evidence sitting past the cut is
 lost — which is also what happens when production stacks truncate contexts.
 
+### Retriever robustness: the chunking effects are not BM25 artifacts
+
+Setup: the 12 baseline configurations rerun with TF-IDF cosine and LSA
+(latent rank ≤ 64) in place of BM25 — same chunks, same questions, same
+protocol, so every comparison below is paired per question. Full tables,
+including LSA's realized per-document latent ranks:
+[`results/summary_dev-v1.1_retrievers.md`](results/summary_dev-v1.1_retrievers.md).
+
+![SpanRecall@400 by chunk size for BM25, TF-IDF, and LSA](results/figures/retriever_comparison_dev-v1.1.png)
+
+*SpanRecall@400 vs. chunk size under each retriever. The three lines are
+nearly parallel in every chunker family: which retriever you pick moves
+recall far less than which chunk size you pick.*
+
+**8. Every chunking finding transfers across retrievers — and the chunking
+effect dominates the retriever effect.** Under budget matching, recall falls
+with chunk size for all three retrievers (TF-IDF at B=400: 0.868 / 0.846 /
+0.679 / 0.019 for fixed 64 → 512; LSA: 0.848 / 0.835 / 0.667 / 0.019). The
+within-retriever size effect is at least as large as under BM25 — fixed-64
+beats fixed-256 at B=400 by **+0.189 [+0.170, +0.208]** (TF-IDF) and +0.182
+[+0.163, +0.201] (LSA) vs. +0.134 for BM25. The sentence-over-fixed edge at
+matched size survives too (size 64, B=400: +0.042 [+0.030, +0.054] TF-IDF,
++0.032 [+0.019, +0.045] LSA), as does the fixed-k metric reversal (TF-IDF
+hit@5 *rises* 0.859 → 0.937 for 64 → 512 while SpanRecall@400 falls
+0.868 → 0.019). By contrast, the largest retriever gap at any matched
+small-chunk configuration (size ≤ 128) is 0.053. At the operating points the
+benchmark recommends anyway, chunking decisions move retrieval quality by
+several times more than the choice among these retrievers.
+
+**9. BM25 ≥ TF-IDF ≥ LSA nearly everywhere, and the retriever gap grows with
+chunk size.** Paired per config × budget, TF-IDF trails BM25 significantly
+in 43/48 cells and LSA in 45/48, with LSA's mean at or below TF-IDF's in
+every cell. The interaction is systematic: at size 64 the BM25-over-TF-IDF
+gap never exceeds 0.019, but at sizes 256–512 it reaches 0.065–0.077 — BM25's
+tf saturation and length normalization earn their keep inside long chunks,
+where raw-tf cosine dilutes. LSA's latent bottleneck never helps on this
+corpus: it loses most exactly where the rank cap binds (size 64: k = 64
+binds for 35/48 documents) and converges toward TF-IDF where the data bound
+makes it (nearly) full-rank (size 512: all 48 documents data-bounded, median
+rank 12). On within-document retrieval with human-written questions over the
+document's own vocabulary, topical smoothing can only discard information.
+Two practical readings: with small chunks, a simple lexical retriever is not
+the bottleneck; and retriever comparisons run at large chunk sizes will
+overstate retriever differences relative to a well-chunked deployment.
+
 ## Status
 
 - [x] Phase 1 (harness): offset-preserving chunkers + tokenization
@@ -295,7 +347,9 @@ lost — which is also what happens when production stacks truncate contexts.
       and figures above)
 - [x] Phase 2: overlap ablation (15 configs, paired vs zero overlap) and
       truncate-final-chunk robustness check (12 configs) — findings 6–7
-- [ ] Phase 2: TF-IDF/LSA + dense (MiniLM) retrievers, Chroma corpora loader
+- [x] Phase 2: TF-IDF + LSA retrievers, cross-retriever grid (24 configs)
+      and interaction analysis — findings 8–9 (193 tests)
+- [ ] Phase 2: dense (MiniLM) retriever, Chroma corpora loader
 - [ ] Phase 3: further ablations, error analysis, multi-seed sampling,
       tokenizer (BPE) robustness
 - [ ] Phase 4: full writeup
@@ -307,10 +361,15 @@ Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).
 - CPU-only environment: neural retrieval is limited to small
   sentence-transformer models; findings may not transfer to large dense
   retrievers or cross-encoder rerankers.
-- Results so far are one retriever (BM25) on one dataset (SQuAD dev-v1.1
-  articles) with one sampling seed; the grid protocol supports more of each,
-  and retriever × chunker interaction is explicitly untested until TF-IDF /
-  LSA / dense runs land.
+- Results so far cover three lexical/low-rank retrievers (BM25, TF-IDF, LSA)
+  on one dataset (SQuAD dev-v1.1 articles) with one sampling seed; the grid
+  protocol supports more of each. Whether the transfer results (findings
+  8–9) extend to neural dense retrieval is untested until the MiniLM runs
+  land.
+- Retrieval here is within-document (each question is scored against its own
+  article's chunks, the regime of long-document QA); LSA's rank cap is
+  therefore bounded by per-document chunk counts, and cross-corpus retrieval
+  could reward latent smoothing differently.
 - SQuAD gold answers are short spans inside single paragraphs, which makes
   SpanPrecision/IoU nearly uninformative here (see Experiments note) and may
   favor small chunks more than corpora with long, multi-sentence evidence
@@ -353,11 +412,12 @@ Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).
 
 ```bash
 pip install -r requirements.txt
-python -m pytest tests/ -q          # 163 tests
+python -m pytest tests/ -q          # 193 tests
 python -m src.data                  # fetch SQuAD (pinned URLs + SHA256)
 python -m experiments.run_grid      # rerun the grid (results are resumable)
 python -m experiments.summarize
 python -m experiments.summarize_ablations
+python -m experiments.summarize_retrievers
 python -m experiments.make_figures
 python -m experiments.make_hero_figure
 ```

@@ -25,14 +25,16 @@ rigorously. It also feeds directly back into my `financial-rag-chatbot`.
 **Phase.** 2 of 4 — baselines (first grid 2026-07-04: fixed-k vs
 budget-matched ranking reversal; overlap ablation + truncate-rule robustness
 check 2026-07-05: overlap = boundary repair, size ordering survives the rule
-change — findings 6–7 in the project README).
+change — findings 6–7; cross-retriever grid 2026-07-06: all chunking effects
+transfer to TF-IDF/LSA, chunking effect > retriever effect, retriever gap
+grows with chunk size — findings 8–9 in the project README).
 
 1. **Harness** — offset-preserving chunkers, tokenization, span-level metrics,
    budget-matched retrieval protocol, dataset loaders. *(done except Chroma loader)*
 2. **Baselines** — BM25 / TF-IDF / LSA retrievers over all chunker x size x overlap
    configs on SQuAD-derived long documents + Chroma eval corpora. *(current:
-   BM25 grid + overlap and budget-rule ablations done; next = TF-IDF/LSA +
-   dense retriever, Chroma corpora)*
+   BM25/TF-IDF/LSA grids + overlap and budget-rule ablations done; next =
+   multi-seed check, dense (MiniLM) retriever, Chroma corpora)*
 3. **Ablations & analysis** — budget curves, overlap ablation *(done)*, semantic vs.
    structural chunking, per-dataset error analysis, multi-seed sampling,
    significance testing.
