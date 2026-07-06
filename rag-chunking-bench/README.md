@@ -3,6 +3,13 @@
 **How much does chunking actually matter for RAG retrieval — once you control
 for the retrieved-token budget?**
 
+![Budget-matched SpanRecall@400 by chunking strategy and chunk size, with 95% bootstrap CIs](assets/hero_spanrecall_dev-v1.1_bm25.png)
+
+*Headline result: at a fixed 400-token retrieval budget, smaller chunks win in
+every chunker family and chunks larger than the budget collapse to ~0.
+Regenerated from committed raw results with
+`python -m experiments.make_hero_figure`.*
+
 ## Abstract
 
 Chunking is the highest-leverage, least-principled design decision in
@@ -122,6 +129,7 @@ python -m experiments.run_grid --chunkers fixed --sizes 64 --overlaps 8 16 32   
 python -m experiments.summarize               # baseline tables incl. paired CIs -> results/summary_*.md
 python -m experiments.summarize_ablations     # overlap + budget-rule tables -> results/summary_*_ablations.md
 python -m experiments.make_figures            # figures -> results/figures/
+python -m experiments.make_hero_figure        # headline figure -> assets/
 ```
 
 ### Baseline grid (phase 2, first slice)
@@ -351,6 +359,14 @@ python -m experiments.run_grid      # rerun the grid (results are resumable)
 python -m experiments.summarize
 python -m experiments.summarize_ablations
 python -m experiments.make_figures
+python -m experiments.make_hero_figure
+```
+
+Or with [uv](https://docs.astral.sh/uv/) (lockfile committed):
+
+```bash
+uv sync --locked
+uv run pytest tests/ -q
 ```
 
 Python 3.11. Runs are deterministic end-to-end (seeded sampling,
