@@ -28,6 +28,7 @@ from experiments.summarize import (
     render_summary,
 )
 from experiments.summarize_ablations import render_ablations
+from experiments.summarize_retrievers import render_retrievers
 from src.data import Document, GoldSpan, QADataset, Question
 
 PARA_ZEBRA = (
@@ -304,3 +305,75 @@ class TestSummarizeAblations:
         run_and_save(_config(), dataset, questions, tmp_path)
         with pytest.raises(SystemExit, match="no ablation results"):
             render_ablations("tiny", "bm25", tmp_path)
+
+
+class TestRetrieverGrid:
+    def test_all_retrievers_run_and_score(self, tiny_dataset):
+        # Each question's vocabulary uniquely matches its paragraph, so
+        # every retriever must recover every answer under the loose budget.
+        dataset, questions = tiny_dataset
+        for retriever in ("bm25", "tfidf", "lsa"):
+            result = run_config(_config(retriever=retriever), dataset, questions)
+            for record in result["records"]:
+                assert record["budgets"]["80"]["recall"] == 1.0, retriever
+
+    def test_lsa_records_realized_ranks(self, tiny_dataset):
+        dataset, questions = tiny_dataset
+        result = run_config(_config(retriever="lsa"), dataset, questions)
+        stats = result["retriever_stats"]
+        assert stats["n_docs"] == 1
+        # The tiny document chunks into few pieces, so the rank must have
+        # been capped by the data, not by n_components.
+        assert 1 <= stats["realized_rank_max"] < stats["n_components"]
+        assert stats["n_docs_data_bounded"] == 1
+
+    def test_non_lsa_runs_have_no_retriever_stats(self, tiny_dataset):
+        dataset, questions = tiny_dataset
+        assert "retriever_stats" not in run_config(_config(), dataset, questions)
+
+    def test_retriever_stats_roundtrip_through_load_raw(self, tiny_dataset, tmp_path):
+        dataset, questions = tiny_dataset
+        run_and_save(_config(retriever="lsa"), dataset, questions, tmp_path)
+        run_and_save(_config(), dataset, questions, tmp_path)
+        by = {rr.config["retriever"]: rr for rr in load_raw(tmp_path)}
+        assert by["lsa"].retriever_stats is not None
+        assert by["bm25"].retriever_stats is None
+
+
+class TestSummarizeRetrievers:
+    def _save_grid(self, tiny_dataset, tmp_path, retrievers=("bm25", "tfidf", "lsa")):
+        dataset, questions = tiny_dataset
+        for retriever in retrievers:
+            for chunker in ("fixed", "sentence"):
+                run_and_save(
+                    _config(retriever=retriever, chunker=chunker),
+                    dataset,
+                    questions,
+                    tmp_path,
+                )
+
+    def test_render_retrievers(self, tiny_dataset, tmp_path):
+        self._save_grid(tiny_dataset, tmp_path)
+        text = render_retrievers("tiny", ["bm25", "tfidf", "lsa"], tmp_path)
+        assert "## SpanRecall@80 (mean) by retriever" in text
+        assert "ΔSpanRecall, tfidf − bm25" in text
+        assert "ΔSpanRecall, lsa − bm25" in text
+        assert "## LSA realized latent rank" in text
+        assert "fixed-32 (lsa)" in text
+
+    def test_missing_retriever_exits(self, tiny_dataset, tmp_path):
+        self._save_grid(tiny_dataset, tmp_path, retrievers=("bm25",))
+        with pytest.raises(SystemExit, match="no baseline-grid results"):
+            render_retrievers("tiny", ["bm25", "tfidf"], tmp_path)
+
+    def test_mismatched_grids_exit(self, tiny_dataset, tmp_path):
+        dataset, questions = tiny_dataset
+        self._save_grid(tiny_dataset, tmp_path, retrievers=("bm25",))
+        run_and_save(_config(retriever="tfidf"), dataset, questions, tmp_path)
+        with pytest.raises(SystemExit, match="different grids"):
+            render_retrievers("tiny", ["bm25", "tfidf"], tmp_path)
+
+    def test_unknown_reference_exits(self, tiny_dataset, tmp_path):
+        self._save_grid(tiny_dataset, tmp_path)
+        with pytest.raises(SystemExit, match="reference retriever"):
+            render_retrievers("tiny", ["bm25", "tfidf"], tmp_path, reference="lsa")

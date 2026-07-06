@@ -30,6 +30,9 @@ class RunResult:
     meta: dict
     chunk_stats: dict
     records: tuple[dict, ...]
+    # Only some retrievers report fit statistics (LSA: realized latent ranks);
+    # absent for every other retriever and for files written before it existed.
+    retriever_stats: dict | None = None
 
     @property
     def label(self) -> str:
@@ -87,6 +90,7 @@ def load_raw(
             meta=payload["meta"],
             chunk_stats=payload["chunk_stats"],
             records=tuple(payload["records"]),
+            retriever_stats=payload.get("retriever_stats"),
         )
         if dataset is not None and rr.config["dataset"] != dataset:
             continue

@@ -33,6 +33,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+import sklearn
 
 from src.chunkers import (
     Chunker,
@@ -42,13 +43,13 @@ from src.chunkers import (
 )
 from src.data import QADataset, Question, download_squad, load_squad, sample_questions
 from src.metrics import hit_at_k, span_scores, take_until_budget
-from src.retrievers import BM25Retriever, Retriever
+from src.retrievers import BM25Retriever, LSARetriever, Retriever, TfidfRetriever
 from src.tokenization import RegexWordTokenizer, TokenIndex
 
 ROOT = Path(__file__).resolve().parent.parent
 
 CHUNKERS = ("fixed", "sentence", "recursive")
-RETRIEVERS = ("bm25",)
+RETRIEVERS = ("bm25", "tfidf", "lsa")
 
 
 @dataclass(frozen=True)
@@ -99,6 +100,10 @@ def make_chunker(name: str, chunk_size: int, overlap: int) -> Chunker:
 def make_retriever(name: str) -> Retriever:
     if name == "bm25":
         return BM25Retriever()
+    if name == "tfidf":
+        return TfidfRetriever()
+    if name == "lsa":
+        return LSARetriever()
     raise ValueError(f"unknown retriever {name!r}")
 
 
@@ -118,6 +123,7 @@ def run_metadata() -> dict[str, str]:
         "git_commit": commit,
         "python": platform.python_version(),
         "numpy": np.__version__,
+        "scikit_learn": sklearn.__version__,
         "started_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
 
@@ -142,12 +148,19 @@ def run_config(
     t0 = time.perf_counter()
     records: list[dict] = []
     chunk_tokens: list[int] = []
+    realized_ranks: list[int] = []
     for doc_id in sorted(by_doc):
         doc = dataset.documents[doc_id]
         index = TokenIndex(doc.text, tokenizer)
         chunks = chunker.chunk(doc.text)
         chunk_tokens.extend(index.count_in(c.start, c.end) for c in chunks)
         retriever = make_retriever(cfg.retriever).fit([c.text for c in chunks])
+        # LSA's latent rank is data-bounded per document; recording it is the
+        # only way to tell, after the fact, where the low-rank bottleneck
+        # actually bound and where LSA degenerated toward plain TF-IDF.
+        rank = getattr(retriever, "realized_rank", None)
+        if rank is not None:
+            realized_ranks.append(rank)
         for question in by_doc[doc_id]:
             ranked = [chunks[i] for i in retriever.rank(question.text)]
             budgets: dict[str, dict] = {}
@@ -169,7 +182,7 @@ def run_config(
                 {"qid": question.qid, "doc_id": doc_id, "budgets": budgets, "hits": hits}
             )
     counts = sorted(chunk_tokens)
-    return {
+    result = {
         "config": dataclasses.asdict(cfg),
         "meta": meta | {"runtime_s": round(time.perf_counter() - t0, 3)},
         "chunk_stats": {
@@ -182,6 +195,17 @@ def run_config(
         "n_questions": len(records),
         "records": records,
     }
+    if realized_ranks:
+        ranks = sorted(realized_ranks)
+        result["retriever_stats"] = {
+            "n_components": LSARetriever().n_components,
+            "realized_rank_min": ranks[0],
+            "realized_rank_median": ranks[len(ranks) // 2],
+            "realized_rank_max": ranks[-1],
+            "n_docs_data_bounded": sum(r < LSARetriever().n_components for r in ranks),
+            "n_docs": len(ranks),
+        }
+    return result
 
 
 def result_path(raw_dir: Path, cfg: GridConfig) -> Path:

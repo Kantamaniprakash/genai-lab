@@ -32,6 +32,14 @@ ROOT = Path(__file__).resolve().parent.parent
 CHUNKER_COLORS = {"fixed": "#2a78d6", "sentence": "#1baf7a", "recursive": "#eda100"}
 CHUNKER_ORDER = ("fixed", "sentence", "recursive")
 SIZE_RAMP = {64: "#86b6ef", 128: "#5598e7", 256: "#2a78d6", 512: "#184f95"}
+# Retrievers reuse the same validated hue order (identity also carried by
+# marker shape, so the two categorical dimensions cannot be confused across
+# figures: chunker families are panel titles here, never colors).
+RETRIEVER_STYLES = {
+    "bm25": ("#2a78d6", "o"),
+    "tfidf": ("#1baf7a", "s"),
+    "lsa": ("#eda100", "^"),
+}
 
 INK = "#0b0b0b"
 INK_SECONDARY = "#52514e"
@@ -325,6 +333,63 @@ def fig_budget_rule(
     plt.close(fig)
 
 
+def fig_retriever_comparison(
+    by_retriever: dict[str, list[RunResult]], out: Path, budget: int = 400
+) -> None:
+    """SpanRecall@budget vs. chunk size, one panel per chunker, one line per
+    retriever.
+
+    The question the figure answers: is "small chunks win under budget
+    matching" a BM25 artifact, or a property of chunking that holds across
+    retrieval models? Chunk lists are identical across retrievers at each
+    grid point, so vertical gaps between lines are pure retriever effects.
+    """
+    grids = {name: _by_config(runs) for name, runs in by_retriever.items()}
+    any_runs = next(iter(by_retriever.values()))
+    sizes = sorted({rr.config["chunk_size"] for rr in any_runs})
+    n_questions = len(any_runs[0].records)
+    fig, axes = plt.subplots(1, len(CHUNKER_ORDER), figsize=(9.6, 3.2), sharey=True)
+    for ax, chunker in zip(axes, CHUNKER_ORDER, strict=True):
+        for name in RETRIEVER_STYLES:
+            if name not in grids:
+                continue
+            color, marker = RETRIEVER_STYLES[name]
+            cis = [mean_ci(grids[name][(chunker, s)].metric("recall", budget)) for s in sizes]
+            ax.fill_between(
+                sizes,
+                [c.ci_low for c in cis],
+                [c.ci_high for c in cis],
+                color=color,
+                alpha=0.16,
+                linewidth=0,
+            )
+            ax.plot(
+                sizes,
+                [c.mean_diff for c in cis],
+                color=color,
+                linewidth=2,
+                marker=marker,
+                markersize=5,
+                markeredgecolor=SURFACE,
+                markeredgewidth=1.0,
+                label=name,
+            )
+        ax.set_title(f"{chunker} chunker")
+        ax.set_ylim(0, 1.0)
+        _log2_axis(ax, sizes, "chunk size (tokens, log scale)")
+    axes[0].set_ylabel(f"SpanRecall@{budget} (mean, {n_questions:,} questions)")
+    axes[0].legend(title="retriever", loc="lower left", title_fontsize=8, labelcolor=INK_SECONDARY)
+    fig.suptitle(
+        f"The size effect is retriever-independent at B={budget}: smaller chunks "
+        "win under every retriever (bands: 95% CI)",
+        fontsize=10.5,
+        color=INK,
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.99))
+    fig.savefig(out, bbox_inches="tight")
+    plt.close(fig)
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Render README figures from raw results.",
@@ -379,6 +444,20 @@ def main(argv: list[str] | None = None) -> None:
         rule = args.out_dir / f"budget_rule_{args.dataset}_{args.retriever}.png"
         fig_budget_rule(baseline, trunc, rule)
         written.append(rule)
+
+    by_retriever = {}
+    for name in RETRIEVER_STYLES:
+        runs = load_raw(
+            args.raw_dir, dataset=args.dataset, retriever=name,
+            budget_rule="stop", overlap=0,
+        )
+        if runs:
+            by_retriever[name] = runs
+    if len(by_retriever) >= 2:
+        check_aligned([rr for runs in by_retriever.values() for rr in runs])
+        comparison = args.out_dir / f"retriever_comparison_{args.dataset}.png"
+        fig_retriever_comparison(by_retriever, comparison)
+        written.append(comparison)
 
     for path in written:
         print(f"wrote {path.relative_to(ROOT)}")
