@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 rag-chunking-bench/data/
+.venv/
+*.egg-info/
+.idea/
+.vscode/
