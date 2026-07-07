@@ -138,7 +138,7 @@ scores, gzipped JSON, with config + git commit embedded) and is regenerable:
 ```bash
 python -m experiments.run_grid                # baseline: 12 configs, ~25 s on 4 CPU cores
 python -m experiments.run_grid --retrievers tfidf lsa   # cross-retriever grid (~90 s)
-python -m experiments.run_grid --retrievers dense       # dense grid (~13 min CPU; needs the "dense" group)
+python -m experiments.run_grid --retrievers dense       # dense grid (~9 min CPU; needs the "dense" group)
 python -m experiments.run_grid --budget-rule truncate   # budget-rule ablation
 python -m experiments.run_grid --chunkers fixed --sizes 64 --overlaps 8 16 32   # overlap ablation (see NOTES)
 python -m experiments.run_grid --seed 1       # independent question sample (multi-seed check)
