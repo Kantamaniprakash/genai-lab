@@ -96,18 +96,26 @@ scoring exact rather than fuzzy-matched.
 
 ### Retrievers
 
-Three deterministic retrievers in `src/retrievers.py`, sharing one retrieval
-tokenizer so they differ only in scoring: BM25 (implemented from scratch,
-tested against a hand-computed example), TF-IDF cosine (scikit-learn,
-likewise hand-verified), and LSA (TruncatedSVD over TF-IDF, ARPACK solver
-with fixed seed; the latent rank is capped per document at
-min(64, n_chunks − 1, n_terms − 1), and runs record where that cap actually
-binds). BEIR (Thakur et al., 2021) established BM25 as a robust zero-shot
-baseline; the chunking effect is measured holding each retriever fixed, and
-retriever × chunker interaction is itself a studied variable (see the
-cross-retriever results below). A neural dense retriever (a small
-sentence-transformer running on CPU) is planned to cover the
-lexical-vs-dense axis.
+Three deterministic lexical/low-rank retrievers in `src/retrievers.py`,
+sharing one retrieval tokenizer so they differ only in scoring: BM25
+(implemented from scratch, tested against a hand-computed example), TF-IDF
+cosine (scikit-learn, likewise hand-verified), and LSA (TruncatedSVD over
+TF-IDF, ARPACK solver with fixed seed; the latent rank is capped per
+document at min(64, n_chunks − 1, n_terms − 1), and runs record where that
+cap actually binds). BEIR (Thakur et al., 2021) established BM25 as a robust
+zero-shot baseline; the chunking effect is measured holding each retriever
+fixed, and retriever × chunker interaction is itself a studied variable (see
+the cross-retriever results below).
+
+A fourth, neural retriever covers the lexical-vs-dense axis: cosine
+similarity over `all-MiniLM-L6-v2` sentence embeddings (`src/dense.py`;
+Reimers & Gurevych 2019, MiniLM distillation by Wang et al. 2020; 22M
+parameters, runs on CPU). Two honesty notes baked into the harness: the
+encoder reads at most 256 wordpieces, so longer chunks are scored by their
+prefix — every dense run records how many chunks that truncation touched —
+and dense scores are deterministic per environment but, unlike the lexical
+retrievers, not bit-portable across torch/BLAS builds (versions are recorded
+in each result file).
 
 ### Datasets
 
@@ -130,11 +138,14 @@ scores, gzipped JSON, with config + git commit embedded) and is regenerable:
 ```bash
 python -m experiments.run_grid                # baseline: 12 configs, ~25 s on 4 CPU cores
 python -m experiments.run_grid --retrievers tfidf lsa   # cross-retriever grid (~90 s)
+python -m experiments.run_grid --retrievers dense       # dense grid (~13 min CPU; needs the "dense" group)
 python -m experiments.run_grid --budget-rule truncate   # budget-rule ablation
 python -m experiments.run_grid --chunkers fixed --sizes 64 --overlaps 8 16 32   # overlap ablation (see NOTES)
+python -m experiments.run_grid --seed 1       # independent question sample (multi-seed check)
 python -m experiments.summarize               # baseline tables incl. paired CIs -> results/summary_*.md
 python -m experiments.summarize_ablations     # overlap + budget-rule tables -> results/summary_*_ablations.md
 python -m experiments.summarize_retrievers    # retriever x chunker tables -> results/summary_*_retrievers.md
+python -m experiments.summarize_seeds         # per-seed robustness tables -> results/summary_*_seeds.md
 python -m experiments.make_figures            # figures -> results/figures/
 python -m experiments.make_hero_figure        # headline figure -> assets/
 ```
@@ -299,11 +310,13 @@ protocol, so every comparison below is paired per question. Full tables,
 including LSA's realized per-document latent ranks:
 [`results/summary_dev-v1.1_retrievers.md`](results/summary_dev-v1.1_retrievers.md).
 
-![SpanRecall@400 by chunk size for BM25, TF-IDF, and LSA](results/figures/retriever_comparison_dev-v1.1.png)
+![SpanRecall@400 by chunk size for BM25, TF-IDF, LSA, and dense MiniLM](results/figures/retriever_comparison_dev-v1.1.png)
 
-*SpanRecall@400 vs. chunk size under each retriever. The three lines are
-nearly parallel in every chunker family: which retriever you pick moves
-recall far less than which chunk size you pick.*
+*SpanRecall@400 vs. chunk size under each retriever. The three lexical lines
+are nearly parallel in every chunker family: which retriever you pick moves
+recall far less than which chunk size you pick. The dense line (added later;
+findings 11–12) tracks them at small sizes and falls away exactly where
+chunks outgrow its encoder window.*
 
 **8. Every chunking finding transfers across retrievers — and the chunking
 effect dominates the retriever effect.** Under budget matching, recall falls
@@ -336,6 +349,82 @@ Two practical readings: with small chunks, a simple lexical retriever is not
 the bottleneck; and retriever comparisons run at large chunk sizes will
 overstate retriever differences relative to a well-chunked deployment.
 
+### Sampling-seed robustness: the headline effects do not ride on the draw
+
+Every grid above samples 50 questions per document with one seed. To check
+that no headline claim is an artifact of that one draw, the 12-config BM25
+baseline grid was rerun under two more seeds — each an independent
+50-per-document sample (2,400 fresh questions per seed). Paired deltas are
+computed within each seed (across-seed pairing would be meaningless); full
+tables: [`results/summary_dev-v1.1_bm25_seeds.md`](results/summary_dev-v1.1_bm25_seeds.md).
+
+**10. Every headline claim replicates under every seed.** Per-config mean
+SpanRecall@400 moves by at most 0.013 across seeds (median spread 0.008),
+and each headline paired comparison stays significant with essentially the
+same effect size under all three seeds:
+
+| ΔSpanRecall@400 (paired, per seed) | seed 0 | seed 1 | seed 2 |
+|---|---|---|---|
+| fixed-64 − fixed-256 | **+0.134** | **+0.119** | **+0.123** |
+| sentence-64 − fixed-64 | **+0.041** | **+0.049** | **+0.047** |
+| sentence-128 − fixed-128 | **+0.020** | **+0.025** | **+0.024** |
+
+(bold = 95% paired bootstrap CI excludes zero; full intervals in the linked
+summary). The question-sampling seed is not a hidden degree of freedom in
+any result reported here.
+
+### Dense retrieval: the effects transfer, and the encoder window becomes a mechanism
+
+Setup: the 12 baseline configurations rerun with the dense retriever —
+cosine over `all-MiniLM-L6-v2` embeddings — same chunks, same questions,
+every comparison paired per question (~9 min on 4 CPU cores for the grid).
+MiniLM reads at most 256 wordpieces per input, and every run records its
+truncation exposure: 0% of chunks at sizes 64–128 in every family, 25% / 59%
+/ 96% at nominal size 256 for recursive / sentence / fixed (their realized
+chunk lengths differ — finding 4's point, now with teeth), and 96–97%
+everywhere at size 512. Full tables:
+[`results/summary_dev-v1.1_retrievers.md`](results/summary_dev-v1.1_retrievers.md).
+
+![Dense-vs-BM25 paired gap by chunk size with truncation shares, and the dense hit@5 downturn](results/figures/dense_window_dev-v1.1.png)
+
+*Left: the dense−BM25 paired recall gap is flat and small while chunks fit
+the encoder window (labels: share of chunks truncated) and dives where
+truncation sets in. Right: dense is the only retriever whose fixed-k hit@5
+curve turns DOWN at large sizes — big chunks stop helping even the metric
+that structurally favors them, because the encoder never reads most of each
+chunk.*
+
+**11. The chunking effects are retriever-family-independent.** The
+budget-matched size ordering (dense SpanRecall@400: 0.850 / 0.801 / 0.569 /
+0.020 for fixed 64 → 512), the sentence-over-fixed edge at matched size
+(+0.054 [+0.040, +0.068] at size 64, B=400), and the fixed-k metric reversal
+all replicate under dense retrieval. The within-dense size effect (fixed-64
+− fixed-256 at B=400: **+0.281 [+0.260, +0.302]**) is twice BM25's +0.134 —
+finding 9's pattern that weaker retrievers degrade more inside big chunks,
+continued past the lexical family. Chunking still dominates retriever
+choice: at size 64 the dense-vs-BM25 gap never exceeds 0.050 at any budget,
+five times smaller than the size effect. With well-sized chunks, MiniLM is
+statistically indistinguishable from BM25 at generous budgets (fixed-64 at
+B=1600: −0.008 [−0.018, +0.002]) — on a corpus whose questions lexically
+overlap their sources, a regime that favors BM25 (see limitations).
+
+**12. Past the encoder window, dense retrieval is prefix retrieval, and
+both metrics show it.** The dense−BM25 gap at B=800 has two regimes: at
+sizes 64–128 (nothing truncated) it stays within −0.005…−0.045, but at the
+truncated sizes it jumps to −0.095 (fixed-256) and **−0.299** (fixed-512) —
+2.6× the worst lexical-challenger gap anywhere in the benchmark (LSA's
+−0.117). The recursive family, whose realized size-256 chunks mostly still
+fit the window (25% truncated), loses only −0.053 at that cell — roughly
+half the fixed-family gap — though exposure alone does not fully order the
+mid-size cells (sentence-256 at 59% behaves like fixed-256 at 96%), so
+realized-length distributions matter beyond the binary truncated/not.
+Sharpest signature: dense hit@5 rises 0.842 → 0.874 through size 256, then
+*falls* to 0.807 at 512 — the only retriever whose fixed-k curve is
+non-monotone (BM25's rises to 0.969). Practical reading: chunk size must be
+co-designed with the embedding model's window; past it, ranking quality
+degrades even at the top of the list, and no budget can buy the discarded
+text back.
+
 ## Status
 
 - [x] Phase 1 (harness): offset-preserving chunkers + tokenization
@@ -349,9 +438,13 @@ overstate retriever differences relative to a well-chunked deployment.
       truncate-final-chunk robustness check (12 configs) — findings 6–7
 - [x] Phase 2: TF-IDF + LSA retrievers, cross-retriever grid (24 configs)
       and interaction analysis — findings 8–9 (193 tests)
-- [ ] Phase 2: dense (MiniLM) retriever, Chroma corpora loader
-- [ ] Phase 3: further ablations, error analysis, multi-seed sampling,
-      tokenizer (BPE) robustness
+- [x] Phase 3 (pulled forward): multi-seed robustness check (24 configs,
+      seeds 1–2) — finding 10
+- [x] Phase 2: dense MiniLM retriever with truncation-exposure
+      instrumentation (12 configs) — findings 11–12 (213 tests)
+- [ ] Phase 2: Chroma corpora loader
+- [ ] Phase 3: further ablations, error analysis, tokenizer (BPE)
+      robustness
 - [ ] Phase 4: full writeup
 
 Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).
@@ -359,13 +452,22 @@ Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).
 ## Limitations
 
 - CPU-only environment: neural retrieval is limited to small
-  sentence-transformer models; findings may not transfer to large dense
-  retrievers or cross-encoder rerankers.
-- Results so far cover three lexical/low-rank retrievers (BM25, TF-IDF, LSA)
-  on one dataset (SQuAD dev-v1.1 articles) with one sampling seed; the grid
-  protocol supports more of each. Whether the transfer results (findings
-  8–9) extend to neural dense retrieval is untested until the MiniLM runs
-  land.
+  sentence-transformer models. MiniLM's 256-wordpiece window is itself part
+  of what the dense results measure (finding 12 quantifies the exposure);
+  large-window embedding models and cross-encoder rerankers may behave
+  differently and are untested here.
+- Results so far cover four retrievers (BM25, TF-IDF, LSA, dense MiniLM) on
+  one dataset (SQuAD dev-v1.1 articles); the grid protocol supports more of
+  each. The BM25 baseline grid replicates under three independent sampling
+  seeds (finding 10); the other retrievers' grids use seed 0, and their
+  paired deltas ride on the same question samples whose stability the seed
+  check established for BM25.
+- SQuAD questions are written by crowdworkers looking at the passage, so
+  their vocabulary overlaps the answer paragraph heavily — a regime that
+  favors lexical retrievers. The dense-vs-BM25 *levels* here should not be
+  read as a general verdict on dense retrieval (BEIR shows the ordering is
+  corpus-dependent); the chunking *effects*, which are measured within each
+  retriever, are the benchmark's claims.
 - Retrieval here is within-document (each question is scored against its own
   article's chunks, the regime of long-document QA); LSA's rank cap is
   therefore bounded by per-document chunk counts, and cross-corpus retrieval
@@ -407,17 +509,25 @@ Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).
 - Pranav Rajpurkar, Jian Zhang, Konstantin Lopyrev, Percy Liang. *SQuAD:
   100,000+ Questions for Machine Comprehension of Text.* EMNLP 2016.
   [arXiv:1606.05250](https://arxiv.org/abs/1606.05250)
+- Nils Reimers, Iryna Gurevych. *Sentence-BERT: Sentence Embeddings using
+  Siamese BERT-Networks.* EMNLP 2019.
+  [arXiv:1908.10084](https://arxiv.org/abs/1908.10084)
+- Wenhui Wang, Furu Wei, Li Dong, Hangbo Bao, Nan Yang, Ming Zhou. *MiniLM:
+  Deep Self-Attention Distillation for Task-Agnostic Compression of
+  Pre-Trained Transformers.* NeurIPS 2020.
+  [arXiv:2002.10957](https://arxiv.org/abs/2002.10957)
 
 ## Reproducing
 
 ```bash
 pip install -r requirements.txt
-python -m pytest tests/ -q          # 193 tests
+python -m pytest tests/ -q          # 213 tests (dense tests skip without the dense stack)
 python -m src.data                  # fetch SQuAD (pinned URLs + SHA256)
 python -m experiments.run_grid      # rerun the grid (results are resumable)
 python -m experiments.summarize
 python -m experiments.summarize_ablations
 python -m experiments.summarize_retrievers
+python -m experiments.summarize_seeds
 python -m experiments.make_figures
 python -m experiments.make_hero_figure
 ```
@@ -427,8 +537,14 @@ Or with [uv](https://docs.astral.sh/uv/) (lockfile committed):
 ```bash
 uv sync --locked
 uv run pytest tests/ -q
+uv sync --locked --group dense      # optional: CPU-only torch + sentence-transformers
+uv run --group dense pytest tests/ -q   # includes the dense-retriever tests
 ```
 
-Python 3.11. Runs are deterministic end-to-end (seeded sampling,
+Python 3.11. Lexical runs are deterministic end-to-end (seeded sampling,
 deterministic retrievers with index tie-breaks, fixed bootstrap seeds), so
-the tables and figures above reproduce bit-for-bit.
+those tables and figures reproduce bit-for-bit on any machine. Dense runs
+are deterministic on a fixed environment; across torch/BLAS builds,
+floating-point differences can perturb near-tied rankings, which is why
+every dense result file records the torch and sentence-transformers
+versions that produced it.

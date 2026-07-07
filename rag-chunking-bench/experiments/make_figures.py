@@ -391,6 +391,123 @@ def fig_retriever_comparison(
     plt.close(fig)
 
 
+def fig_dense_window(
+    bm25_runs: list[RunResult],
+    dense_runs: list[RunResult],
+    out: Path,
+    budget: int = 800,
+    hit_k: int = 5,
+) -> None:
+    """The encoder-window mechanism behind the dense-vs-BM25 gap.
+
+    Left: paired ΔSpanRecall (dense − BM25) at ``budget`` vs. chunk size, one
+    line per chunker family, each point annotated with the fraction of chunks
+    the encoder truncated. B=800 is used because it is the smallest budget at
+    which every size fits at least one chunk, so no cell is a protocol
+    artifact. Right: hit@5 vs. size for the fixed chunker — BM25's fixed-k
+    curve rises monotonically with size while dense turns down past the
+    window, the signature that separates truncation from generic retriever
+    weakness.
+    """
+    bm25 = _by_config(bm25_runs)
+    dense = _by_config(dense_runs)
+    sizes = sorted({rr.config["chunk_size"] for rr in dense_runs})
+    n_questions = len(dense_runs[0].records)
+    window = next(
+        rr.retriever_stats["max_seq_length"]
+        for rr in dense_runs
+        if rr.retriever_stats is not None
+    )
+    fig, (ax_delta, ax_hit) = plt.subplots(1, 2, figsize=(9.6, 3.4))
+
+    ax_delta.axhline(0, color=AXIS, linewidth=1)
+    for chunker in CHUNKER_ORDER:
+        color = CHUNKER_COLORS[chunker]
+        cis = [
+            diff_ci(
+                dense[(chunker, s)].metric("recall", budget),
+                bm25[(chunker, s)].metric("recall", budget),
+            )
+            for s in sizes
+        ]
+        ax_delta.fill_between(
+            sizes,
+            [c.ci_low for c in cis],
+            [c.ci_high for c in cis],
+            color=color,
+            alpha=0.16,
+            linewidth=0,
+        )
+        ax_delta.plot(
+            sizes,
+            [c.mean_diff for c in cis],
+            color=color,
+            linewidth=2,
+            marker="o",
+            markersize=5,
+            markeredgecolor=SURFACE,
+            markeredgewidth=1.0,
+            label=chunker,
+        )
+        # Non-zero truncation shares only: sizes 64/128 are all 0% and the
+        # three coincident labels would just overprint each other there.
+        # Offsets stagger horizontally because fixed and sentence deltas
+        # nearly coincide at the truncated sizes.
+        label_offset = {"fixed": (-16, -5), "sentence": (15, 5), "recursive": (0, 10)}
+        for size, ci in zip(sizes, cis, strict=True):
+            stats = dense[(chunker, size)].retriever_stats
+            share = stats["n_chunks_truncated"] / stats["n_chunks"]
+            if share == 0:
+                continue
+            ax_delta.annotate(
+                f"{share:.0%}",
+                (size, ci.mean_diff),
+                textcoords="offset points",
+                xytext=label_offset[chunker],
+                ha="center",
+                fontsize=7,
+                color=color,
+            )
+    ax_delta.set_title(
+        f"Paired Δ vs BM25 at B={budget}\n(labels: share of chunks truncated)"
+    )
+    ax_delta.set_ylabel(f"ΔSpanRecall@{budget} (dense − BM25)")
+    ax_delta.legend(title="chunker", loc="lower left", title_fontsize=8,
+                    labelcolor=INK_SECONDARY)
+    _log2_axis(ax_delta, sizes, "chunk size (tokens, log scale)")
+
+    for name in ("bm25", "dense"):
+        color, marker = RETRIEVER_STYLES[name]
+        grid = bm25 if name == "bm25" else dense
+        ax_hit.plot(
+            sizes,
+            [sum(grid[("fixed", s)].hits(hit_k)) / n_questions for s in sizes],
+            color=color,
+            linewidth=2,
+            marker=marker,
+            markersize=5,
+            markeredgecolor=SURFACE,
+            markeredgewidth=1.0,
+            label=name,
+        )
+    ax_hit.set_title(f"hit@{hit_k}, fixed chunker")
+    ax_hit.set_ylabel(f"hit@{hit_k} (mean, {n_questions:,} questions)")
+    ax_hit.legend(title="retriever", loc="lower center", title_fontsize=8,
+                  labelcolor=INK_SECONDARY)
+    _log2_axis(ax_hit, sizes, "chunk size (tokens, log scale)")
+
+    fig.suptitle(
+        f"Past the {window}-wordpiece encoder window, dense retrieval is "
+        "prefix retrieval: the BM25 gap widens where truncation sets in, and "
+        "even fixed-k hit@5 turns down",
+        fontsize=10.5,
+        color=INK,
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.97))
+    fig.savefig(out, bbox_inches="tight")
+    plt.close(fig)
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Render README figures from raw results.",
@@ -466,6 +583,13 @@ def main(argv: list[str] | None = None) -> None:
         comparison = args.out_dir / f"retriever_comparison_{args.dataset}.png"
         fig_retriever_comparison(by_retriever, comparison)
         written.append(comparison)
+
+    if "bm25" in by_retriever and "dense" in by_retriever and all(
+        rr.retriever_stats is not None for rr in by_retriever["dense"]
+    ):
+        window = args.out_dir / f"dense_window_{args.dataset}.png"
+        fig_dense_window(by_retriever["bm25"], by_retriever["dense"], window)
+        written.append(window)
 
     for path in written:
         print(f"wrote {path.relative_to(ROOT)}")

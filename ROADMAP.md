@@ -27,17 +27,22 @@ budget-matched ranking reversal; overlap ablation + truncate-rule robustness
 check 2026-07-05: overlap = boundary repair, size ordering survives the rule
 change — findings 6–7; cross-retriever grid 2026-07-06: all chunking effects
 transfer to TF-IDF/LSA, chunking effect > retriever effect, retriever gap
-grows with chunk size — findings 8–9 in the project README).
+grows with chunk size — findings 8–9; multi-seed check + dense MiniLM grid
+2026-07-07: headline claims replicate under three independent question
+samples, chunking effects transfer to dense retrieval, and past the encoder
+window dense retrieval degrades to prefix retrieval — findings 10–12 in the
+project README. The retriever axis is complete: BM25 / TF-IDF / LSA / dense).
 
 1. **Harness** — offset-preserving chunkers, tokenization, span-level metrics,
    budget-matched retrieval protocol, dataset loaders. *(done except Chroma loader)*
-2. **Baselines** — BM25 / TF-IDF / LSA retrievers over all chunker x size x overlap
-   configs on SQuAD-derived long documents + Chroma eval corpora. *(current:
-   BM25/TF-IDF/LSA grids + overlap and budget-rule ablations done; next =
-   multi-seed check, dense (MiniLM) retriever, Chroma corpora)*
-3. **Ablations & analysis** — budget curves, overlap ablation *(done)*, semantic vs.
-   structural chunking, per-dataset error analysis, multi-seed sampling,
-   significance testing.
+2. **Baselines** — BM25 / TF-IDF / LSA / dense retrievers over all chunker x size x
+   overlap configs on SQuAD-derived long documents + Chroma eval corpora.
+   *(current: all four retriever grids plus overlap, budget-rule, and
+   multi-seed checks done on SQuAD; next = Chroma corpora loader, the
+   gateway to meaningful SpanPrecision/IoU results)*
+3. **Ablations & analysis** — budget curves, overlap ablation *(done)*,
+   multi-seed sampling *(done, BM25)*, semantic vs. structural chunking,
+   per-dataset error analysis, significance testing.
 4. **Writeup** — README as a full research report with real tables and limitations.
 
 **Environment constraints (recorded so results are honest).** CPU-only (4 cores,

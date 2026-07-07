@@ -454,3 +454,107 @@ the ones my diff would have added, left the rest (not my scope today).
 - Truncate × overlap cross unrun (one invocation away if a reviewer asks).
 - Seed sensitivity: addressed for BM25 tomorrow; decide whether tfidf/lsa
   need it too or whether BM25 stability generalizes (argue, don't assume).
+
+---
+
+## 2026-07-07 — Day 6: multi-seed check + dense MiniLM — findings 10–12, phase 2 retrievers complete
+
+### Built today (committed first at 1b7cc10; figure fn added after, see below)
+
+- **Optional `dense` dependency group** (pyproject): sentence-transformers
+  5.6.0 + torch 2.12.1+cpu, with torch pinned to the CPU-only index via
+  `[tool.uv.sources]` — the default PyPI resolution would have dragged in
+  multi-GB CUDA wheels. CI installs only default groups, so it never
+  downloads torch; `uv lock --check` verified the lockfile stays valid for
+  the default path. Dense tests guard with `importorskip`.
+- `src/dense.py` — `SentenceTransformerEncoder` (process-wide, lazy model
+  load, in-memory memoization keyed by text; L2-normalized float32 output)
+  + `DenseRetriever` (cosine, same tie-break convention as the lexical
+  retrievers). Decided AGAINST the day-5 idea of a disk embedding cache:
+  the runner is already resumable per config and memoization makes each
+  distinct text cost one forward pass per process — a disk cache would be
+  complexity without a failure mode it protects against.
+- **Truncation-exposure instrumentation** — the design decision that paid
+  off most today (same lesson as day 5's LSA rank table: instrument the
+  bottleneck, don't infer it). MiniLM reads ≤256 wordpieces; `fit` counts
+  chunks over the window and `run_config` persists per-config exposure +
+  model + torch/sentence-transformers versions (`_optional_versions`, keyed
+  on sys.modules so lexical runs never import torch).
+- `load_raw(..., seed=)` filter + `--seed` threaded through every
+  summarizer/figure script (without this, seed-1/2 files would have broken
+  every existing qid-alignment check), `experiments/summarize_seeds.py`
+  (per-seed means + within-seed paired deltas; refuses cross-seed pairing),
+  `fig_dense_window` in make_figures. Tests 193 → **213**.
+
+### Ran (36 new configs: BM25 baseline × seeds {1,2}, dense × 12; ~9 min for dense)
+
+Encoding throughput on 4 CPU cores: ~150 s for the 4,747-chunk fixed-64
+config, 17–45 s for the rest (memoized queries amortize across configs).
+
+### Findings (README §10–12)
+
+1. **Finding 10 — every headline claim replicates under 3 independent
+   question samples.** Per-config SpanRecall@400 spread ≤ 0.013 across
+   seeds; fixed-64−fixed-256 = +0.134/+0.119/+0.123, sentence-64−fixed-64 =
+   +0.041/+0.049/+0.047, all CIs exclude 0 under every seed. Seed is not a
+   hidden degree of freedom.
+2. **Finding 11 — chunking effects transfer to dense retrieval.** Size
+   ordering, sentence>fixed (+0.054 @64/B400), and the metric reversal all
+   hold under MiniLM. Within-dense size effect (+0.281, fixed-64 vs 256
+   @B400) is 2× BM25's — finding 9's "weaker retrievers degrade more in big
+   chunks," continued. At size 64 the dense-vs-BM25 gap never exceeds 0.050
+   and is n.s. by B=1600. Chunking > retriever choice, now across four
+   retriever families.
+3. **Finding 12 — past the encoder window, dense retrieval is prefix
+   retrieval.** Exposure: 0% at sizes 64–128; 25/59/96% at nominal 256 for
+   recursive/sentence/fixed (realized-size differences, finding 4, now with
+   consequences); 96–97% at 512. Dense−BM25 @B800 jumps from −0.005…−0.045
+   (untruncated sizes) to −0.299 (fixed-512) — 2.6× LSA's worst gap.
+   recursive-256 (25% exposed) loses about half of fixed-256's gap. Honest
+   caveat kept in README: exposure alone doesn't order the mid cells
+   (sentence-256 @59% ≈ fixed-256 @96%), so realized-length distributions
+   matter beyond truncated-or-not. Sharpest signature: dense hit@5 is
+   non-monotone (.842→.874→.807 for fixed 64→256→512) — the only retriever
+   whose fixed-k curve turns down. `dense_window_dev-v1.1.png` is the
+   figure for this.
+4. SQuAD's lexical-overlap regime favors BM25, so dense *levels* are not a
+   verdict on dense retrieval (BEIR caveat recorded in limitations); the
+   within-retriever chunking *effects* are the claims.
+
+### Process notes
+
+- The four pre-existing figures reproduced bit-identically after adding the
+  dense line to `retriever_comparison` — end-to-end determinism still holds
+  for the lexical stack. Dense determinism is per-environment only
+  (torch/BLAS); versions are recorded in every dense result payload and the
+  README reproducibility note now says so explicitly.
+- `fig_dense_window` label collisions took two iterations: horizontal
+  stagger (fixed left, sentence right, recursive above) + suppressing 0%
+  labels was the fix; family-colored labels carry the association.
+
+### Next steps (Day 7, in order)
+
+1. **Chroma corpora loader** (`src/data.py` or `src/data_chroma.py`) — the
+   long-standing gateway to meaningful SpanPrecision/IoU (SQuAD's ~3-token
+   golds cap what precision can say — day-3 finding 6). FIRST verify gold
+   excerpt (start, end) offsets against the corpus files (day-1 open
+   question); if offsets are inexact, remap by string search and record the
+   correction rate. Gold representation: one alternative containing all
+   references (jointly-required), per the day-2 design.
+2. Run the baseline grid (BM25 + dense if time) on at least 2 Chroma
+   corpora; first precision/IoU tables + check whether "small chunks win"
+   survives long-reference evidence (the honest risk to the headline:
+   multi-sentence golds may reward bigger chunks).
+3. If time: extend `summarize_seeds` HEADLINE_PAIRS with a dense pair or
+   run seeds 1–2 for dense (~18 min) to close the "seed stability shown for
+   BM25 only" caveat in limitations.
+
+### Open questions (carried + new)
+
+- Chroma reference offsets (day-1) — now the top item, see next steps.
+- Cross-family overlap table (sentence-o0 vs fixed+25%) still ad hoc.
+- Truncate × overlap cross unrun (one invocation away).
+- Does the truncation cliff move with a longer-window encoder? A 512-window
+  CPU-feasible model (e.g. multi-qa-MiniLM variants are still 512-capable?
+  verify) would turn finding 12 into a controlled window ablation —
+  candidate for a later day; record as backlog, don't chase now.
