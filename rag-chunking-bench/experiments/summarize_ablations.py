@@ -188,9 +188,11 @@ def render_rule_section(
 
 
 def render_ablations(
-    dataset: str, retriever: str, raw_dir: Path
+    dataset: str, retriever: str, raw_dir: Path, seed: int = 0
 ) -> str:
-    stop_all = load_raw(raw_dir, dataset=dataset, retriever=retriever, budget_rule="stop")
+    stop_all = load_raw(
+        raw_dir, dataset=dataset, retriever=retriever, budget_rule="stop", seed=seed
+    )
     overlap_runs = [rr for rr in stop_all if rr.config["overlap"] > 0]
     baselines = {
         (rr.config["chunker"], rr.config["chunk_size"]): rr
@@ -198,7 +200,12 @@ def render_ablations(
         if rr.config["overlap"] == 0
     }
     trunc_runs = load_raw(
-        raw_dir, dataset=dataset, retriever=retriever, budget_rule="truncate", overlap=0
+        raw_dir,
+        dataset=dataset,
+        retriever=retriever,
+        budget_rule="truncate",
+        overlap=0,
+        seed=seed,
     )
     stop_runs = {_key(rr): rr for rr in stop_all if rr.config["overlap"] == 0}
     if not overlap_runs and not trunc_runs:
@@ -234,6 +241,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--dataset", default="dev-v1.1")
     parser.add_argument("--retriever", default="bm25")
+    parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--raw-dir", type=Path, default=ROOT / "results" / "raw")
     parser.add_argument("--out-dir", type=Path, default=ROOT / "results")
     return parser.parse_args(argv)
@@ -241,7 +249,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
-    text = render_ablations(args.dataset, args.retriever, args.raw_dir)
+    text = render_ablations(args.dataset, args.retriever, args.raw_dir, seed=args.seed)
     out = args.out_dir / f"summary_{args.dataset}_{args.retriever}_ablations.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text + "\n", encoding="utf-8")

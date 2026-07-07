@@ -191,6 +191,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--dataset", default="dev-v1.1")
     parser.add_argument("--retriever", default="bm25")
     parser.add_argument("--baseline", default="fixed-256")
+    parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--raw-dir", type=Path, default=ROOT / "results" / "raw")
     parser.add_argument("--out-dir", type=Path, default=ROOT / "results")
     return parser.parse_args(argv)
@@ -204,6 +205,7 @@ def main(argv: list[str] | None = None) -> None:
         retriever=args.retriever,
         budget_rule="stop",
         overlap=0,
+        seed=args.seed,
     )
     if not results:
         raise SystemExit(f"no results for {args.dataset}/{args.retriever} in {args.raw_dir}")

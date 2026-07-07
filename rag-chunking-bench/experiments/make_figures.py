@@ -39,6 +39,7 @@ RETRIEVER_STYLES = {
     "bm25": ("#2a78d6", "o"),
     "tfidf": ("#1baf7a", "s"),
     "lsa": ("#eda100", "^"),
+    "dense": ("#9a5bd2", "D"),
 }
 
 INK = "#0b0b0b"
@@ -397,6 +398,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--dataset", default="dev-v1.1")
     parser.add_argument("--retriever", default="bm25")
+    parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--raw-dir", type=Path, default=ROOT / "results" / "raw")
     parser.add_argument("--out-dir", type=Path, default=ROOT / "results" / "figures")
     return parser.parse_args(argv)
@@ -410,6 +412,7 @@ def main(argv: list[str] | None = None) -> None:
         retriever=args.retriever,
         budget_rule="stop",
         overlap=0,
+        seed=args.seed,
     )
     if not baseline:
         raise SystemExit(f"no results for {args.dataset}/{args.retriever} in {args.raw_dir}")
@@ -424,7 +427,11 @@ def main(argv: list[str] | None = None) -> None:
     written += [curves, reversal]
 
     stop_all = load_raw(
-        args.raw_dir, dataset=args.dataset, retriever=args.retriever, budget_rule="stop"
+        args.raw_dir,
+        dataset=args.dataset,
+        retriever=args.retriever,
+        budget_rule="stop",
+        seed=args.seed,
     )
     if any(rr.config["overlap"] > 0 for rr in stop_all):
         check_aligned(stop_all)
@@ -438,6 +445,7 @@ def main(argv: list[str] | None = None) -> None:
         retriever=args.retriever,
         budget_rule="truncate",
         overlap=0,
+        seed=args.seed,
     )
     if trunc:
         check_aligned(baseline + trunc)
@@ -449,7 +457,7 @@ def main(argv: list[str] | None = None) -> None:
     for name in RETRIEVER_STYLES:
         runs = load_raw(
             args.raw_dir, dataset=args.dataset, retriever=name,
-            budget_rule="stop", overlap=0,
+            budget_rule="stop", overlap=0, seed=args.seed,
         )
         if runs:
             by_retriever[name] = runs

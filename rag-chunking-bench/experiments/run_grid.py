@@ -28,6 +28,7 @@ import gzip
 import json
 import platform
 import subprocess
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -49,7 +50,7 @@ from src.tokenization import RegexWordTokenizer, TokenIndex
 ROOT = Path(__file__).resolve().parent.parent
 
 CHUNKERS = ("fixed", "sentence", "recursive")
-RETRIEVERS = ("bm25", "tfidf", "lsa")
+RETRIEVERS = ("bm25", "tfidf", "lsa", "dense")
 
 
 @dataclass(frozen=True)
@@ -104,6 +105,12 @@ def make_retriever(name: str) -> Retriever:
         return TfidfRetriever()
     if name == "lsa":
         return LSARetriever()
+    if name == "dense":
+        # Imported here so the lexical grid never requires torch; instances
+        # share one process-wide encoder, so the model loads once per run.
+        from src.dense import DenseRetriever
+
+        return DenseRetriever()
     raise ValueError(f"unknown retriever {name!r}")
 
 
@@ -128,6 +135,22 @@ def run_metadata() -> dict[str, str]:
     }
 
 
+def _optional_versions() -> dict[str, str]:
+    """Versions of the optional dense stack, when this process imported it.
+
+    Dense scores are deterministic per environment but not portable across
+    torch/BLAS builds, so the versions belong in the result metadata. Checked
+    at result-assembly time (after the retrievers ran, hence after any lazy
+    import) and keyed on ``sys.modules`` so lexical-only runs never pull in
+    torch just to report a version that played no part in the run.
+    """
+    return {
+        module: sys.modules[module].__version__
+        for module in ("torch", "sentence_transformers")
+        if module in sys.modules
+    }
+
+
 def run_config(
     cfg: GridConfig, dataset: QADataset, questions: tuple[Question, ...]
 ) -> dict:
@@ -149,6 +172,8 @@ def run_config(
     records: list[dict] = []
     chunk_tokens: list[int] = []
     realized_ranks: list[int] = []
+    n_truncated = 0
+    encoder_info: dict | None = None
     for doc_id in sorted(by_doc):
         doc = dataset.documents[doc_id]
         index = TokenIndex(doc.text, tokenizer)
@@ -161,6 +186,15 @@ def run_config(
         rank = getattr(retriever, "realized_rank", None)
         if rank is not None:
             realized_ranks.append(rank)
+        # The dense encoder scores over-window chunks by prefix; the per-config
+        # exposure count is what separates "dense retrieval degraded" from
+        # "dense retrieval never saw most of the chunk" when reading results.
+        if hasattr(retriever, "n_truncated"):
+            n_truncated += retriever.n_truncated
+            encoder_info = {
+                "model": retriever.model_name,
+                "max_seq_length": retriever.max_seq_length,
+            }
         for question in by_doc[doc_id]:
             ranked = [chunks[i] for i in retriever.rank(question.text)]
             budgets: dict[str, dict] = {}
@@ -184,7 +218,9 @@ def run_config(
     counts = sorted(chunk_tokens)
     result = {
         "config": dataclasses.asdict(cfg),
-        "meta": meta | {"runtime_s": round(time.perf_counter() - t0, 3)},
+        "meta": meta
+        | _optional_versions()
+        | {"runtime_s": round(time.perf_counter() - t0, 3)},
         "chunk_stats": {
             "n_chunks": len(counts),
             "tokens_min": counts[0],
@@ -204,6 +240,11 @@ def run_config(
             "realized_rank_max": ranks[-1],
             "n_docs_data_bounded": sum(r < LSARetriever().n_components for r in ranks),
             "n_docs": len(ranks),
+        }
+    if encoder_info is not None:
+        result["retriever_stats"] = encoder_info | {
+            "n_chunks_truncated": n_truncated,
+            "n_chunks": len(counts),
         }
     return result
 

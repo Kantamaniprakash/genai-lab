@@ -3,3 +3,7 @@ pytest==9.1.1
 numpy==2.3.1
 matplotlib==3.11.0
 scikit-learn==1.9.0
+# Optional dense-retriever stack (dependency group "dense" in pyproject.toml;
+# torch resolves from the CPU-only index there). Not needed for lexical runs.
+sentence-transformers==5.6.0
+torch==2.12.1

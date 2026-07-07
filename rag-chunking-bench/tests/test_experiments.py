@@ -29,6 +29,7 @@ from experiments.summarize import (
 )
 from experiments.summarize_ablations import render_ablations
 from experiments.summarize_retrievers import render_retrievers
+from experiments.summarize_seeds import render_seeds
 from src.data import Document, GoldSpan, QADataset, Question
 
 PARA_ZEBRA = (
@@ -98,7 +99,7 @@ class TestFactories:
 
     def test_unknown_retriever(self):
         with pytest.raises(ValueError, match="unknown retriever"):
-            make_retriever("dense")
+            make_retriever("splade")
 
     def test_config_id_encodes_grid_point(self):
         cfg = _config(dataset="dev-v1.1", chunker="sentence", chunk_size=128)
@@ -215,6 +216,14 @@ class TestAggregate:
         trunc = load_raw(tmp_path, budget_rule="truncate")
         assert [rr.label for rr in trunc] == ["fixed-32/truncate"]
         assert [rr.label for rr in load_raw(tmp_path, overlap=8)] == ["fixed-32/o8"]
+
+    def test_load_raw_seed_filter(self, tiny_dataset, tmp_path):
+        dataset, questions = tiny_dataset
+        run_and_save(_config(), dataset, questions, tmp_path)
+        run_and_save(_config(seed=1), dataset, questions, tmp_path)
+        assert len(load_raw(tmp_path)) == 2
+        assert [rr.config["seed"] for rr in load_raw(tmp_path, seed=1)] == [1]
+        assert load_raw(tmp_path, seed=2) == []
 
     def test_load_raw_fills_missing_budget_rule(self, tiny_dataset, tmp_path):
         # Result files written before the budget_rule field existed are
@@ -377,3 +386,39 @@ class TestSummarizeRetrievers:
         self._save_grid(tiny_dataset, tmp_path)
         with pytest.raises(SystemExit, match="reference retriever"):
             render_retrievers("tiny", ["bm25", "tfidf"], tmp_path, reference="lsa")
+
+
+class TestSummarizeSeeds:
+    def _save_seed_grids(self, tiny_dataset, tmp_path, seeds=(0, 1)):
+        # Sizes 64/256 so the fixed-64 - fixed-256 headline pair exists.
+        dataset, questions = tiny_dataset
+        for seed in seeds:
+            for size in (64, 256):
+                run_and_save(
+                    _config(chunk_size=size, seed=seed), dataset, questions, tmp_path
+                )
+
+    def test_render_seeds(self, tiny_dataset, tmp_path):
+        self._save_seed_grids(tiny_dataset, tmp_path)
+        text = render_seeds("tiny", "bm25", [0, 1], tmp_path, budget=40)
+        assert "## SpanRecall@40 (mean) by seed" in text
+        assert "fixed-64 − fixed-256" in text
+        assert "seed 0" in text and "seed 1" in text
+        assert "max−min" in text
+
+    def test_missing_seed_exits(self, tiny_dataset, tmp_path):
+        self._save_seed_grids(tiny_dataset, tmp_path, seeds=(0,))
+        with pytest.raises(SystemExit, match="no baseline-grid results for seed 1"):
+            render_seeds("tiny", "bm25", [0, 1], tmp_path, budget=40)
+
+    def test_mismatched_seed_grids_exit(self, tiny_dataset, tmp_path):
+        dataset, questions = tiny_dataset
+        self._save_seed_grids(tiny_dataset, tmp_path, seeds=(0,))
+        run_and_save(_config(chunk_size=64, seed=1), dataset, questions, tmp_path)
+        with pytest.raises(SystemExit, match="different grids"):
+            render_seeds("tiny", "bm25", [0, 1], tmp_path, budget=40)
+
+    def test_budget_must_be_in_grid(self, tiny_dataset, tmp_path):
+        self._save_seed_grids(tiny_dataset, tmp_path)
+        with pytest.raises(SystemExit, match="budget 999"):
+            render_seeds("tiny", "bm25", [0, 1], tmp_path, budget=999)

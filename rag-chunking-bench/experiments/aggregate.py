@@ -73,12 +73,15 @@ def load_raw(
     retriever: str | None = None,
     budget_rule: str | None = None,
     overlap: int | None = None,
+    seed: int | None = None,
 ) -> list[RunResult]:
     """Parse all raw result files, optionally filtered, in presentation order.
 
     ``None`` filters match everything. Files written before ``budget_rule``
     existed are stop-rule runs by construction; the key is filled in on load
-    so downstream code never special-cases them.
+    so downstream code never special-cases them. Different seeds sample
+    different question sets, so any caller doing paired comparisons must pin
+    a single seed or ``check_aligned`` will (correctly) refuse to proceed.
     """
     results = []
     for path in sorted(raw_dir.glob("*.json.gz")):
@@ -99,6 +102,8 @@ def load_raw(
         if budget_rule is not None and rr.config["budget_rule"] != budget_rule:
             continue
         if overlap is not None and rr.config["overlap"] != overlap:
+            continue
+        if seed is not None and rr.config["seed"] != seed:
             continue
         results.append(rr)
     results.sort(key=sort_key)

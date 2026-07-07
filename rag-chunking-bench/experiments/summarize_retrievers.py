@@ -31,12 +31,17 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def _load_by_retriever(
-    raw_dir: Path, dataset: str, retrievers: list[str]
+    raw_dir: Path, dataset: str, retrievers: list[str], seed: int = 0
 ) -> dict[str, list[RunResult]]:
     by_retriever: dict[str, list[RunResult]] = {}
     for retriever in retrievers:
         runs = load_raw(
-            raw_dir, dataset=dataset, retriever=retriever, budget_rule="stop", overlap=0
+            raw_dir,
+            dataset=dataset,
+            retriever=retriever,
+            budget_rule="stop",
+            overlap=0,
+            seed=seed,
         )
         if not runs:
             raise SystemExit(
@@ -52,9 +57,13 @@ def _load_by_retriever(
 
 
 def render_retrievers(
-    dataset: str, retrievers: list[str], raw_dir: Path, reference: str = "bm25"
+    dataset: str,
+    retrievers: list[str],
+    raw_dir: Path,
+    reference: str = "bm25",
+    seed: int = 0,
 ) -> str:
-    by_retriever = _load_by_retriever(raw_dir, dataset, retrievers)
+    by_retriever = _load_by_retriever(raw_dir, dataset, retrievers, seed=seed)
     if reference not in by_retriever:
         raise SystemExit(f"reference retriever {reference!r} not among {retrievers}")
     labels = [rr.label for rr in by_retriever[reference]]
@@ -142,7 +151,7 @@ def render_retrievers(
     for label in labels:
         for retriever, rr in runs_at(label).items():
             stats = rr.retriever_stats
-            if stats is None:
+            if stats is None or "n_components" not in stats:
                 continue
             rank_rows.append(
                 [
@@ -168,6 +177,40 @@ def render_retrievers(
             ["config", "n_components", "rank min", "median", "max", "data-bounded"],
             rank_rows,
         )
+
+    truncation_rows = []
+    for label in labels:
+        for retriever, rr in runs_at(label).items():
+            stats = rr.retriever_stats
+            if stats is None or "max_seq_length" not in stats:
+                continue
+            frac = stats["n_chunks_truncated"] / stats["n_chunks"]
+            truncation_rows.append(
+                [
+                    f"{label} ({retriever})",
+                    stats["model"],
+                    str(stats["max_seq_length"]),
+                    f"{stats['n_chunks_truncated']}/{stats['n_chunks']}",
+                    f"{frac:.1%}",
+                ]
+            )
+    if truncation_rows:
+        lines += [
+            "## Dense encoder truncation exposure",
+            "",
+            "The encoder silently truncates inputs at its maximum sequence "
+            "length (wordpieces, specials included), so for chunks past that "
+            "window the dense retriever scores a prefix. Any dense result on "
+            "configs with high truncation exposure measures prefix retrieval, "
+            "not whole-chunk retrieval — that is the deployment reality of "
+            "pairing large chunks with a small encoder, and the exposure "
+            "column quantifies how much of the grid it affects.",
+            "",
+        ]
+        lines += _table(
+            ["config", "model", "max tokens", "chunks truncated", "share"],
+            truncation_rows,
+        )
     return "\n".join(lines)
 
 
@@ -177,8 +220,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--dataset", default="dev-v1.1")
-    parser.add_argument("--retrievers", nargs="+", default=["bm25", "tfidf", "lsa"])
+    parser.add_argument(
+        "--retrievers", nargs="+", default=["bm25", "tfidf", "lsa", "dense"]
+    )
     parser.add_argument("--reference", default="bm25")
+    parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--raw-dir", type=Path, default=ROOT / "results" / "raw")
     parser.add_argument("--out-dir", type=Path, default=ROOT / "results")
     return parser.parse_args(argv)
@@ -186,7 +232,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
-    text = render_retrievers(args.dataset, args.retrievers, args.raw_dir, args.reference)
+    text = render_retrievers(
+        args.dataset, args.retrievers, args.raw_dir, args.reference, seed=args.seed
+    )
     out = args.out_dir / f"summary_{args.dataset}_retrievers.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text + "\n", encoding="utf-8")

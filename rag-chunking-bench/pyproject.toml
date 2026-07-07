@@ -20,10 +20,26 @@ dev = [
     "pytest>=9.1.1",
     "ruff>=0.12.0",
 ]
+# The dense retriever needs torch; kept out of the default groups so CI and
+# lexical-only runs never download it. Install with: uv sync --group dense
+dense = [
+    "sentence-transformers>=5.0.0",
+    "torch>=2.8.0",
+]
 
 [tool.uv]
 # Research repo: src/ and experiments/ are used in place, never built/installed.
 package = false
+
+[tool.uv.sources]
+# CPU-only wheels: the default PyPI torch resolution drags in multi-GB CUDA
+# packages this CPU-only benchmark never uses.
+torch = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [tool.ruff]
 line-length = 100
