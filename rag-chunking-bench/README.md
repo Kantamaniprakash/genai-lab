@@ -8,7 +8,9 @@ for the retrieved-token budget?**
 *Headline result: at a fixed 400-token retrieval budget, smaller chunks win in
 every chunker family and chunks larger than the budget collapse to ~0.
 Regenerated from committed raw results with
-`python -m experiments.make_hero_figure`.*
+`python -m experiments.make_hero_figure`. This holds on SQuAD's ~3-token gold
+answers; findings 13–15 measure where the claim's boundary lies when gold
+evidence is sentence-scale.*
 
 ## Abstract
 
@@ -24,7 +26,14 @@ protocol**: retrievers are compared at equal retrieved-token budgets using
 span-level (token-overlap) metrics against gold evidence spans, with paired
 bootstrap confidence intervals over questions. The goal is a defensible
 answer to "which chunking decisions survive budget control, and by how much,"
-at a scale (CPU, open data) that anyone can reproduce.
+at a scale (CPU, open data) that anyone can reproduce. Headline results so
+far: fixed-k evaluation and budget-matched evaluation rank chunk sizes in
+opposite orders (finding 2); under budget matching the winning chunk size is
+set by the length of the gold evidence — smallest chunks dominate on
+short-answer SQuAD at every budget, but with sentence-scale evidence the
+advantage inverts at generous budgets (findings 13–14); and the effects
+replicate across four retriever families, three sampling seeds, and both
+budget-boundary rules.
 
 ## Motivation
 
@@ -126,9 +135,15 @@ in each result file).
   answerable questions after deduplication. Raw JSON is fetched from pinned
   URLs with SHA256 checks (`python -m src.data`).
 - **Chroma chunking-evaluation corpora** (Smith & Troynikov, 2024): five
-  heterogeneous corpora (state-of-the-union, Wikitexts, chat logs, finance,
-  PubMed) with question/gold-excerpt pairs; queries are LLM-generated, which
-  is recorded as a provenance caveat.
+  heterogeneous single-file corpora (state-of-the-union, Wikitexts, chat
+  logs, finance, PubMed; 7.9k–145k tokens) with 472 questions whose gold
+  evidence is given as exact character spans. All 790 references verified
+  verbatim against the pinned corpus files at load time (none needed
+  remapping). Unlike SQuAD's ~3-token answers, references are sentence-scale
+  (median ~28 tokens) and 40% of questions require several jointly — the
+  regime where SpanPrecision/IoU become informative and where gold-evidence
+  length can moderate the size effect (findings 13–15). Queries are
+  LLM-generated, which is recorded as a provenance caveat.
 
 ## Experiments
 
@@ -142,10 +157,13 @@ python -m experiments.run_grid --retrievers dense       # dense grid (~9 min CPU
 python -m experiments.run_grid --budget-rule truncate   # budget-rule ablation
 python -m experiments.run_grid --chunkers fixed --sizes 64 --overlaps 8 16 32   # overlap ablation (see NOTES)
 python -m experiments.run_grid --seed 1       # independent question sample (multi-seed check)
+python -m experiments.run_grid --dataset chroma --per-doc-cap 150 --retrievers bm25 tfidf lsa dense
+                                              # long-reference corpora, all four retrievers (~7 min)
 python -m experiments.summarize               # baseline tables incl. paired CIs -> results/summary_*.md
 python -m experiments.summarize_ablations     # overlap + budget-rule tables -> results/summary_*_ablations.md
 python -m experiments.summarize_retrievers    # retriever x chunker tables -> results/summary_*_retrievers.md
 python -m experiments.summarize_seeds         # per-seed robustness tables -> results/summary_*_seeds.md
+python -m experiments.summarize_chroma        # per-corpus + gold-length moderation -> results/summary_chroma_*_moderation.md
 python -m experiments.make_figures            # figures -> results/figures/
 python -m experiments.make_hero_figure        # headline figure -> assets/
 ```
@@ -189,7 +207,9 @@ fixed-64 beats the fixed-256 baseline by **+0.134 [+0.117, +0.152]**
 SpanRecall; fixed-128 by +0.122 [+0.107, +0.138]. The advantage shrinks as
 the budget grows (+0.024 [+0.012, +0.036] at B=800; n.s. at B=1600) but
 never reverses: with a finite context budget, many small high-precision
-pieces beat few large diluted ones on this corpus.
+pieces beat few large diluted ones on this corpus. (Findings 13–15 show this
+is a property of SQuAD's short gold spans, not of retrieval: with
+sentence-scale gold evidence the advantage inverts at generous budgets.)
 
 **2. Fixed-k evaluation reverses that ranking — the confound is real and
 large.** hit@5 *increases* monotonically with chunk size (fixed: 0.873 →
@@ -232,8 +252,8 @@ not an artifact of this rule.
 A note on the other span metrics: on SQuAD, gold answers average ~3 tokens,
 so SpanPrecision@B is dominated by 1/|retrieved| and is nearly identical
 across configs at a given budget (see summary tables). Recall is the
-informative span metric here; precision/IoU become discriminative on corpora
-with long gold references (Chroma corpora, phase 2).
+informative span metric here; precision/IoU become discriminative on the
+long-reference Chroma corpora (finding 15).
 
 ### Overlap ablation: overlap is boundary repair, not free recall
 
@@ -425,6 +445,83 @@ co-designed with the embedding model's window; past it, ranking quality
 degrades even at the top of the list, and no budget can buy the discarded
 text back.
 
+### Long-reference corpora: gold-evidence length sets where "smaller" stops winning
+
+Setup: the five Chroma evaluation corpora as five documents (7.9k–145k
+tokens), all 472 questions (no sampling — the 150-per-document cap exceeds
+every corpus's question count), same 12 chunking configurations, budgets,
+and stop rule as the baseline grid, run under all four retrievers. Gold
+references here are sentence-scale (median ~28 tokens, up to 349 total per
+question) and 40% of questions require several jointly — the regime SQuAD
+could not test, and the honest risk to finding 1 flagged when it was first
+reported. Full tables:
+[`results/summary_chroma_bm25.md`](results/summary_chroma_bm25.md) and
+[`results/summary_chroma_bm25_moderation.md`](results/summary_chroma_bm25_moderation.md).
+
+![Small-chunk advantage vs budget on SQuAD and Chroma, and by gold-length tercile](results/figures/gold_length_crossover.png)
+
+*Left: the same paired comparison (fixed-64 − fixed-256) that never reverses
+on SQuAD crosses zero on Chroma between B=400 and B=800 under BM25 — but not
+under the window-limited dense encoder, which never reads more than a prefix
+of a 256-token chunk. Right: splitting the Chroma delta by gold-evidence
+length shows the crossover concentrated in the questions with the longest
+gold spans. B=200 is omitted: the baseline retrieves nothing there under the
+stop rule (finding 5), so the delta would measure the artifact.*
+
+**13. With sentence-scale gold evidence, the small-chunk advantage inverts
+at generous budgets.** Under BM25, fixed-64 still beats fixed-256 at B=400
+(**+0.133 [+0.093, +0.172]** SpanRecall), but by B=800 the sign flips
+(**−0.033 [−0.064, −0.002]**) and stays flipped at B=1600 (**−0.040
+[−0.063, −0.018]**) — the reversal finding 1 never showed on SQuAD at any
+budget. The best Chroma configs at generous budgets are mid-sized:
+sentence-256 tops SpanRecall@1600 (0.938, **+0.024 [+0.002, +0.047]** over
+fixed-256, with fixed-64 at 0.874), while at B=200 small chunks still win
+(sentence-64: 0.602 vs 0.030 for sentence-256). The per-corpus breakdown
+shows the same shape in all five corpora — significantly positive at B=400
+in 4/5, zero-crossing at B=800, significantly negative at B=1600 in 3/5,
+never significantly positive past B=400 — so this is not one corpus's
+quirk. The fixed-k reversal, meanwhile, replicates: hit@5 rises with size
+(0.860 → 0.951 for fixed 64 → 512) exactly as on SQuAD.
+
+**14. The inversion is driven by gold-evidence length — chunk size should be
+matched to the evidence span, not minimized.** Splitting the same paired
+delta by each question's total gold length (terciles: ≤32, 33–57, >57
+tokens): at B=400 the small-chunk advantage falls from **+0.192** to
+**+0.112** to **+0.092** across terciles; at B=1600 the short and mid
+terciles are null (−0.024 [−0.062, +0.013], −0.014) while the long tercile
+is significantly negative (**−0.085 [−0.123, −0.047]**). Questions needing
+2+ references show the flip (−0.069 [−0.104, −0.035] at B=1600) where
+single-reference questions do not (−0.022, n.s.). Mechanically: a 64-token
+chunk cannot contain a 60-token evidence span plus its lexical context, so
+covering long or multi-part evidence costs several retrievals that each pay
+rank-quality risk, while a 256-token chunk amortizes them. Together with
+findings 1 and 10 this gives the benchmark's most practical rule so far:
+**the optimal chunk size scales with the length of the evidence a question
+needs** — ~3-token answers favor the smallest chunks at every budget;
+sentence-to-paragraph evidence favors 128–256-token chunks once the budget
+is loose enough to afford them.
+
+**15. The inversion requires a retriever that can read the whole chunk —
+and precision finally has something to say.** Under dense MiniLM retrieval
+the crossover never happens: fixed-64 stays significantly ahead of
+fixed-256 at every budget (+0.229 / **+0.082** / **+0.047** at B=400 / 800
+/ 1600), because 99.5% of fixed-256 chunks exceed the encoder's
+256-wordpiece window on these corpora — the retriever ranks prefixes
+(finding 12), so large chunks never get to use their extra evidence. The
+window mechanism caps the gold-length mechanism: co-designing chunk size
+with the encoder window is not just a ranking concern but decides whether
+longer-evidence questions are servable at all. Separately, the
+long-reference regime makes the precision metrics informative for the first
+time (on SQuAD they were pinned near 1/|retrieved|): SpanPrecision@200
+peaks at mid-size boundary-aware configs (sentence-128: 0.193 vs 0.140 for
+fixed-64), boundary-aware packing beats fixed windows at matched size more
+strongly than on SQuAD (sentence-256 vs fixed-256 at B=400: **+0.083
+[+0.042, +0.125]**, four times the SQuAD gap — cutting mid-sentence now
+means cutting through the gold span itself), and precision decays
+hyperbolically with budget everywhere (gold is fixed while retrieved tokens
+grow), which is the quantitative face of "Lost in the Middle"'s warning
+that padding budgets dilutes.
+
 ## Status
 
 - [x] Phase 1 (harness): offset-preserving chunkers + tokenization
@@ -442,7 +539,9 @@ text back.
       seeds 1–2) — finding 10
 - [x] Phase 2: dense MiniLM retriever with truncation-exposure
       instrumentation (12 configs) — findings 11–12 (213 tests)
-- [ ] Phase 2: Chroma corpora loader
+- [x] Phase 2: Chroma corpora loader (790 references verified exact) and the
+      long-reference grid, all four retrievers (48 configs) — findings 13–15
+      (221 tests)
 - [ ] Phase 3: further ablations, error analysis, tokenizer (BPE)
       robustness
 - [ ] Phase 4: full writeup
@@ -456,12 +555,15 @@ Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).
   of what the dense results measure (finding 12 quantifies the exposure);
   large-window embedding models and cross-encoder rerankers may behave
   differently and are untested here.
-- Results so far cover four retrievers (BM25, TF-IDF, LSA, dense MiniLM) on
-  one dataset (SQuAD dev-v1.1 articles); the grid protocol supports more of
-  each. The BM25 baseline grid replicates under three independent sampling
-  seeds (finding 10); the other retrievers' grids use seed 0, and their
-  paired deltas ride on the same question samples whose stability the seed
-  check established for BM25.
+- Results cover four retrievers (BM25, TF-IDF, LSA, dense MiniLM) on two
+  datasets (SQuAD dev-v1.1 articles; the five Chroma corpora); the grid
+  protocol supports more of each. The SQuAD BM25 baseline grid replicates
+  under three independent sampling seeds (finding 10); the other SQuAD grids
+  use seed 0, and their paired deltas ride on the same question samples
+  whose stability the seed check established for BM25. Chroma grids use all
+  472 questions, so sampling seeds do not apply there — but those questions
+  span only five documents, and per-corpus n (56–144) makes the per-corpus
+  intervals wide; findings 13–15 rest on the pooled and tercile analyses.
 - SQuAD questions are written by crowdworkers looking at the passage, so
   their vocabulary overlaps the answer paragraph heavily — a regime that
   favors lexical retrievers. The dense-vs-BM25 *levels* here should not be
@@ -473,9 +575,12 @@ Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).
   therefore bounded by per-document chunk counts, and cross-corpus retrieval
   could reward latent smoothing differently.
 - SQuAD gold answers are short spans inside single paragraphs, which makes
-  SpanPrecision/IoU nearly uninformative here (see Experiments note) and may
-  favor small chunks more than corpora with long, multi-sentence evidence
-  would.
+  SpanPrecision/IoU nearly uninformative there and favors small chunks — a
+  suspicion the Chroma grid has now measured rather than left as a caveat
+  (findings 13–14): the small-chunk advantage inverts at generous budgets
+  when gold evidence is sentence-scale. Both datasets' gold spans are still
+  contiguous excerpts; evidence scattered across a whole document (multi-hop
+  QA) is untested.
 - The stop-before-exceed budget rule zeroes configs whose chunks exceed the
   budget; the truncate-final-chunk rerun (finding 7) shows the size ordering
   is robust to this choice, and the budget-utilization table makes the
@@ -521,13 +626,14 @@ Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).
 
 ```bash
 pip install -r requirements.txt
-python -m pytest tests/ -q          # 213 tests (dense tests skip without the dense stack)
-python -m src.data                  # fetch SQuAD (pinned URLs + SHA256)
+python -m pytest tests/ -q          # 221 tests (dense tests skip without the dense stack)
+python -m src.data                  # fetch SQuAD + Chroma corpora (pinned URLs + SHA256)
 python -m experiments.run_grid      # rerun the grid (results are resumable)
 python -m experiments.summarize
 python -m experiments.summarize_ablations
 python -m experiments.summarize_retrievers
 python -m experiments.summarize_seeds
+python -m experiments.summarize_chroma
 python -m experiments.make_figures
 python -m experiments.make_hero_figure
 ```

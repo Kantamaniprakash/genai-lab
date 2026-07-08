@@ -22,27 +22,32 @@ chunkers, chunk sizes, and retrievers — with paired bootstrap confidence inter
 on span-level metrics — is a genuine gap at a scale one person can execute
 rigorously. It also feeds directly back into my `financial-rag-chatbot`.
 
-**Phase.** 2 of 4 — baselines (first grid 2026-07-04: fixed-k vs
-budget-matched ranking reversal; overlap ablation + truncate-rule robustness
-check 2026-07-05: overlap = boundary repair, size ordering survives the rule
-change — findings 6–7; cross-retriever grid 2026-07-06: all chunking effects
-transfer to TF-IDF/LSA, chunking effect > retriever effect, retriever gap
-grows with chunk size — findings 8–9; multi-seed check + dense MiniLM grid
-2026-07-07: headline claims replicate under three independent question
-samples, chunking effects transfer to dense retrieval, and past the encoder
-window dense retrieval degrades to prefix retrieval — findings 10–12 in the
-project README. The retriever axis is complete: BM25 / TF-IDF / LSA / dense).
+**Phase.** 2 of 4 essentially complete — baselines (first grid 2026-07-04:
+fixed-k vs budget-matched ranking reversal; overlap ablation + truncate-rule
+robustness check 2026-07-05: overlap = boundary repair, size ordering
+survives the rule change — findings 6–7; cross-retriever grid 2026-07-06:
+all chunking effects transfer to TF-IDF/LSA, chunking effect > retriever
+effect, retriever gap grows with chunk size — findings 8–9; multi-seed check
++ dense MiniLM grid 2026-07-07: headline claims replicate under three
+independent question samples, chunking effects transfer to dense retrieval,
+and past the encoder window dense retrieval degrades to prefix retrieval —
+findings 10–12; Chroma long-reference grid 2026-07-08, all four retrievers:
+the small-chunk advantage INVERTS at generous budgets on sentence-scale
+golds, the inversion is gold-length-driven and requires a full-chunk-reading
+retriever, and precision/IoU are finally informative — findings 13–15).
 
 1. **Harness** — offset-preserving chunkers, tokenization, span-level metrics,
-   budget-matched retrieval protocol, dataset loaders. *(done except Chroma loader)*
+   budget-matched retrieval protocol, dataset loaders. *(done — SQuAD +
+   Chroma loaders, both with verbatim-verified gold spans)*
 2. **Baselines** — BM25 / TF-IDF / LSA / dense retrievers over all chunker x size x
    overlap configs on SQuAD-derived long documents + Chroma eval corpora.
-   *(current: all four retriever grids plus overlap, budget-rule, and
-   multi-seed checks done on SQuAD; next = Chroma corpora loader, the
-   gateway to meaningful SpanPrecision/IoU results)*
-3. **Ablations & analysis** — budget curves, overlap ablation *(done)*,
-   multi-seed sampling *(done, BM25)*, semantic vs. structural chunking,
-   per-dataset error analysis, significance testing.
+   *(done: all four retriever grids on both datasets; overlap, budget-rule,
+   and multi-seed checks on SQuAD)*
+3. **Ablations & analysis** — overlap ablation *(done on SQuAD; chroma next)*,
+   budget-rule check *(done on SQuAD; chroma next)*, multi-seed sampling
+   *(done, BM25)*, gold-length moderation *(done — finding 14)*, semantic
+   vs. structural chunking, BPE tokenizer robustness, per-corpus error
+   analysis.
 4. **Writeup** — README as a full research report with real tables and limitations.
 
 **Environment constraints (recorded so results are honest).** CPU-only (4 cores,

@@ -558,3 +558,115 @@ config, 17–45 s for the rest (memoized queries amortize across configs).
   CPU-feasible model (e.g. multi-qa-MiniLM variants are still 512-capable?
   verify) would turn finding 12 into a controlled window ablation —
   candidate for a later day; record as backlog, don't chase now.
+
+---
+
+## 2026-07-08 — Day 7: Chroma corpora — the crossover, findings 13–15, precision earns its keep
+
+### The day-1 open question, resolved in one probe
+
+All 790 gold references across the five Chroma corpora have EXACT
+(start, end) offsets against the corpus files — verified before writing any
+code (0 mismatches, 0 remappings needed, no CRLF/BOM traps). The loader
+therefore verifies verbatim at load and hard-errors on mismatch, same
+contract as the SQuAD loader. Files pinned by SHA256 (checksum mismatch =
+gold offsets invalid too, since they're byte positions). CSV is clean:
+no duplicate (corpus, question) pairs, no degenerate refs, no overlapping
+refs within a question.
+
+### Built (loader committed at 3955e85 BEFORE any grid ran)
+
+- `load_chroma` in `src/data.py`: five corpora as five documents, qids
+  `<corpus>:<n>` in CSV row order, all of a question's references in ONE
+  gold alternative (jointly required — the day-2 gold-semantics design paid
+  off: zero metric changes needed). `download_chroma` + `python -m src.data`
+  prints corpus stats. Grid runner takes `--dataset chroma`; ran with
+  `--per-doc-cap 150` (> max 144 questions/corpus, so no sampling — seed
+  moot).
+- `experiments/summarize_chroma.py`: per-corpus paired deltas + moderation
+  splits (gold-length terciles via shared `gold_terciles`, reference count).
+  Needs `data/chroma` (gold lengths recomputed from text; refuses to run
+  without). Output: `results/summary_chroma_bm25_moderation.md`.
+- `fig_gold_length_crossover` in make_figures: SQuAD-vs-Chroma-vs-dense
+  delta curves + tercile split. B=200 EXCLUDED deliberately: fixed-256
+  retrieves nothing there under stop (finding 5), so the ~+0.6 artifact
+  delta would compress the crossover region the figure exists to show.
+- Fixed two latent make_figures bugs surfaced by the second dataset:
+  hardcoded "2,400 questions" ylabels, and suptitles asserting
+  SQuAD-specific verdicts ("smaller chunks dominate at every budget" — FALSE
+  on chroma). Titles are now dataset-neutral; interpretation lives in README
+  captions. Only those two dev-v1.1 PNGs changed; the other four reproduced
+  bit-identically (determinism check still passing).
+- Tests 213 → **221** (loader: joint-alternative semantics, qid scheme,
+  mismatch/unknown-corpus errors, real-data integration; summarizer:
+  sections/groups render, out-of-sync qids exit).
+
+### Ran (48 configs: baseline 12 × {bm25, tfidf, lsa, dense}, all 472 questions)
+
+BM25 ~21 s, tfidf+lsa ~40 s, dense ~5.5 min (finance = 145k tokens; MiniLM
+warning "269 > 256" is the truncation instrumentation's territory, expected).
+
+### Findings (README §13–15, the day the honest risk got measured)
+
+1. **Finding 13 — the crossover.** fixed-64 − fixed-256 under BM25:
+   +0.133 @B400 → **−0.033** @B800 → **−0.040** @B1600. The SQuAD "small
+   chunks never lose" claim is a SHORT-GOLD property, exactly as the day-6
+   risk note feared — and that's the interesting result. Direction
+   consistent in all 5 corpora. Best config at B=1600 is sentence-256
+   (0.938). Fixed-k hit@5 still rises with size (reversal replicates).
+2. **Finding 14 — mechanism.** Tercile gradient at B=400
+   (+0.192/+0.112/+0.092) and B=1600 (n.s./n.s./−0.085); 2+-ref questions
+   drive the flip (−0.069 vs −0.022 n.s.). Practical rule now in README:
+   optimal chunk size scales with gold-evidence length.
+3. **Finding 15 — window × gold-length interaction.** Under dense, NO
+   crossover (fixed-64 ahead at every budget, +0.047 @B1600) because 99.5%
+   of fixed-256 chunks exceed MiniLM's window — prefix retrieval can't
+   harvest long-gold benefits. Also: precision/IoU informative at last
+   (sentence-128 peaks @B200: P=0.193, IoU=0.177); sentence-vs-fixed at 256
+   is +0.083 @B400, ~4× the SQuAD gap (cutting mid-sentence now cuts gold).
+
+### Process notes
+
+- Later configs in a multi-config invocation record `+dirty` because earlier
+  configs' untracked result files land in the working tree — same benign
+  artifact as the day-4/6 committed files (verified: dev-v1.1 seed-2 and
+  dense files carry it too). The actual code state for every chroma run was
+  clean 3955e85. Improvement for a slack day: scope run_metadata's dirty
+  check to computation inputs (`git status --porcelain -- src experiments
+  pyproject.toml uv.lock requirements.txt`) so result-file accumulation
+  stops tripping it. Don't rewrite existing raw files over this.
+- `--per-doc-cap 150` reads oddly in chroma config ids (`cap150`); it's a
+  no-op cap, documented in the summary header ("no sampling").
+
+### Next steps (Day 8, in order)
+
+1. **Overlap ablation on chroma** (one invocation: fixed {64,128,256} ×
+   {12.5/25/50%}, sentence × {1,2} — runner supports it). Hypothesis worth
+   testing: overlap's boundary-repair value should be LARGER on chroma
+   (long golds straddle boundaries more often); summarize_ablations already
+   parameterized by --dataset. Check whether the 25% recommendation from
+   finding 6 changes.
+2. **Truncate-rule robustness on chroma** (12 configs, `--budget-rule
+   truncate`): does the crossover survive full budget utilization? (The
+   stop-rule artifact only affects B=200, which findings 13–15 exclude, so
+   expect yes — but the check is cheap and closes the loop like finding 7
+   did.)
+3. If both land: extend `summarize_seeds`-style robustness thinking to
+   chroma is NOT applicable (no sampling); instead consider a
+   per-corpus-jackknife of finding 13 (drop each corpus, recompute pooled
+   delta) as the analogous stability check — decide whether it merits code
+   or an ad hoc NOTES table.
+4. Backlog (phase 3): BPE tokenizer robustness check (tiktoken reachable
+   since day 2); 512-window encoder ablation; semantic chunker (embedding
+   breakpoints) now that the dense stack exists.
+
+### Open questions (carried + new)
+
+- Cross-family overlap table (sentence-o0 vs fixed+25%) still ad hoc —
+  chroma overlap run (next step 1) is the moment to generalize it.
+- Truncate × overlap cross unrun.
+- Scoped dirty-check improvement (process note above).
+- chatlogs is the corpus where fixed-64 does WORST at B=1600 relative to
+  its own median gold length (59 tokens, longest of the five) — consistent
+  with finding 14, but a per-corpus × tercile interaction table would nail
+  it if a reviewer asks.
