@@ -17,10 +17,10 @@ Gold-span semantics: a question carries a tuple of *alternatives*, each of
 which is a tuple of required spans. SQuAD's multiple annotations are
 alternative locations of the same answer (any one suffices — the standard
 max-over-answers convention), so each distinct annotated span becomes a
-singleton alternative. Corpora whose references are jointly required (e.g.
-the Chroma evaluation corpora, loaded in a later phase) use a single
-alternative holding all reference spans. Metrics take the max over
-alternatives, so both semantics score correctly through one code path.
+singleton alternative. The Chroma evaluation corpora give jointly-required
+references, so all of a question's references form a single alternative.
+Metrics take the max over alternatives, so both semantics score correctly
+through one code path.
 
 Raw JSON payloads are downloaded to ``data/`` (gitignored) with pinned URLs
 and SHA256 checksums; ``python -m src.data`` fetches everything and prints
@@ -29,6 +29,7 @@ corpus statistics.
 
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
 import random
@@ -97,6 +98,45 @@ SQUAD_FILES = {
 }
 
 PARAGRAPH_JOINER = "\n\n"
+
+# The Chroma chunking-evaluation corpora (Smith & Troynikov 2024): five
+# single-file corpora with human-curated questions whose gold evidence is
+# given as exact character spans. Unlike SQuAD's ~3-token answers, references
+# here are sentence-scale (median ~28 regex tokens), which is what makes
+# SpanPrecision and SpanIoU informative on this dataset. SHA256 pins computed
+# from the files fetched on 2026-07-08; offsets were verified exact against
+# these exact bytes, so a checksum mismatch invalidates the gold spans too.
+_CHROMA_BASE = (
+    "https://raw.githubusercontent.com/brandonstarxel/chunking_evaluation/main/"
+    "chunking_evaluation/evaluation_framework/general_evaluation_data"
+)
+CHROMA_CORPORA = ("chatlogs", "finance", "pubmed", "state_of_the_union", "wikitexts")
+CHROMA_FILES = {
+    "questions_df.csv": (
+        f"{_CHROMA_BASE}/questions_df.csv",
+        "3ab3901889b8900f43775537bf12d36bd6614255fc59124faca31bede1dda7a3",
+    ),
+    "chatlogs.md": (
+        f"{_CHROMA_BASE}/corpora/chatlogs.md",
+        "543a98f82b2a6a492349fd7f8c9d6c3e78d1a4af81d13c79a7fd513c3f65bda6",
+    ),
+    "finance.md": (
+        f"{_CHROMA_BASE}/corpora/finance.md",
+        "1c48d0156820abc88e46e5c992fa0cd2708b07ae59a3771b2b18234b7208561f",
+    ),
+    "pubmed.md": (
+        f"{_CHROMA_BASE}/corpora/pubmed.md",
+        "0fd9242ffb253695e5d0f0215cb79a66a2a8f1236591e764c60d370747684ced",
+    ),
+    "state_of_the_union.md": (
+        f"{_CHROMA_BASE}/corpora/state_of_the_union.md",
+        "6fc21d560d31eb2421e337596feea0f83f1fa9ca02c6c4e47bc26959d7531b37",
+    ),
+    "wikitexts.md": (
+        f"{_CHROMA_BASE}/corpora/wikitexts.md",
+        "74cafcdb771185ecb9f22cc41b73e2e44477e0636ecf9cf1f96fd6ee0f4b86c0",
+    ),
+}
 
 
 def download_file(url: str, dest: Path, sha256: str) -> Path:
@@ -190,6 +230,67 @@ def load_squad(path: Path, name: str | None = None) -> QADataset:
     )
 
 
+def download_chroma(data_dir: Path) -> dict[str, Path]:
+    chroma_dir = data_dir / "chroma"
+    return {
+        name: download_file(url, chroma_dir / name, sha256)
+        for name, (url, sha256) in CHROMA_FILES.items()
+    }
+
+
+def load_chroma(data_dir: Path, name: str = "chroma") -> QADataset:
+    """Load the Chroma evaluation corpora as one five-document dataset.
+
+    Each corpus file is one document. A question's references are *jointly
+    required* — they are distinct pieces of evidence for one answer, not
+    alternative locations of the same answer — so all of them form a single
+    gold alternative (contrast ``load_squad``, where each annotation is its
+    own singleton alternative). Every reference is verified verbatim against
+    the corpus text; a mismatch is a hard error, never a silent skip or a
+    fuzzy remap.
+
+    Question ids are ``<corpus>:<n>`` with ``n`` counting that corpus's
+    questions in CSV row order, so ids are stable across loads and encode
+    provenance.
+    """
+    chroma_dir = Path(data_dir) / "chroma"
+    documents = {
+        corpus: Document(
+            doc_id=corpus,
+            title=corpus,
+            text=(chroma_dir / f"{corpus}.md").read_text(encoding="utf-8"),
+        )
+        for corpus in CHROMA_CORPORA
+    }
+    questions: list[Question] = []
+    counters: dict[str, int] = {}
+    with open(chroma_dir / "questions_df.csv", encoding="utf-8", newline="") as f:
+        for row in csv.DictReader(f):
+            corpus = row["corpus_id"]
+            if corpus not in documents:
+                raise ValueError(f"question references unknown corpus {corpus!r}")
+            text = documents[corpus].text
+            spans: list[GoldSpan] = []
+            for ref in json.loads(row["references"]):
+                start, end = ref["start_index"], ref["end_index"]
+                if text[start:end] != ref["content"]:
+                    raise ValueError(
+                        f"reference mismatch in {corpus} at [{start}, {end}): "
+                        f"{text[start:end]!r} != {ref['content']!r}"
+                    )
+                spans.append(GoldSpan(start, end))
+            n = counters[corpus] = counters.get(corpus, 0) + 1
+            questions.append(
+                Question(
+                    qid=f"{corpus}:{n:03d}",
+                    text=row["question"].strip(),
+                    doc_id=corpus,
+                    gold_alternatives=(tuple(spans),),
+                )
+            )
+    return QADataset(name=name, documents=documents, questions=tuple(questions))
+
+
 def sample_questions(
     dataset: QADataset, per_doc_cap: int, seed: int
 ) -> tuple[Question, ...]:
@@ -228,4 +329,22 @@ if __name__ == "__main__":
             f"{filename}: {len(ds.documents)} documents, {len(ds.questions)} questions | "
             f"doc tokens min/median/max = "
             f"{lengths[0]}/{lengths[n // 2]}/{lengths[-1]}"
+        )
+    download_chroma(data_dir)
+    chroma = load_chroma(data_dir)
+    by_doc: dict[str, int] = {}
+    for q in chroma.questions:
+        by_doc[q.doc_id] = by_doc.get(q.doc_id, 0) + 1
+    for corpus in CHROMA_CORPORA:
+        doc = chroma.documents[corpus]
+        ref_lens = sorted(
+            tokenizer.count(doc.text[s.start : s.end])
+            for q in chroma.questions
+            if q.doc_id == corpus
+            for s in q.gold_alternatives[0]
+        )
+        print(
+            f"chroma/{corpus}: {tokenizer.count(doc.text)} doc tokens, "
+            f"{by_doc[corpus]} questions | ref tokens min/median/max = "
+            f"{ref_lens[0]}/{ref_lens[len(ref_lens) // 2]}/{ref_lens[-1]}"
         )

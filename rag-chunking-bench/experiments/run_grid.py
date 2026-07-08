@@ -42,7 +42,15 @@ from src.chunkers import (
     RecursiveCharacterChunker,
     SentenceChunker,
 )
-from src.data import QADataset, Question, download_squad, load_squad, sample_questions
+from src.data import (
+    QADataset,
+    Question,
+    download_chroma,
+    download_squad,
+    load_chroma,
+    load_squad,
+    sample_questions,
+)
 from src.metrics import hit_at_k, span_scores, take_until_budget
 from src.retrievers import BM25Retriever, LSARetriever, Retriever, TfidfRetriever
 from src.tokenization import RegexWordTokenizer, TokenIndex
@@ -283,7 +291,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description="Run the chunking benchmark grid.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--dataset", default="dev-v1.1", choices=("dev-v1.1", "dev-v2.0"))
+    parser.add_argument(
+        "--dataset", default="dev-v1.1", choices=("dev-v1.1", "dev-v2.0", "chroma")
+    )
     parser.add_argument("--chunkers", nargs="+", default=list(CHUNKERS), choices=CHUNKERS)
     parser.add_argument("--sizes", nargs="+", type=int, default=[64, 128, 256, 512])
     parser.add_argument("--overlaps", nargs="+", type=int, default=[0])
@@ -307,10 +317,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
-    data_path = ROOT / "data" / f"{args.dataset}.json"
-    if not data_path.exists():
-        download_squad(ROOT / "data")
-    dataset = load_squad(data_path, name=args.dataset)
+    if args.dataset == "chroma":
+        download_chroma(ROOT / "data")
+        dataset = load_chroma(ROOT / "data")
+    else:
+        data_path = ROOT / "data" / f"{args.dataset}.json"
+        if not data_path.exists():
+            download_squad(ROOT / "data")
+        dataset = load_squad(data_path, name=args.dataset)
     questions = sample_questions(dataset, args.per_doc_cap, args.seed)
     configs = [
         GridConfig(

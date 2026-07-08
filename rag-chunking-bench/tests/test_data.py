@@ -1,21 +1,24 @@
-"""Tests for SQuAD loading: reconstruction, span remapping, dedup, sampling.
+"""Tests for dataset loading: reconstruction, span remapping, dedup, sampling.
 
-The loader's contract is exactness — every gold span must match the document
-text verbatim — so most tests build a small synthetic SQuAD file and check
-coordinates by hand. An integration test runs against the real dev sets when
-they have been downloaded (`python -m src.data`); it is skipped otherwise so
-the suite passes on a fresh clone.
+The loaders' shared contract is exactness — every gold span must match the
+document text verbatim — so most tests build small synthetic dataset files
+and check coordinates by hand. Integration tests run against the real files
+when they have been downloaded (`python -m src.data`); they are skipped
+otherwise so the suite passes on a fresh clone.
 """
 
+import csv
 import json
 from pathlib import Path
 
 import pytest
 
 from src.data import (
-    GoldSpan,
+    CHROMA_CORPORA,
     PARAGRAPH_JOINER,
+    GoldSpan,
     Question,
+    load_chroma,
     load_squad,
     sample_questions,
 )
@@ -233,6 +236,133 @@ class TestSampleQuestions:
         sampled = sample_questions(ds, per_doc_cap=6, seed=11)
         indices = [int(q.qid.split("q")[1]) for q in sampled]
         assert indices == sorted(indices)
+
+
+def _ref(text, content):
+    start = text.index(content)
+    return {"content": content, "start_index": start, "end_index": start + len(content)}
+
+
+def make_chroma_dir(tmp_path, corpus_texts, question_rows):
+    """Build a synthetic data/chroma layout.
+
+    `corpus_texts` maps corpus name -> text (unnamed corpora get filler
+    text, since the loader reads all five pinned corpus files).
+    `question_rows` is a list of (corpus_id, question, references) tuples.
+    """
+    chroma_dir = tmp_path / "chroma"
+    chroma_dir.mkdir()
+    for corpus in CHROMA_CORPORA:
+        text = corpus_texts.get(corpus, f"Filler text for the {corpus} corpus.")
+        (chroma_dir / f"{corpus}.md").write_text(text, encoding="utf-8")
+    with open(chroma_dir / "questions_df.csv", "w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["question", "references", "corpus_id"])
+        for corpus_id, question, references in question_rows:
+            writer.writerow([question, json.dumps(references), corpus_id])
+    return tmp_path
+
+
+class TestLoadChroma:
+    def test_multi_reference_question_is_one_joint_alternative(self, tmp_path):
+        text = "Alpha said hello. Beta answered politely. Gamma left early."
+        data_dir = make_chroma_dir(
+            tmp_path,
+            {"chatlogs": text},
+            [
+                (
+                    "chatlogs",
+                    "Who spoke?",
+                    [_ref(text, "Alpha said hello."), _ref(text, "Gamma left early.")],
+                )
+            ],
+        )
+        ds = load_chroma(data_dir)
+        (q,) = ds.questions
+        # Jointly-required references: ONE alternative holding both spans,
+        # not two alternatives (which would mean either-suffices).
+        assert len(q.gold_alternatives) == 1
+        spans = q.gold_alternatives[0]
+        assert [text[s.start : s.end] for s in spans] == [
+            "Alpha said hello.",
+            "Gamma left early.",
+        ]
+
+    def test_all_five_corpora_load_as_documents(self, tmp_path):
+        data_dir = make_chroma_dir(tmp_path, {}, [])
+        ds = load_chroma(data_dir)
+        assert set(ds.documents) == set(CHROMA_CORPORA)
+        assert ds.questions == ()
+
+    def test_qids_count_per_corpus_in_csv_order(self, tmp_path):
+        fin = "Revenue rose sharply. Costs fell notably."
+        chat = "User one waved. User two nodded."
+        data_dir = make_chroma_dir(
+            tmp_path,
+            {"finance": fin, "chatlogs": chat},
+            [
+                ("finance", "What rose?", [_ref(fin, "Revenue rose sharply.")]),
+                ("chatlogs", "Who waved?", [_ref(chat, "User one waved.")]),
+                ("finance", "What fell?", [_ref(fin, "Costs fell notably.")]),
+            ],
+        )
+        ds = load_chroma(data_dir)
+        assert [q.qid for q in ds.questions] == [
+            "finance:001",
+            "chatlogs:001",
+            "finance:002",
+        ]
+
+    def test_reference_mismatch_raises(self, tmp_path):
+        text = "Exact offsets are the whole contract."
+        data_dir = make_chroma_dir(
+            tmp_path,
+            {"pubmed": text},
+            [
+                (
+                    "pubmed",
+                    "?",
+                    [{"content": "Exact offsets", "start_index": 1, "end_index": 14}],
+                )
+            ],
+        )
+        with pytest.raises(ValueError, match="reference mismatch"):
+            load_chroma(data_dir)
+
+    def test_unknown_corpus_raises(self, tmp_path):
+        data_dir = make_chroma_dir(
+            tmp_path,
+            {},
+            [("mystery", "?", [{"content": "x", "start_index": 0, "end_index": 1}])],
+        )
+        with pytest.raises(ValueError, match="unknown corpus"):
+            load_chroma(data_dir)
+
+
+@pytest.mark.skipif(
+    not (DATA_DIR / "chroma" / "questions_df.csv").exists(),
+    reason="run `python -m src.data` to download the Chroma corpora",
+)
+class TestRealChroma:
+    def test_chroma_loads_with_verified_references(self):
+        # load_chroma raises on any offset mismatch, so loading IS the check.
+        ds = load_chroma(DATA_DIR)
+        assert len(ds.documents) == 5
+        assert len(ds.questions) == 472
+        by_doc = {}
+        for q in ds.questions:
+            by_doc[q.doc_id] = by_doc.get(q.doc_id, 0) + 1
+        assert by_doc == {
+            "wikitexts": 144,
+            "pubmed": 99,
+            "finance": 97,
+            "state_of_the_union": 76,
+            "chatlogs": 56,
+        }
+        # Long-reference regime: at least one question carries several
+        # jointly-required spans through a single alternative.
+        assert max(len(q.gold_alternatives[0]) for q in ds.questions) == 5
+        assert all(len(q.gold_alternatives) == 1 for q in ds.questions)
 
 
 @pytest.mark.skipif(
