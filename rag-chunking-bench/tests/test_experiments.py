@@ -28,6 +28,7 @@ from experiments.summarize import (
     render_summary,
 )
 from experiments.summarize_ablations import render_ablations
+from experiments.summarize_chroma import render_moderation
 from experiments.summarize_retrievers import render_retrievers
 from experiments.summarize_seeds import render_seeds
 from src.data import Document, GoldSpan, QADataset, Question
@@ -295,6 +296,73 @@ class TestSummarize:
         assert len(rows) == 1
         assert rows[0][0] == "sentence-32 vs fixed-32"
         assert len(rows[0]) == 3
+
+
+class TestSummarizeChroma:
+    """Chroma-style fixture: qids carry a `corpus:` prefix, gold lengths vary."""
+
+    def _chroma_like(self) -> tuple[QADataset, tuple[Question, ...]]:
+        doc = Document(
+            doc_id="tiny",
+            title="tiny",
+            text="\n\n".join([PARA_ZEBRA, PARA_VOLCANO, PARA_MARKET]),
+        )
+        long_answer = "Wholesale prices are settled by hand signals"
+        questions = (
+            _question("finance:001", doc, "When did the sanctuary open?", "1974"),
+            _question("finance:002", doc, "What lines the rim?", "Basalt columns"),
+            _question("chatlogs:001", doc, "How are prices settled?", long_answer),
+        )
+        dataset = QADataset(name="chroma", documents={doc.doc_id: doc}, questions=questions)
+        return dataset, questions
+
+    def _stats(self, dataset) -> dict[str, tuple[int, int]]:
+        from src.tokenization import RegexWordTokenizer, TokenIndex
+
+        index = TokenIndex(dataset.documents["tiny"].text, RegexWordTokenizer())
+        return {
+            q.qid: (
+                len(
+                    {
+                        t
+                        for s in q.gold_alternatives[0]
+                        for t in index.tokens_overlapping(s.start, s.end)
+                    }
+                ),
+                len(q.gold_alternatives[0]),
+            )
+            for q in dataset.questions
+        }
+
+    def test_render_moderation_sections_and_groups(self, tmp_path):
+        dataset, questions = self._chroma_like()
+        for size in (16, 32):
+            run_and_save(
+                _config(dataset="chroma", chunk_size=size), dataset, questions, tmp_path
+            )
+        results = load_raw(tmp_path)
+        text = render_moderation(results, self._stats(dataset), "fixed-16", "fixed-32")
+        assert "## Gold evidence by corpus" in text
+        # Unknown-to-Chroma corpus names from the fixture still render, and
+        # per-corpus question counts come from the qid prefixes.
+        assert "| chatlogs | 1 |" in text
+        assert "| finance | 2 |" in text
+        assert "chatlogs (n=1)" in text and "finance (n=2)" in text
+        assert "## Moderation by total gold-evidence length" in text
+        assert "## Moderation by reference count" in text
+        assert "1 reference (n=3)" in text
+
+    def test_render_moderation_rejects_unknown_qids(self, tmp_path):
+        dataset, questions = self._chroma_like()
+        for size in (16, 32):
+            run_and_save(
+                _config(dataset="chroma", chunk_size=size), dataset, questions, tmp_path
+            )
+        results = load_raw(tmp_path)
+        stats = self._stats(dataset)
+        stats.pop("chatlogs:001")
+        with pytest.raises(SystemExit, match="out of sync"):
+            render_moderation(results, stats, "fixed-16", "fixed-32")
 
 
 class TestSummarizeAblations:

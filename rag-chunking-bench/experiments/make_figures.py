@@ -94,6 +94,7 @@ def fig_budget_curves(results: list[RunResult], out: Path) -> None:
     grid = _by_config(results)
     budgets = [int(b) for b in results[0].config["budgets"]]
     sizes = sorted({rr.config["chunk_size"] for rr in results})
+    n_questions = len(results[0].records)
     fig, axes = plt.subplots(1, len(CHUNKER_ORDER), figsize=(9.6, 3.2), sharey=True)
     for ax, chunker in zip(axes, CHUNKER_ORDER):
         for size in sizes:
@@ -122,7 +123,7 @@ def fig_budget_curves(results: list[RunResult], out: Path) -> None:
         ax.set_title(f"{chunker} chunker")
         ax.set_ylim(0, 1.0)
         _log2_axis(ax, budgets, "token budget B (log scale)")
-    axes[0].set_ylabel("SpanRecall@B (mean, 2,400 questions)")
+    axes[0].set_ylabel(f"SpanRecall@B (mean, {n_questions:,} questions)")
     axes[-1].legend(
         title="chunk size (tokens)",
         loc="lower right",
@@ -130,9 +131,12 @@ def fig_budget_curves(results: list[RunResult], out: Path) -> None:
         title_fontsize=8,
         labelcolor=INK_SECONDARY,
     )
+    # Titles state what is drawn, not a verdict: the size ordering is
+    # dataset-dependent (SQuAD: small dominates; Chroma: crossover — see
+    # fig_gold_length_crossover), and the same code renders both.
     fig.suptitle(
-        "Budget-matched retrieval: smaller chunks dominate at every budget "
-        "(bands: 95% bootstrap CI)",
+        f"Budget-matched SpanRecall by chunker family and chunk size, "
+        f"{results[0].config['dataset']} (bands: 95% bootstrap CI)",
         fontsize=10.5,
         color=INK,
     )
@@ -321,7 +325,9 @@ def fig_budget_rule(
         ax.set_title(f"{chunker} chunker")
         ax.set_ylim(0, 1.0)
         _log2_axis(ax, sizes, "chunk size (tokens, log scale)")
-    axes[0].set_ylabel(f"SpanRecall@{budget} (mean, 2,400 questions)")
+    axes[0].set_ylabel(
+        f"SpanRecall@{budget} (mean, {len(stop_runs[0].records):,} questions)"
+    )
     axes[0].legend(title="budget rule", loc="lower left", title_fontsize=8, labelcolor=INK_SECONDARY)
     fig.suptitle(
         f"Truncating the final chunk removes the stop rule's collapse at B={budget}, "
@@ -381,8 +387,8 @@ def fig_retriever_comparison(
     axes[0].set_ylabel(f"SpanRecall@{budget} (mean, {n_questions:,} questions)")
     axes[0].legend(title="retriever", loc="lower left", title_fontsize=8, labelcolor=INK_SECONDARY)
     fig.suptitle(
-        f"The size effect is retriever-independent at B={budget}: smaller chunks "
-        "win under every retriever (bands: 95% CI)",
+        f"SpanRecall@{budget} by chunk size under each retriever, "
+        f"{any_runs[0].config['dataset']} (bands: 95% CI)",
         fontsize=10.5,
         color=INK,
     )
@@ -508,6 +514,115 @@ def fig_dense_window(
     plt.close(fig)
 
 
+def fig_gold_length_crossover(
+    runs_by_line: dict[str, list[RunResult]],
+    gold_stats: dict[str, tuple[int, int]],
+    out: Path,
+    challenger: tuple[str, int] = ("fixed", 64),
+    baseline: tuple[str, int] = ("fixed", 256),
+    min_budget: int = 400,
+) -> None:
+    """Where "small chunks win" ends: gold-span length moderates the size effect.
+
+    Left: the paired small-vs-large-chunk delta against budget for three
+    (dataset, retriever) settings. On SQuAD's ~3-token golds the advantage
+    never reverses; on Chroma's sentence-scale golds it crosses zero as the
+    budget grows — except under the window-limited dense encoder, which
+    cannot read a large chunk past its prefix, so large chunks never get to
+    use their length. Right: the Chroma/BM25 delta split by gold-length
+    tercile — the crossover is driven by the questions with the longest gold
+    evidence, the direct mechanism check.
+
+    Budgets below ``min_budget`` are excluded: at B=200 the 256-token
+    baseline retrieves nothing under the stop rule, so the delta there
+    measures the protocol artifact (finding 5), not chunking, and its ~0.6
+    magnitude would compress the crossover region the figure exists to show.
+    """
+    from experiments.summarize_chroma import gold_terciles
+
+    line_styles = {
+        "SQuAD dev-v1.1 / BM25": ("#2a78d6", "o"),
+        "Chroma / BM25": ("#1baf7a", "s"),
+        "Chroma / dense": ("#9a5bd2", "D"),
+    }
+    tercile_ramp = ("#86b6ef", "#2a78d6", "#184f95")
+    ch_label = f"{challenger[0]}-{challenger[1]}"
+    bl_label = f"{baseline[0]}-{baseline[1]}"
+
+    def deltas(runs: list[RunResult], indices: list[int] | None = None):
+        grid = _by_config(runs)
+        a, b = grid[challenger], grid[baseline]
+        budgets = [int(x) for x in a.config["budgets"] if int(x) >= min_budget]
+        cis = []
+        for budget in budgets:
+            sa, sb = a.metric("recall", budget), b.metric("recall", budget)
+            if indices is not None:
+                sa = [sa[i] for i in indices]
+                sb = [sb[i] for i in indices]
+            cis.append(diff_ci(sa, sb))
+        return budgets, cis
+
+    fig, (ax_lines, ax_terc) = plt.subplots(1, 2, figsize=(9.6, 3.6), sharey=True)
+
+    def draw(ax, budgets, cis, color, marker, label):
+        ax.fill_between(
+            budgets,
+            [c.ci_low for c in cis],
+            [c.ci_high for c in cis],
+            color=color,
+            alpha=0.16,
+            linewidth=0,
+        )
+        ax.plot(
+            budgets,
+            [c.mean_diff for c in cis],
+            color=color,
+            linewidth=2,
+            marker=marker,
+            markersize=5,
+            markeredgecolor=SURFACE,
+            markeredgewidth=1.0,
+            label=label,
+        )
+
+    for label, (color, marker) in line_styles.items():
+        if label not in runs_by_line:
+            continue
+        budgets, cis = deltas(runs_by_line[label])
+        draw(ax_lines, budgets, cis, color, marker, label)
+    ax_lines.set_title(
+        "Same comparison, three settings:\nthe reversal needs long golds AND a full-chunk retriever"
+    )
+    ax_lines.set_ylabel(f"ΔSpanRecall@B ({ch_label} − {bl_label}, paired)")
+    ax_lines.legend(loc="upper right", labelcolor=INK_SECONDARY)
+
+    chroma_bm25 = runs_by_line["Chroma / BM25"]
+    qids = _by_config(chroma_bm25)[challenger].qids()
+    for (label, indices), color in zip(
+        gold_terciles(qids, gold_stats), tercile_ramp, strict=True
+    ):
+        budgets, cis = deltas(chroma_bm25, indices)
+        draw(ax_terc, budgets, cis, color, "o", f"{label} (n={len(indices)})")
+    ax_terc.set_title(
+        "Chroma / BM25 by gold-evidence length:\nlong-gold questions drive the crossover"
+    )
+    ax_terc.legend(title="gold-length tercile", loc="upper right", title_fontsize=8,
+                   labelcolor=INK_SECONDARY)
+
+    for ax in (ax_lines, ax_terc):
+        ax.axhline(0, color=INK_MUTED, linewidth=0.9)
+        _log2_axis(ax, budgets, "token budget B (log scale)")
+    fig.suptitle(
+        "The small-chunk advantage is a property of short gold spans: with "
+        "sentence-scale evidence it shrinks, then reverses (bands: 95% paired CI)",
+        fontsize=10.5,
+        color=INK,
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.97))
+    fig.savefig(out, bbox_inches="tight")
+    plt.close(fig)
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Render README figures from raw results.",
@@ -517,6 +632,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--retriever", default="bm25")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--raw-dir", type=Path, default=ROOT / "results" / "raw")
+    parser.add_argument("--data-dir", type=Path, default=ROOT / "data")
     parser.add_argument("--out-dir", type=Path, default=ROOT / "results" / "figures")
     return parser.parse_args(argv)
 
@@ -590,6 +706,33 @@ def main(argv: list[str] | None = None) -> None:
         window = args.out_dir / f"dense_window_{args.dataset}.png"
         fig_dense_window(by_retriever["bm25"], by_retriever["dense"], window)
         written.append(window)
+
+    # The gold-length crossover spans datasets (SQuAD vs Chroma) and needs
+    # gold lengths recomputed from the corpus text, so it renders only when
+    # all of its inputs exist — independently of --dataset.
+    crossover_inputs = {
+        "SQuAD dev-v1.1 / BM25": ("dev-v1.1", "bm25"),
+        "Chroma / BM25": ("chroma", "bm25"),
+        "Chroma / dense": ("chroma", "dense"),
+    }
+    runs_by_line = {}
+    for label, (dataset, retriever) in crossover_inputs.items():
+        runs = load_raw(
+            args.raw_dir, dataset=dataset, retriever=retriever,
+            budget_rule="stop", overlap=0, seed=args.seed,
+        )
+        if runs:
+            check_aligned(runs)
+            runs_by_line[label] = runs
+    if (
+        set(runs_by_line) == set(crossover_inputs)
+        and (args.data_dir / "chroma" / "questions_df.csv").exists()
+    ):
+        from experiments.summarize_chroma import gold_stats
+
+        crossover = args.out_dir / "gold_length_crossover.png"
+        fig_gold_length_crossover(runs_by_line, gold_stats(args.data_dir), crossover)
+        written.append(crossover)
 
     for path in written:
         print(f"wrote {path.relative_to(ROOT)}")
