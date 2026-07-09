@@ -271,8 +271,8 @@ def fig_overlap_ablation(
         labelcolor=INK_SECONDARY,
     )
     fig.suptitle(
-        "Overlap earns back its token cost for fixed windows at tight budgets; "
-        "for sentence packing it is mostly cost (bars: 95% paired CI)",
+        "Effect of overlap, paired against zero overlap at the same chunk size "
+        "(bars: 95% paired CI)",
         fontsize=10.5,
         color=INK,
     )
@@ -330,8 +330,8 @@ def fig_budget_rule(
     )
     axes[0].legend(title="budget rule", loc="lower left", title_fontsize=8, labelcolor=INK_SECONDARY)
     fig.suptitle(
-        f"Truncating the final chunk removes the stop rule's collapse at B={budget}, "
-        "but small chunks still win (bands: 95% CI)",
+        f"Truncating the final chunk removes the stop rule's retrieve-nothing "
+        f"collapse at B={budget} (bands: 95% CI)",
         fontsize=10.5,
         color=INK,
     )
