@@ -4,14 +4,17 @@
 
 writes ``results/summary_<dataset>_<retriever>_ablations.md`` and prints it.
 
-Two controlled comparisons, each paired per-question against its own control
-run (never against a different grid point):
+Three controlled comparisons, each paired per-question (never against a
+different question set):
 
 - **Overlap ablation** — each overlap configuration vs. the zero-overlap run
   of the same (chunker, size), stop rule on both sides. Overlap changes the
   ranked chunk list, so hit@k is reported alongside the budget-matched span
   metrics: folklore says overlap helps, and the interesting question is
   whether that survives paying for the duplicated tokens.
+- **Cross-family control** — sentence packing at zero overlap vs. fixed
+  windows at 25% overlap, matched nominal size: does boundary-aware packing
+  collect overlap's boundary-repair benefit for free?
 - **Budget rule** — each zero-overlap configuration run under
   truncate-final-chunk vs. the same configuration under stop-before-exceed.
   The ranked list is identical on both sides; only the boundary handling
@@ -125,6 +128,49 @@ def render_overlap_section(
     return lines
 
 
+def render_cross_family_section(
+    stop_all: list[RunResult], budgets: list[int]
+) -> list[str]:
+    """Sentence packing at zero overlap vs. fixed windows at 25% overlap.
+
+    The mechanism claim behind the overlap findings: overlap earns its keep
+    by repairing arbitrary window boundaries. If that is the whole story, a
+    boundary-aware chunker collects the same benefit without paying for
+    duplicated tokens, and the paired delta between sentence-o0 and
+    fixed+25% at matched nominal size should sit at or above zero.
+    """
+    by_key = {_key(rr): rr for rr in stop_all}
+    rows = []
+    for chunker, size, overlap in sorted(by_key):
+        if chunker != "sentence" or overlap != 0:
+            continue
+        fixed = by_key.get(("fixed", size, size // 4))
+        if fixed is None:
+            continue
+        sent = by_key[(chunker, size, overlap)]
+        _check_paired(sent, fixed)
+        rows.append(
+            [
+                f"{sent.label} − {fixed.label}",
+                *(
+                    fmt_diff(diff_ci(sent.metric("recall", b), fixed.metric("recall", b)))
+                    for b in budgets
+                ),
+            ]
+        )
+    if not rows:
+        return []
+    return [
+        "## Cross-family control: sentence packing (o0) vs. fixed windows (+25% overlap)",
+        "",
+        "Positive Δ favors sentence packing. Zero or better means boundary-aware "
+        "packing matches or beats the best overlap setting while retrieving no "
+        "duplicated text (mean [95% CI]; bold = CI excludes 0).",
+        "",
+        *_table(["pair", *(f"B={b}" for b in budgets)], rows),
+    ]
+
+
 def render_rule_section(
     trunc_runs: list[RunResult], stop_runs: dict[tuple[str, int, int], RunResult], budgets: list[int]
 ) -> list[str]:
@@ -229,6 +275,7 @@ def render_ablations(
     ]
     if overlap_runs:
         lines += render_overlap_section(overlap_runs, baselines, budgets)
+        lines += render_cross_family_section(stop_all, budgets)
     if trunc_runs:
         lines += render_rule_section(trunc_runs, stop_runs, budgets)
     return "\n".join(lines)
