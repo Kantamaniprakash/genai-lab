@@ -12,7 +12,10 @@ within corpus. Second, Chroma gold references are sentence-scale and often
 multi-span, unlike SQuAD's ~3-token answers — the moderation tables split
 the same comparison by the question's total gold-evidence length and by its
 reference count, which is the direct test of whether optimal chunk size
-tracks the length of the evidence being retrieved.
+tracks the length of the evidence being retrieved. A drop-one-corpus
+jackknife of the pooled delta sits between the two: it is the corpus-level
+analogue of the SQuAD multi-seed check (chroma runs every question, so
+there is no sampling seed to vary).
 
 Gold lengths are recomputed from the corpus text, so this summarizer needs
 ``data/chroma`` downloaded (``python -m src.data``); it refuses to run
@@ -178,6 +181,33 @@ def render_moderation(
             baseline,
             budgets,
             [(corpus, per_corpus[corpus]) for corpus in corpora],
+        ),
+    )
+
+    # The chroma dataset has no question sampling to vary (every question of
+    # every corpus runs), so the stability check analogous to the SQuAD
+    # multi-seed grids is corpus-level: recompute the pooled delta with each
+    # corpus removed. A finding that flips sign or loses significance under
+    # some drop-one estimate is riding on that corpus.
+    all_indices = list(range(len(qids)))
+    lines += [
+        "## Corpus jackknife: pooled ΔSpanRecall with each corpus dropped",
+        "",
+    ]
+    lines += _table(
+        ["questions used", *budget_cols],
+        _subset_diff_rows(
+            challenger,
+            baseline,
+            budgets,
+            [("all corpora", all_indices)]
+            + [
+                (
+                    f"without {corpus}",
+                    [i for i in all_indices if i not in set(per_corpus[corpus])],
+                )
+                for corpus in corpora
+            ],
         ),
     )
 

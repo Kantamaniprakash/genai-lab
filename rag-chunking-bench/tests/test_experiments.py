@@ -388,6 +388,12 @@ class TestSummarizeChroma:
         assert "## Moderation by total gold-evidence length" in text
         assert "## Moderation by reference count" in text
         assert "1 reference (n=3)" in text
+        # Jackknife: one pooled row plus one drop-one row per corpus, and
+        # dropping a corpus removes exactly its questions from the pool.
+        assert "## Corpus jackknife" in text
+        assert "all corpora (n=3)" in text
+        assert "without chatlogs (n=2)" in text
+        assert "without finance (n=1)" in text
 
     def test_render_moderation_rejects_unknown_qids(self, tmp_path):
         dataset, questions = self._chroma_like()
