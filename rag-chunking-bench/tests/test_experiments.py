@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import gzip
 import json
+import subprocess
 
 import pytest
 
+from experiments import run_grid
 from experiments.aggregate import (
     RunResult,
     check_aligned,
@@ -113,6 +115,41 @@ class TestFactories:
         trunc = _config(dataset="dev-v1.1", budget_rule="truncate")
         assert stop.config_id == "dev-v1.1_fixed32_o0_bm25_cap50_seed0"
         assert trunc.config_id == "dev-v1.1_fixed32_o0_bm25_cap50_seed0_truncate"
+
+
+class TestRunMetadata:
+    @pytest.fixture()
+    def git_repo(self, tmp_path, monkeypatch):
+        def git(*args: str) -> None:
+            subprocess.run(
+                ["git", *args], cwd=tmp_path, check=True, capture_output=True
+            )
+
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "module.py").write_text("x = 1\n")
+        git("init")
+        git("config", "user.email", "test@example.invalid")
+        git("config", "user.name", "test")
+        git("add", "-A")
+        git("commit", "-m", "init")
+        monkeypatch.setattr(run_grid, "ROOT", tmp_path)
+        return tmp_path
+
+    def test_clean_repo_records_plain_commit(self, git_repo):
+        commit = run_grid.run_metadata()["git_commit"]
+        assert len(commit) == 40 and not commit.endswith("+dirty")
+
+    def test_result_files_do_not_mark_dirty(self, git_repo):
+        # Earlier configs of a multi-config invocation leave result files in
+        # the tree; they are outputs, not inputs, so the commit stays clean.
+        raw = git_repo / "results" / "raw"
+        raw.mkdir(parents=True)
+        (raw / "some_config.json.gz").write_bytes(b"")
+        assert not run_grid.run_metadata()["git_commit"].endswith("+dirty")
+
+    def test_input_changes_mark_dirty(self, git_repo):
+        (git_repo / "src" / "module.py").write_text("x = 2\n")
+        assert run_grid.run_metadata()["git_commit"].endswith("+dirty")
 
 
 class TestRunConfig:
@@ -376,6 +413,18 @@ class TestSummarizeAblations:
         assert "fixed-32/o8" in text
         assert "## Budget rule" in text
         assert "ΔSpanRecall, truncate − stop" in text
+        # No sentence-o0 run at a size with a fixed+25% partner: the
+        # cross-family control has nothing to pair and must stay silent.
+        assert "## Cross-family control" not in text
+
+    def test_render_ablations_cross_family_pairing(self, tiny_dataset, tmp_path):
+        dataset, questions = tiny_dataset
+        run_and_save(_config(), dataset, questions, tmp_path)
+        run_and_save(_config(overlap=8), dataset, questions, tmp_path)
+        run_and_save(_config(chunker="sentence"), dataset, questions, tmp_path)
+        text = render_ablations("tiny", "bm25", tmp_path)
+        assert "## Cross-family control" in text
+        assert "sentence-32 − fixed-32/o8" in text
 
     def test_render_ablations_requires_ablation_runs(self, tiny_dataset, tmp_path):
         dataset, questions = tiny_dataset

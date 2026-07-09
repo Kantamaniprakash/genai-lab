@@ -130,7 +130,12 @@ def run_metadata() -> dict[str, str]:
 
     try:
         commit = git("rev-parse", "HEAD")
-        if git("status", "--porcelain"):
+        # Only uncommitted changes to computation inputs make a result
+        # unreproducible from the recorded commit. A repo-wide check would
+        # flag later configs of a multi-config invocation as dirty merely
+        # because earlier configs' result files accumulated in the tree.
+        inputs = ("src", "experiments", "pyproject.toml", "uv.lock", "requirements.txt")
+        if git("status", "--porcelain", "--", *inputs):
             commit += "+dirty"
     except (OSError, subprocess.CalledProcessError):
         commit = "unknown"
