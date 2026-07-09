@@ -289,10 +289,13 @@ cut sentences and evidence spans mid-stream, and overlap repairs those cuts;
 sentence packing rarely makes them, so duplication just spends budget.
 Consistent with that, sentence-64 at *zero* overlap is statistically
 indistinguishable from fixed-64 at 25% overlap (+0.007 [−0.004, +0.019] at
-B=200) — boundary-aware packing achieves what overlap buys, without paying
-for it in index size or retrieved duplicates. Practical reading: if you use
+B=200; the ablation summary generates this cross-family control at every
+size) — boundary-aware packing achieves what overlap buys, without paying
+for it in index size or retrieved duplicates. This control holds on SQuAD
+at every size and budget; finding 17 shows the regime where it breaks. Practical reading: if you use
 fixed windows with a tight context budget, ~25% overlap is worth it; if you
-chunk on sentence boundaries, skip overlap entirely.
+chunk on sentence boundaries, skip overlap entirely — advice findings 16–17
+amend for corpora whose gold evidence outgrows the chunk.
 
 ### Budget-rule robustness: the size effect is not a stop-rule artifact
 
@@ -522,6 +525,97 @@ hyperbolically with budget everywhere (gold is fixed while retrieved tokens
 grow), which is the quantitative face of "Lost in the Middle"'s warning
 that padding budgets dilutes.
 
+### Overlap on long-gold corpora: boundary repair becomes evidence stitching
+
+Setup: the same overlap ablation as finding 6 — fixed {64, 128, 256} ×
+overlap {12.5%, 25%, 50% of size}, sentence {64, 128, 256} × {1, 2}
+sentences, each paired against its own zero-overlap control — rerun on the
+Chroma corpora (BM25, stop rule, all 472 questions). Full tables, including
+the generated cross-family control:
+[`results/summary_chroma_bm25_ablations.md`](results/summary_chroma_bm25_ablations.md).
+
+![Overlap ablation on Chroma: paired deltas vs zero overlap](results/figures/overlap_ablation_chroma_bm25.png)
+
+*Paired ΔSpanRecall vs. zero overlap on the Chroma corpora. Two contrasts
+with the SQuAD figure above: the fixed-window gains no longer fade to zero
+at B=1600 (top-left vs. bottom-left), and sentence packing at size 128 now
+benefits significantly (right column) — with sentence-scale golds, evidence
+straddles even sentence-pack boundaries.*
+
+**16. With long gold evidence, overlap's gains persist across budgets — and
+extend to sentence packing.** On SQuAD, overlap was a tight-budget
+phenomenon: gains shrank monotonically with budget and 50% overlap at size
+256 was significantly *negative* by B=1600 (finding 6). With sentence-scale
+golds the same manipulation keeps paying: fixed-64 at 50% overlap gains
+**+0.048 [+0.024, +0.072]** at B=400 and is still **+0.024 [+0.007,
++0.042]** ahead at B=1600; fixed-256 at 25% gains **+0.059 [+0.023,
++0.095]** at B=400, three times the corresponding SQuAD effect; and no
+fixed-window overlap cell is significantly negative at any budget. The
+cleanest sign flip is sentence packing at mid size: sentence-128 with
+2-sentence overlap gains **+0.044 [+0.016, +0.073]** at B=400 and **+0.035
+[+0.012, +0.057]** at B=800 — the same cells that were significantly
+negative on SQuAD (−0.010, −0.011). The fixed-k view flips the other way:
+on SQuAD overlap bought significant hit@5 at small sizes (+0.033 for
+fixed-64 at 25%); on Chroma no overlap configuration improves hit@5 (all 15
+deltas are ≤ +0.019 and n.s., one significantly negative). Overlap here is
+not buying better rankings — it is buying more of each gold span once its
+neighborhood is found.
+
+**17. The cross-family control breaks where golds outgrow the window —
+boundary repair is not the whole overlap story.** On SQuAD, sentence
+packing at zero overlap matched or beat fixed windows at 25% overlap at
+every size and budget (e.g. +0.007 [−0.004, +0.019] at size 64, B=200),
+which is what licensed reading overlap as pure boundary repair (finding 6).
+On Chroma the same control splits by size: at sizes 64 and 128, sentence-o0
+is *point-negative in seven of eight cells and significantly worse in four*
+(worst: **−0.053 [−0.081, −0.024]** at size 128, B=400), while at size 256
+parity-or-better returns (**+0.030 [+0.016, +0.046]** at B=200, **+0.022
+[+0.003, +0.042]** at B=1600). The regime is the one finding 14 identified:
+median gold evidence is ~28 tokens and 40% of questions need several
+references, so at window sizes 64–128 a gold span plus its context often
+cannot fit inside any single chunk no matter where the boundaries fall.
+Staggered duplicate windows then act as *evidence stitching* — each
+retrieved offset window extends coverage around the strongest lexical match
+— which boundary-aware packing cannot replicate at those sizes. Once the
+window again dwarfs typical evidence (256), boundary awareness suffices and
+the SQuAD picture returns. One caveat keeps this honest: sentence packing
+under-fills its nominal budget (realized mean 51 vs. 64 tokens at nominal
+64 here), so part of its small-size deficit is the realized-size penalty
+that finding 13 charges to operating smaller. The practical rule of finding
+6 survives with an amendment: with fixed windows, ~25% overlap; with
+boundary-aware chunkers, add overlap only when the evidence you expect to
+retrieve is longer than your chunks.
+
+### Crossover robustness: the inversion survives the budget rule and every corpus
+
+Setup: the 12 chroma baseline configurations rerun under truncate-final-chunk
+(utilization 1.00 everywhere — tables in the
+[ablation summary](results/summary_chroma_bm25_ablations.md)), plus a
+drop-one-corpus jackknife of the pooled finding-13 delta (in the
+[moderation summary](results/summary_chroma_bm25_moderation.md)) — the
+corpus-level analogue of the SQuAD seed check, since chroma runs every
+question and has no sampling seed to vary.
+
+**18. The crossover is not a budget-rule artifact — but most of the
+tight-budget small-chunk edge was.** Under truncate, fixed-64 − fixed-256
+is **−0.041 [−0.071, −0.011]** at B=800 and **−0.047 [−0.069, −0.026]** at
+B=1600: the inversion of finding 13, slightly larger. The other side of the
+rule change is just as informative: at B=200 the small-chunk advantage
+collapses from +0.590 (stop) to +0.171 (truncate), and at B=400 from
+**+0.133** to +0.030 [−0.008, +0.067], no longer significant. Contrast
+SQuAD (finding 7), where fixed-64 kept a **+0.218** edge at B=200 under
+truncate: with ~3-token golds, small chunks genuinely retrieve better; with
+sentence-scale golds, much of their tight-budget advantage was the stop
+rule forbidding large chunks from retrieving anything. sentence-256 is the
+best configuration at B≥800 under both rules (+0.068 [+0.039, +0.096] over
+fixed-64 at B=800 under truncate). The jackknife says the corpus mix is not
+doing the work either: the B=1600 inversion stays significant under all
+five drop-one estimates (−0.030 to −0.049), while the B=800 estimate stays
+negative in all five but grazes zero in four (upper CI bounds +0.000 to
++0.007) — dropping a corpus leaves only ~330–420 questions, so the earlier,
+smaller crossover sits at the edge of what that sample can resolve. The
+B=1600 cell is the one to cite.
+
 ## Status
 
 - [x] Phase 1 (harness): offset-preserving chunkers + tokenization
@@ -542,7 +636,10 @@ that padding budgets dilutes.
 - [x] Phase 2: Chroma corpora loader (790 references verified exact) and the
       long-reference grid, all four retrievers (48 configs) — findings 13–15
       (221 tests)
-- [ ] Phase 3: further ablations, error analysis, tokenizer (BPE)
+- [x] Phase 3: overlap ablation and truncate-rule check on Chroma (27
+      configs), generated cross-family control, corpus jackknife — findings
+      16–18 (225 tests)
+- [ ] Phase 3: error analysis, semantic chunking, tokenizer (BPE)
       robustness
 - [ ] Phase 4: full writeup
 
@@ -582,9 +679,11 @@ Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).
   contiguous excerpts; evidence scattered across a whole document (multi-hop
   QA) is untested.
 - The stop-before-exceed budget rule zeroes configs whose chunks exceed the
-  budget; the truncate-final-chunk rerun (finding 7) shows the size ordering
-  is robust to this choice, and the budget-utilization table makes the
-  affected cells explicit in both protocols.
+  budget; the truncate-final-chunk reruns show the SQuAD size ordering
+  (finding 7) and the Chroma crossover (finding 18) are both robust to this
+  choice — though on Chroma the *magnitude* of the tight-budget small-chunk
+  advantage is rule-dependent (finding 18) — and the budget-utilization
+  tables make the affected cells explicit in both protocols.
 - The regex tokenizer approximates BPE token counts; budget conclusions are
   in "word-token" units (a tiktoken BPE robustness check is planned).
 - Chroma corpora queries are LLM-generated (dataset provenance, not ours);

@@ -670,3 +670,105 @@ warning "269 > 256" is the truncation instrumentation's territory, expected).
   its own median gold length (59 tokens, longest of the five) — consistent
   with finding 14, but a per-corpus × tercile interaction table would nail
   it if a reviewer asks.
+
+---
+
+## 2026-07-09 — Day 8: chroma overlap + truncate ablations, corpus jackknife — findings 16–18
+
+### Built (all committed BEFORE the grids ran, per house rule)
+
+- **Scoped dirty check** (day-7 process note, closed): `run_metadata` now
+  runs `git status --porcelain -- src experiments pyproject.toml uv.lock
+  requirements.txt`, so result files accumulating mid-invocation no longer
+  stamp later configs `+dirty`. Verified live: all 27 of today's raw files
+  record clean `31eac72`. Tests cover clean / output-only / input-modified.
+- **Cross-family control table generated** (carried since day 4):
+  `summarize_ablations` renders sentence-o0 vs fixed+(size//4) paired deltas
+  wherever both runs exist. Regenerated dev-v1.1 summary reproduces the
+  day-4 ad hoc number exactly (+0.007 [−0.004, +0.019] @64/B200).
+- **Corpus jackknife section** in `summarize_chroma`: pooled challenger −
+  baseline delta recomputed with each corpus dropped (the corpus-level
+  analogue of the seed check; chroma has no sampling seed to vary).
+- Figure-title neutralization, round 2 (same class as day 7): overlap and
+  budget-rule suptitles asserted SQuAD verdicts ("for sentence packing it
+  is mostly cost" — FALSE on chroma). Now dataset-neutral; captions carry
+  interpretation. Only those two dev-v1.1 PNGs changed; all other PNGs
+  reproduced bit-identically. Tests 221 → **225** (full suite run with the
+  dense group installed).
+
+### Ran (27 configs, ~70 s: overlap 15 + truncate 12, chroma, BM25, stop-rule controls already on disk)
+
+### Findings (README §16–18)
+
+1. **Finding 16 — overlap gains persist across budgets on long golds and
+   extend to sentence packing.** fixed-64/o32: +0.048 @B400 → +0.024
+   @B1600, still significant (SQuAD gains faded to ~0/negative by B1600);
+   fixed-256/o64 +0.059 @B400 ≈ 3× SQuAD; sentence-128/o2 +0.044 @B400 /
+   +0.035 @B800 where SQuAD had significant NEGATIVES (−0.010/−0.011) —
+   clean sign flip. hit@5 flips the other way: no chroma overlap cell
+   improves it (SQuAD fixed-64/o16 gained +0.033). Overlap on long golds
+   buys more of each gold once found, not better rankings.
+2. **Finding 17 — the boundary-repair reading of overlap has a regime
+   boundary.** Cross-family control on chroma: sentence-o0 loses to
+   fixed+25% at sizes 64–128 (point-negative 7/8 cells, significant 4,
+   worst −0.053 @128/B400); parity-or-better returns at 256 (+0.030 @B200,
+   +0.022 @B1600). Interpretation: when gold + context can't fit any single
+   window, staggered windows STITCH evidence around the lexical match —
+   packing can't replicate that. Caveat recorded: sentence realized mean 51
+   vs nominal 64 (finding-4 confound; part of the deficit is operating
+   smaller where smaller is penalized).
+3. **Finding 18 — crossover robust; tight-budget edge was the stop rule.**
+   Under truncate: fixed-64 − fixed-256 = +0.171 @B200 (was +0.590 under
+   stop), +0.030 n.s. @B400 (was +0.133*), **−0.041* @B800, −0.047*
+   @B1600** — inversion survives, slightly larger. Contrast SQuAD finding 7
+   (+0.218 @B200 under truncate): short golds → small chunks genuinely
+   better; long golds → the tight-budget advantage was mostly protocol.
+   sentence-256 best at B≥800 under both rules (+0.068 over fixed-64 @B800
+   truncate). Jackknife: B=1600 inversion significant under ALL five
+   drop-one estimates (−0.030…−0.049); B=800 negative in all five but
+   grazes zero in four (upper bounds +0.000…+0.007; n drops to ~330–420).
+   Cite the B=1600 cell.
+
+### Process notes
+
+- `uv sync --group dense` (torch CPU) needed for the full 225-test count;
+  CI still installs default groups only — fine, dense tests importorskip.
+- The ablation summarizer's `render_rule_section` signature line is the one
+  pre-existing E501 in my files; left untouched (not my diff's).
+
+### Next steps (Day 9)
+
+**Day 9 should be a SIDE-REPO day** — days 1–8 were all flagship; the
+weekly rhythm owes 1–2 improvement days to the other repos. Best candidate:
+**financial-rag-chatbot**, because the flagship now has directly applicable
+results. Check `git log --oneline -15` there first, then pick ONE focused
+change, e.g.: (a) inspect its chunking defaults and align them with
+findings 6/14/16 (sentence-aware packing, size matched to expected evidence
+length, ~25% overlap only if fixed windows), citing rag-chunking-bench in
+the README; or (b) add a small retrieval-quality eval script to that repo
+(its own corpus, hit@k + a budget-matched recall metric) so future chunking
+changes there are measurable. Keep the diff focused; do not port the whole
+bench.
+
+Day 10 (flagship) queue, in order:
+1. **BPE tokenizer robustness check** (phase-3 backlog, cheap and
+   well-scoped): tiktoken vocab is reachable (day-2 probe). Add a
+   `TiktokenTokenizer` behind the existing `Tokenizer` protocol, rerun the
+   12-config BM25 baseline on dev-v1.1 with budgets in BPE tokens
+   (config_id must encode the tokenizer — check GridConfig; add a field
+   with a default that keeps old ids stable, like budget_rule), verify the
+   size ordering and sentence>fixed claims are unit-invariant.
+2. Semantic chunker (embedding-breakpoint) using the dense stack — the last
+   chunker family the related work compares.
+3. Per-corpus × tercile interaction table (day-7 open question) if a slack
+   hour remains.
+
+### Open questions (carried + new)
+
+- Truncate × overlap cross still unrun (one invocation away, both datasets).
+- Does the chroma overlap gain concentrate in the long-gold tercile the way
+  the size effect does (finding 14)? A tercile split of the OVERLAP delta
+  would close the finding-16 mechanism the same way finding 14 closed
+  finding 13's. Candidate for a phase-3 slack slot.
+- 512-window encoder ablation (day-6 backlog) still open.
+- chatlogs per-corpus × tercile table (day-7) still open.

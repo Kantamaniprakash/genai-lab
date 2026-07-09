@@ -22,7 +22,7 @@ chunkers, chunk sizes, and retrievers — with paired bootstrap confidence inter
 on span-level metrics — is a genuine gap at a scale one person can execute
 rigorously. It also feeds directly back into my `financial-rag-chatbot`.
 
-**Phase.** 2 of 4 essentially complete — baselines (first grid 2026-07-04:
+**Phase.** 3 of 4 underway — baselines (first grid 2026-07-04:
 fixed-k vs budget-matched ranking reversal; overlap ablation + truncate-rule
 robustness check 2026-07-05: overlap = boundary repair, size ordering
 survives the rule change — findings 6–7; cross-retriever grid 2026-07-06:
@@ -34,7 +34,12 @@ and past the encoder window dense retrieval degrades to prefix retrieval —
 findings 10–12; Chroma long-reference grid 2026-07-08, all four retrievers:
 the small-chunk advantage INVERTS at generous budgets on sentence-scale
 golds, the inversion is gold-length-driven and requires a full-chunk-reading
-retriever, and precision/IoU are finally informative — findings 13–15).
+retriever, and precision/IoU are finally informative — findings 13–15;
+chroma overlap + truncate ablations and corpus jackknife 2026-07-09: overlap
+gains persist across budgets on long golds and the cross-family
+boundary-repair control breaks at small sizes, while the crossover survives
+the budget rule and every drop-one corpus and the tight-budget small-chunk
+edge turns out to be mostly a stop-rule artifact — findings 16–18).
 
 1. **Harness** — offset-preserving chunkers, tokenization, span-level metrics,
    budget-matched retrieval protocol, dataset loaders. *(done — SQuAD +
@@ -43,11 +48,11 @@ retriever, and precision/IoU are finally informative — findings 13–15).
    overlap configs on SQuAD-derived long documents + Chroma eval corpora.
    *(done: all four retriever grids on both datasets; overlap, budget-rule,
    and multi-seed checks on SQuAD)*
-3. **Ablations & analysis** — overlap ablation *(done on SQuAD; chroma next)*,
-   budget-rule check *(done on SQuAD; chroma next)*, multi-seed sampling
-   *(done, BM25)*, gold-length moderation *(done — finding 14)*, semantic
-   vs. structural chunking, BPE tokenizer robustness, per-corpus error
-   analysis.
+3. **Ablations & analysis** — overlap ablation *(done: SQuAD + chroma)*,
+   budget-rule check *(done: SQuAD + chroma)*, multi-seed sampling
+   *(done, BM25)*, gold-length moderation *(done — finding 14)*, corpus
+   jackknife *(done — finding 18)*, semantic vs. structural chunking, BPE
+   tokenizer robustness, per-corpus error analysis.
 4. **Writeup** — README as a full research report with real tables and limitations.
 
 **Environment constraints (recorded so results are honest).** CPU-only (4 cores,
