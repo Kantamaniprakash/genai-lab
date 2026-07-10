@@ -5,6 +5,11 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Auto-updating "Latest from the lab" README section: `scripts/sync_latest.py` distills the newest research-log entry (headline findings, or the opening paragraph for side-repo days) onto the repo landing page, run by a workflow on every push that touches `NOTES.md`.
+
 ## [0.1.0] - 2026-07-05
 
 ### Added

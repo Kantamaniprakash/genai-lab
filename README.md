@@ -6,6 +6,18 @@
 
 Hands-on experiments with current Gen AI techniques — RAG, agents, evals, fine-tuning and whatever's moving the field this week
 
+<!-- latest-start -->
+## Latest from the lab
+
+<!-- auto-generated from research/NOTES.md by scripts/sync_latest.py; do not hand-edit -->
+
+**2026-07-10 — Day 9: SIDE-REPO DAY — findings applied to financial-rag-chatbot**
+
+First transfer of bench results into production code, per the day-8 plan (option a). Commit `edbb087` on financial-rag-chatbot.
+
+[Full entry →](rag-chunking-bench/research/NOTES.md#2026-07-10--day-9-side-repo-day--findings-applied-to-financial-rag-chatbot)
+<!-- latest-end -->
+
 ![Budget-matched SpanRecall@400 by chunking strategy and chunk size, with 95% bootstrap CIs](rag-chunking-bench/assets/hero_spanrecall_dev-v1.1_bm25.png)
 
 *Flagship result from [`rag-chunking-bench`](rag-chunking-bench/): once the
