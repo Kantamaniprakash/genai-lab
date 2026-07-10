@@ -16,6 +16,12 @@ Hands-on experiments with current Gen AI techniques — RAG, agents, evals, fine
 First transfer of bench results into production code, per the day-8 plan (option a). Commit `edbb087` on financial-rag-chatbot.
 
 [Full entry →](rag-chunking-bench/research/NOTES.md#2026-07-10--day-9-side-repo-day--findings-applied-to-financial-rag-chatbot)
+
+**Most recent findings** ([2026-07-09 — Day 8: chroma overlap + truncate ablations, corpus jackknife — findings 16–18](rag-chunking-bench/research/NOTES.md#2026-07-09--day-8-chroma-overlap--truncate-ablations-corpus-jackknife--findings-1618)):
+
+- Finding 16 — overlap gains persist across budgets on long golds and extend to sentence packing.
+- Finding 17 — the boundary-repair reading of overlap has a regime boundary.
+- Finding 18 — crossover robust; tight-budget edge was the stop rule.
 <!-- latest-end -->
 
 ![Budget-matched SpanRecall@400 by chunking strategy and chunk size, with 95% bootstrap CIs](rag-chunking-bench/assets/hero_spanrecall_dev-v1.1_bm25.png)

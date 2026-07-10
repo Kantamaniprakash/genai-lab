@@ -20,43 +20,67 @@ def gh_anchor(heading: str) -> str:
     return slug.replace(" ", "-")
 
 
-def latest_entry(notes_text: str):
+def day_entries(notes_text: str):
+    """All (heading, body) day sections, oldest first."""
     days = list(re.finditer(r"^## (.+)$", notes_text, flags=re.M))
     if not days:
         sys.exit("sync_latest: no '## ' day entries found in NOTES.md")
-    last = days[-1]
-    return last.group(1), notes_text[last.end():]
+    entries = []
+    for match, nxt in zip(days, days[1:] + [None]):
+        end = nxt.start() if nxt else len(notes_text)
+        entries.append((match.group(1), notes_text[match.end():end]))
+    return entries
+
+
+def finding_leads(body: str):
+    findings = re.search(
+        r"^### Findings.*?$(.*?)(?=^### |\Z)", body, flags=re.M | re.S
+    )
+    if not findings:
+        return []
+    leads = re.findall(r"^\d+\.\s+\*\*(.+?)\*\*", findings.group(1), flags=re.M | re.S)
+    return [re.sub(r"\s+", " ", lead) for lead in leads]
+
+
+def entry_link(heading: str) -> str:
+    return f"rag-chunking-bench/research/NOTES.md#{gh_anchor(heading)}"
 
 
 def digest(heading: str, body: str) -> str:
     lines = [f"**{heading}**", ""]
-    findings = re.search(
-        r"^### Findings.*?$(.*?)(?=^### |\Z)", body, flags=re.M | re.S
-    )
-    leads = (
-        re.findall(r"^\d+\.\s+\*\*(.+?)\*\*", findings.group(1), flags=re.M | re.S)
-        if findings
-        else []
-    )
+    leads = finding_leads(body)
     if leads:
-        lines += ["- " + re.sub(r"\s+", " ", lead) for lead in leads]
+        lines += ["- " + lead for lead in leads]
     else:
         # ponytail: no Findings section (side-repo days) -> first prose paragraph
         para = body.strip().split("\n\n")[0]
         if not para.startswith("#"):
             lines.append(re.sub(r"\s+", " ", para))
-    link = f"rag-chunking-bench/research/NOTES.md#{gh_anchor(heading)}"
-    lines += ["", f"[Full entry →]({link})"]
+    lines += ["", f"[Full entry →]({entry_link(heading)})"]
     return "\n".join(lines)
 
 
 def render(notes_text: str) -> str:
-    heading, body = latest_entry(notes_text)
+    entries = day_entries(notes_text)
+    heading, body = entries[-1]
+    block = digest(heading, body)
+    if not finding_leads(body):
+        # keep hard numbers on the landing page even on side-repo days:
+        # append the most recent entry that carries findings
+        for prev_heading, prev_body in reversed(entries[:-1]):
+            leads = finding_leads(prev_body)
+            if leads:
+                block += (
+                    f"\n\n**Most recent findings** ([{prev_heading}]"
+                    f"({entry_link(prev_heading)})):\n\n"
+                    + "\n".join("- " + lead for lead in leads)
+                )
+                break
     return (
         f"{START}\n"
         "## Latest from the lab\n\n"
         "<!-- auto-generated from research/NOTES.md by scripts/sync_latest.py; do not hand-edit -->\n\n"
-        f"{digest(heading, body)}\n"
+        f"{block}\n"
         f"{END}"
     )
 
@@ -95,14 +119,18 @@ def selftest() -> None:
     assert "Detail prose" not in out
     assert "#2026-01-02--day-2-new-stuff--findings-12" in out
 
-    no_findings = (
-        "## 2026-01-03 — Day 3: side-repo day\n\n"
+    no_findings = with_findings + (
+        "\n## 2026-01-03 — Day 3: side-repo day\n\n"
         "First transfer of results into\nproduction code.\n\n"
         "### What shipped there\n\n- a thing\n"
     )
     out = render(no_findings)
+    assert "**2026-01-03 — Day 3: side-repo day**" in out
     assert "First transfer of results into production code." in out
     assert "a thing" not in out
+    # side-repo day still carries the newest hard numbers, from day 2
+    assert "**Most recent findings**" in out
+    assert "- Finding 2 — short." in out
     print("sync_latest: selftest ok")
 
 
