@@ -772,3 +772,75 @@ Day 10 (flagship) queue, in order:
   finding 13's. Candidate for a phase-3 slack slot.
 - 512-window encoder ablation (day-6 backlog) still open.
 - chatlogs per-corpus × tercile table (day-7) still open.
+
+---
+
+## 2026-07-10 — Day 9: SIDE-REPO DAY — findings applied to financial-rag-chatbot
+
+First transfer of bench results into production code, per the day-8 plan
+(option a). Commit `edbb087` on financial-rag-chatbot.
+
+### What shipped there
+
+- `chunking.py`: sentence-aware chunker with a HARD token budget counted in
+  cl100k_base (the tokenizer of text-embedding-3-small) — replacing
+  RecursiveCharacterTextSplitter(1000 chars, 200 overlap). Ported the bench's
+  boundary regex (incl. the day-1 closing-quote fix) with one PDF-specific
+  adaptation: single `\n` is NOT a boundary (PyMuPDF hard-wraps lines
+  mid-sentence; the bench's `\n+` rule would have put chunk boundaries inside
+  sentences — the exact failure sentence packing exists to prevent). Blank
+  lines remain boundaries. Budget checked on the actual joined text, not
+  summed per-sentence counts (BPE merges across joins), and the token-window
+  fallback re-checks decoded windows (decode→re-encode does not always
+  round-trip counts).
+- Defaults from the bench, each traceable to a finding: 256-token sentence
+  packing (chroma: sentence-256 top config at B=800/1600 — findings 13/18;
+  app budget is k=5 × ≤256 ≈ 1,000–1,300 tokens = that regime), overlap 0
+  (sentence-256 overlap deltas n.s. −0.014…+0.010, index +21–44% — day-8
+  ablation table), sentence-vs-fixed +0.083 @256/B400 (finding 15).
+- 15 invariant tests (budget, coverage, boundary alignment, overlap
+  advancement guarantee, metadata, determinism), runnable standalone or via
+  pytest — they run in that repo's CI. Verified end-to-end with a real
+  PyMuPDF-generated 3-page PDF: 9 chunks, max 251 tokens, every chunk ends
+  at a sentence boundary despite hard line wraps.
+- README section "Chunking configuration (and why)" citing the bench with
+  honest caveats: bench budgets are regex word tokens not BPE; retrievers
+  were BM25/TF-IDF/LSA/MiniLM, not text-embedding-3-small (8K window =
+  full-chunk-reading regime, where the findings held); retrieval metrics,
+  not end-to-end answer quality. CHANGELOG [Unreleased] entry added.
+
+### Repo state note (financial-rag-chatbot — matters for future sessions)
+
+Main had moved since the 07-03 clone: Prakash merged a security migration to
+the **LangChain 0.3 line** (langchain_chroma, langchain_core.documents,
+pinned CVE-driven versions), **uv + pyproject.toml + committed uv.lock**,
+CI (uv sync --locked, ruff --exit-zero, pytest on 3.10–3.12), CHANGELOG,
+MIT license, and an HF Spaces live demo. Consequences: dependency changes
+must keep uv.lock in sync; tests run in CI so they must not need API keys;
+`tiktoken==0.13.0` was already pinned (no packaging change needed for the
+chunker). My commit was rebased onto that; pre-existing unused imports in
+app.py (os, Path, tempfile, PyMuPDFLoader) left untouched — not my diff.
+
+### What this does NOT claim (and the honest gap)
+
+The bench measured retrieval span-recall with its own retrievers; I could
+not re-run the grid with OpenAI embeddings (no OPENAI_API_KEY in this
+environment), so the app change is benchmark-motivated, not end-to-end
+verified. That repo's eval_harness.py (hit@k/MRR + LLM-judge) is the tool
+to close the loop the day an API key is available — its fixture chunks are
+pre-defined, so it currently measures the retriever+generator, not the new
+chunker; extending it to chunk a fixture document would make the chunking
+change measurable there.
+
+### Next steps (Day 10 — FLAGSHIP, queue unchanged from day 8)
+
+1. **BPE tokenizer robustness check**: `TiktokenTokenizer` behind the
+   `Tokenizer` protocol; rerun the 12-config BM25 dev-v1.1 baseline with
+   budgets in BPE tokens; verify size ordering + sentence>fixed are
+   unit-invariant. GridConfig needs a tokenizer field whose default keeps
+   old config_ids stable (same pattern as budget_rule on day 4). Extra
+   motivation now: today's README caveat in financial-rag-chatbot
+   ("regex word tokens vs cl100k BPE") cites this as unverified — the
+   check closes it.
+2. Semantic chunker (embedding-breakpoint) using the dense stack.
+3. Per-corpus × tercile interaction table if slack remains.
