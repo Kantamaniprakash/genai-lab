@@ -101,10 +101,6 @@ def _point_label(point: tuple[str, int]) -> str:
     return f"{point[0]}-{point[1]}"
 
 
-def _monotone_decreasing(values: list[float]) -> bool:
-    return all(a > b for a, b in zip(values, values[1:], strict=False))
-
-
 def render_tokenizers(
     dataset: str,
     retriever: str,
@@ -189,20 +185,29 @@ def render_tokenizers(
 
     fixed_sizes = sorted(size for chunker, size in points if chunker == "fixed")
     lines += [
-        "## Size ordering (fixed family): monotone in size?",
+        "## Size ordering (fixed family): adjacent-size paired steps",
+        "",
+        "Positive = the smaller size wins that step. The ordering claim is "
+        "unit-robust when no step flips to a *significant* negative in either "
+        "unit; non-significant wobbles between near-tied sizes are expected "
+        "at generous budgets and should agree across units too.",
         "",
     ]
     rows = []
-    for b in budgets:
-        cells = [f"B={b}"]
-        for tok in tokenizers:
-            means = [mean(grids[tok][("fixed", s)].metric("recall", b)) for s in fixed_sizes]
-            cells.append("yes" if _monotone_decreasing(means) else "NO")
-        rows.append(cells)
-    lines += _table(
-        ["budget", *(f"{t}: recall falls {'>'.join(map(str, fixed_sizes))}" for t in tokenizers)],
-        rows,
-    )
+    for small, large in zip(fixed_sizes, fixed_sizes[1:], strict=False):
+        for b in budgets:
+            cells = [f"fixed-{small} − fixed-{large}", f"B={b}"]
+            for tok in tokenizers:
+                cells.append(
+                    fmt_diff(
+                        diff_ci(
+                            grids[tok][("fixed", small)].metric("recall", b),
+                            grids[tok][("fixed", large)].metric("recall", b),
+                        )
+                    )
+                )
+            rows.append(cells)
+    lines += _table(["step", "budget", *unit_names], rows)
 
     lines += [
         "## Headline paired deltas by unit (bold = 95% CI excludes 0)",

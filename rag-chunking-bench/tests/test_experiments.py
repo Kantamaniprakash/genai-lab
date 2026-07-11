@@ -659,7 +659,7 @@ class TestSummarizeTokenizers:
         assert "# Tokenizer robustness — tiny, bm25" in text
         assert "## Unit conversion and realized chunk sizes" in text
         assert "## SpanRecall@B (mean) by unit" in text
-        assert "## Size ordering (fixed family): monotone in size?" in text
+        assert "## Size ordering (fixed family): adjacent-size paired steps" in text
         assert "cl100k_base BPE" in text
         assert "fixed-32" in text
         assert "## hit@3 by unit" in text
