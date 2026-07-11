@@ -11,17 +11,11 @@ Hands-on experiments with current Gen AI techniques — RAG, agents, evals, fine
 
 <!-- auto-generated from research/NOTES.md by scripts/sync_latest.py; do not hand-edit -->
 
-**2026-07-10 — Day 9: SIDE-REPO DAY — findings applied to financial-rag-chatbot**
+**2026-07-11 — Day 10: BPE tokenizer robustness — finding 19, and two chunker bugs the new unit exposed**
 
-First transfer of bench results into production code, per the day-8 plan (option a). Commit `edbb087` on financial-rag-chatbot.
+- Finding 19 — every headline claim is unit-invariant under real BPE accounting.
 
-[Full entry →](rag-chunking-bench/research/NOTES.md#2026-07-10--day-9-side-repo-day--findings-applied-to-financial-rag-chatbot)
-
-**Most recent findings** ([2026-07-09 — Day 8: chroma overlap + truncate ablations, corpus jackknife — findings 16–18](rag-chunking-bench/research/NOTES.md#2026-07-09--day-8-chroma-overlap--truncate-ablations-corpus-jackknife--findings-1618)):
-
-- Finding 16 — overlap gains persist across budgets on long golds and extend to sentence packing.
-- Finding 17 — the boundary-repair reading of overlap has a regime boundary.
-- Finding 18 — crossover robust; tight-budget edge was the stop rule.
+[Full entry →](rag-chunking-bench/research/NOTES.md#2026-07-11--day-10-bpe-tokenizer-robustness--finding-19-and-two-chunker-bugs-the-new-unit-exposed)
 <!-- latest-end -->
 
 ![Budget-matched SpanRecall@400 by chunking strategy and chunk size, with 95% bootstrap CIs](rag-chunking-bench/assets/hero_spanrecall_dev-v1.1_bm25.png)
@@ -63,7 +57,9 @@ carries a 95% paired bootstrap confidence interval:
   (+0.13–0.19 SpanRecall at B=400) outweighs the retriever effect at small
   chunk sizes (≤ 0.053) several times over.
 
-Full tables, figures, findings 1–9, and an honest
-[Limitations](rag-chunking-bench/README.md#limitations) section (lexical
-retrievers only so far, single dataset/seed, regex tokenizer, CPU-only
+Full tables, figures, findings 1–19 (now spanning four retriever
+families, two datasets, three sampling seeds, both budget-boundary rules,
+and two token units), and an honest
+[Limitations](rag-chunking-bench/README.md#limitations) section (small
+CPU-sized dense encoder only, contiguous gold evidence only, CPU-only
 scale) live in the [project README](rag-chunking-bench/README.md).

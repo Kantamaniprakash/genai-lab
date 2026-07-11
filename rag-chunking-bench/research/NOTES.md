@@ -844,3 +844,110 @@ change measurable there.
    check closes it.
 2. Semantic chunker (embedding-breakpoint) using the dense stack.
 3. Per-corpus × tercile interaction table if slack remains.
+
+---
+
+## 2026-07-11 — Day 10: BPE tokenizer robustness — finding 19, and two chunker bugs the new unit exposed
+
+### Built (committed d57fd44 BEFORE the grid ran, per house rule)
+
+- `TiktokenTokenizer` (cl100k_base) behind the `Tokenizer` protocol.
+  tiktoken tokenizes UTF-8 bytes, so spans are reconstructed by mapping each
+  token's byte range back to character offsets: a character straddling a
+  token boundary belongs to the token where its byte sequence *ends*; a
+  token lying entirely inside one multi-byte character gets an empty span
+  (still counts toward budgets — the generator pays for it). Special-token
+  text (`<|endoftext|>` in a document) is encoded as data, never as a
+  control token. ASCII fast path skips the byte→char table.
+- Tokenizer axis through the stack, all following the day-4 budget_rule
+  pattern: `GridConfig.tokenizer` defaults to `"regex"` and is omitted from
+  config_id (old filenames stay valid; non-default appends `_cl100k`),
+  `make_tokenizer`, chunker factory threading, `--tokenizer` flag, tiktoken
+  version recorded via `_optional_versions`. One deliberate asymmetry:
+  `load_raw`'s tokenizer filter defaults CLOSED (`"regex"`), unlike every
+  other filter — cross-unit runs share question ids with the primary grid,
+  so `check_aligned` cannot catch accidental mixing; the scores would align
+  mechanically and mean nothing. Summarizers needed zero changes.
+- **The day's real engineering lesson: BPE tokens straddle exactly the
+  boundaries that boundary-respecting chunkers cut at** (a token carries
+  its leading whitespace). This exposed two containment-vs-overlap bugs in
+  `RecursiveCharacterChunker`: a single-word piece cut after a separator
+  contains no *complete* BPE token, so `_split`/`_merge` silently dropped
+  the whole word, and `_trimmed` cut merged pieces past their first word.
+  All three sites now use `tokens_overlapping` — provably identical under
+  the regex tokenizer (separator cuts are whitespace cuts and regex tokens
+  never contain whitespace, so every merge range is token-aligned).
+  Verified empirically before running anything: three regex-unit configs
+  (incl. both recursive sizes' neighbors) re-ran bit-for-bit against the
+  committed raw files, and all eight existing PNGs regenerate
+  bit-identically. SentenceChunker needed no fix — its coverage guarantee
+  is restated (overlap, not containment, for the chunk-leading token) and
+  documented in the class docstring.
+- `experiments/summarize_tokenizers.py`: unit-conversion table recovered
+  from stored chunk_stats (no re-tokenization needed at summary time),
+  side-by-side levels, adjacent-size paired steps, headline deltas per
+  unit, same-size tables, hit@5. First draft had a strict mean-monotonicity
+  check; replaced it after it flagged the n.s. fixed-64-vs-128 wobble at
+  B≥800 as "NO" in both units — the statistically right statement is
+  "no *significant* inversion", so the section now renders paired step CIs.
+- `fig_tokenizer_robustness` (BPE-unit budget curves + headline-delta bars
+  by unit). Tests 225 → **243** (span tiling, byte-slice equality, emoji
+  ZWJ/flag empty-span ordering, chunker contract under BPE, config_id/
+  loader/renderer coverage; BPE tests skip without network). tiktoken
+  0.13.0 pinned via `uv add` (lockfile in sync, `uv lock --check` clean).
+
+### Ran (12 configs: BM25 baseline × cl100k unit, ~28 s)
+
+### Findings (README §19)
+
+1. **Finding 19 — every headline claim is unit-invariant under real BPE
+   accounting.** One regex token costs 1.083–1.105 cl100k tokens on this
+   corpus. All 16 headline paired cells keep their significance status and
+   every significant cell keeps its sign: fixed-64 − fixed-256 @B400
+   +0.134 regex vs **+0.120 [+0.103, +0.138]** cl100k; sentence-64 −
+   fixed-64 +0.041 vs **+0.051**; hit@5 still rises with size while
+   SpanRecall falls. Even the non-significant 64-vs-128 tie at B≥800
+   replicates in both units. Across all 60 generated cells the only
+   significance flips are five cells within ±0.011 of zero (two lose, three
+   gain); everything ≥0.02 agrees in sign and significance. Sentence
+   packing looks marginally *better* under BPE. The day-3 worry — and the
+   README limitation entry — that conclusions might be "word-token-unit
+   artifacts" is closed for the SQuAD/BM25 grid.
+
+### Process notes
+
+- The cl100k grid runs in ~28 s total (tokenization is not the bottleneck;
+  the byte→char table only builds on non-ASCII documents).
+- financial-rag-chatbot's README caveat from day 9 ("bench budgets are
+  regex word tokens, not BPE") can now cite finding 19 — a one-line update
+  for the next side-repo day, not worth a cross-repo commit today.
+- Corpus totals in the unit-conversion table come from n_chunks ×
+  tokens_mean of the zero-overlap configs — no data/ dependency at summary
+  time, unlike summarize_chroma.
+
+### Next steps (Day 11, in order)
+
+1. **Semantic chunker** (last chunker family the related work compares;
+   Chroma's ClusterSemanticChunker is the precedent): embedding-breakpoint
+   segmentation over sentences using the existing MiniLM stack — cosine
+   distance between adjacent sentence embeddings, percentile-threshold
+   breakpoints, greedy packing under the token budget with the existing
+   window fallback so the budget stays hard. Offsets must stay exact
+   (reuse `split_sentences` ranges; never re-join text). Determinism is
+   per-environment like all dense results — record model/torch versions in
+   payloads (already automatic). Run dev-v1.1 BM25 first (semantic-64/128/
+   256/512), compare against sentence packing at matched size — the
+   interesting question is whether embedding breakpoints beat regex
+   sentence boundaries once budget-matched.
+2. Per-corpus × tercile interaction table for chroma (day-7 open item;
+   `chatlogs` is the suggestive case).
+3. Truncate × overlap cross (still one invocation away, both datasets).
+
+### Open questions (carried)
+
+- Overlap-delta tercile split on chroma (does the finding-16 gain
+  concentrate in the long-gold tercile?).
+- 512-window encoder ablation (day-6 backlog).
+- Whether the semantic chunker's realized-size distribution (finding 4)
+  needs a matched-realized-size comparison protocol, not just matched
+  nominal size — decide after seeing its chunk stats.

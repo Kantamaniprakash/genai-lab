@@ -32,8 +32,8 @@ opposite orders (finding 2); under budget matching the winning chunk size is
 set by the length of the gold evidence — smallest chunks dominate on
 short-answer SQuAD at every budget, but with sentence-scale evidence the
 advantage inverts at generous budgets (findings 13–14); and the effects
-replicate across four retriever families, three sampling seeds, and both
-budget-boundary rules.
+replicate across four retriever families, three sampling seeds, both
+budget-boundary rules, and two token units (regex word vs. cl100k_base BPE).
 
 ## Motivation
 
@@ -88,7 +88,8 @@ Token counting uses a deterministic regex word/punctuation tokenizer
 (`src/tokenization.py`) shared by chunkers, budget accounting, and metrics —
 the unit only needs to be consistent, not identical to any model's BPE. The
 `Tokenizer` protocol allows a BPE tokenizer to be slotted in as a robustness
-check.
+check; `TiktokenTokenizer` (cl100k_base) is that check, and finding 19
+verifies the headline claims are unit-invariant.
 
 ### Chunking strategies (`src/chunkers.py`)
 
@@ -616,6 +617,69 @@ negative in all five but grazes zero in four (upper CI bounds +0.000 to
 smaller crossover sits at the edge of what that sample can resolve. The
 B=1600 cell is the one to cite.
 
+### Tokenizer-unit robustness: the claims survive real BPE accounting
+
+Every token-denominated quantity so far — chunk sizes, budgets, and the
+token sets behind the span metrics — was counted by the deterministic regex
+word tokenizer. Production stacks count in model BPE units, so the honest
+worry is that some claim is an artifact of the ruler. Setup: the 12-config
+BM25 baseline grid rerun with *everything* counted in cl100k_base tokens
+(`TiktokenTokenizer`), same 2,400-question sample, paired deltas computed
+within each unit; full tables:
+[`results/summary_dev-v1.1_bm25_tokenizers.md`](results/summary_dev-v1.1_bm25_tokenizers.md).
+On this corpus one regex token costs 1.083–1.105 cl100k tokens (per-config
+conversion in the summary), so a nominal size or budget buys ~10% less text
+under BPE — levels shift accordingly, and only within-unit comparisons are
+claims.
+
+**19. Every headline claim is unit-invariant.** All 16 headline paired
+cells (size effect and sentence-vs-fixed at B ∈ {200–1600}) keep their
+significance status under BPE accounting, every significant cell keeps its
+sign, and magnitudes match closely:
+
+| ΔSpanRecall@400 (paired, within unit) | regex word | cl100k_base BPE |
+|---|---|---|
+| fixed-64 − fixed-256 | **+0.134 [+0.117, +0.152]** | **+0.120 [+0.103, +0.138]** |
+| fixed-64 − fixed-512 | **+0.856 [+0.842, +0.870]** | **+0.834 [+0.819, +0.849]** |
+| sentence-64 − fixed-64 | **+0.041 [+0.029, +0.052]** | **+0.051 [+0.039, +0.063]** |
+| sentence-128 − fixed-128 | **+0.020 [+0.008, +0.031]** | **+0.025 [+0.014, +0.037]** |
+
+The finer structure transfers too: the fixed-k hit@5 metric still rises with
+size while budget-matched SpanRecall falls (the finding-2 reversal), and the
+adjacent-size step table replicates down to its non-significant wobble —
+fixed-64 vs fixed-128 is a statistical tie at B ≥ 800 in *both* units.
+Across all 60 generated cells, the only significance flips are five cells
+within ±0.011 of zero — two marginally significant regex cells lose
+significance under BPE (fixed-128 − fixed-256 at B=1600: +0.008 → +0.002;
+sentence-512 vs fixed-512 at B=400) and three near-zero cells gain it.
+Every effect of practical size (≥ 0.02) agrees in both sign and
+significance, and sentence packing, if anything, looks slightly *better*
+under BPE accounting.
+
+![Tokenizer robustness](results/figures/tokenizer_robustness_dev-v1.1_bm25.png)
+
+*Left: the budget-matched size ordering, with chunk sizes, budgets, and
+metrics all counted in cl100k_base BPE tokens — compare the regex-unit
+curves in the baseline figure above. Right: headline paired deltas at B=400
+computed within each unit; unit-robust claims keep their sign and keep
+their 95% CI clear of zero in both bars.*
+
+A methodological byproduct worth recording: BPE tokens carry their leading
+whitespace, so they straddle exactly the sentence and separator boundaries
+that boundary-respecting chunkers cut at. Wiring the unit in exposed two
+containment-vs-overlap bugs in the recursive chunker (a single-word piece
+cut after a separator contains no *complete* BPE token, so it was silently
+dropped or trimmed past its first word) — both fixed by testing token
+overlap instead, which is provably equivalent under the regex tokenizer.
+Verified empirically: after the fix, re-running regex-unit configs
+reproduces the committed per-question scores bit-for-bit, and all previous
+figures regenerate bit-identically. Chunkers that respect text boundaries
+inherit a one-token-per-chunk-edge ambiguity under BPE accounting (the
+straddling token is scored by overlap but not charged by containment);
+at the sizes studied here this is a ≤2% effect with no bearing on any
+comparison, since it applies identically to both sides of every paired
+delta.
+
 ## Status
 
 - [x] Phase 1 (harness): offset-preserving chunkers + tokenization
@@ -639,8 +703,9 @@ B=1600 cell is the one to cite.
 - [x] Phase 3: overlap ablation and truncate-rule check on Chroma (27
       configs), generated cross-family control, corpus jackknife — findings
       16–18 (225 tests)
-- [ ] Phase 3: error analysis, semantic chunking, tokenizer (BPE)
-      robustness
+- [x] Phase 3: cl100k_base BPE tokenizer unit (12 configs) with the
+      unit-invariance analysis — finding 19 (243 tests)
+- [ ] Phase 3: error analysis, semantic chunking
 - [ ] Phase 4: full writeup
 
 Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).
@@ -684,8 +749,12 @@ Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).
   choice — though on Chroma the *magnitude* of the tight-budget small-chunk
   advantage is rule-dependent (finding 18) — and the budget-utilization
   tables make the affected cells explicit in both protocols.
-- The regex tokenizer approximates BPE token counts; budget conclusions are
-  in "word-token" units (a tiktoken BPE robustness check is planned).
+- The primary unit is regex word tokens; finding 19 shows the SQuAD/BM25
+  headline claims are invariant under cl100k_base BPE accounting (one regex
+  token ≈ 1.10 cl100k tokens on this corpus). The BPE rerun covers that one
+  grid — the Chroma, dense, and overlap results remain word-token-unit
+  measurements, with no mechanism identified by which the unit would affect
+  them differently.
 - Chroma corpora queries are LLM-generated (dataset provenance, not ours);
   SQuAD questions are human-written but crowd-sourced over single paragraphs.
 
@@ -725,14 +794,16 @@ Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).
 
 ```bash
 pip install -r requirements.txt
-python -m pytest tests/ -q          # 221 tests (dense tests skip without the dense stack)
+python -m pytest tests/ -q          # 243 tests (dense tests skip without the dense stack)
 python -m src.data                  # fetch SQuAD + Chroma corpora (pinned URLs + SHA256)
 python -m experiments.run_grid      # rerun the grid (results are resumable)
+python -m experiments.run_grid --tokenizer cl100k   # the BPE-unit grid (finding 19)
 python -m experiments.summarize
 python -m experiments.summarize_ablations
 python -m experiments.summarize_retrievers
 python -m experiments.summarize_seeds
 python -m experiments.summarize_chroma
+python -m experiments.summarize_tokenizers
 python -m experiments.make_figures
 python -m experiments.make_hero_figure
 ```
@@ -748,7 +819,10 @@ uv run --group dense pytest tests/ -q   # includes the dense-retriever tests
 
 Python 3.11. Lexical runs are deterministic end-to-end (seeded sampling,
 deterministic retrievers with index tie-breaks, fixed bootstrap seeds), so
-those tables and figures reproduce bit-for-bit on any machine. Dense runs
+those tables and figures reproduce bit-for-bit on any machine. That includes
+the BPE-unit grid: cl100k_base is a fixed published vocabulary (fetched and
+cached by tiktoken on first use; the library version is recorded in every
+result file). Dense runs
 are deterministic on a fixed environment; across torch/BLAS builds,
 floating-point differences can perturb near-tied rankings, which is why
 every dense result file records the torch and sentence-transformers
