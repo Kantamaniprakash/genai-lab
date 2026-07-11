@@ -623,6 +623,119 @@ def fig_gold_length_crossover(
     plt.close(fig)
 
 
+def fig_tokenizer_robustness(
+    regex_runs: list[RunResult], bpe_runs: list[RunResult], out: Path
+) -> None:
+    """Budget curves under the BPE unit + headline deltas under both units.
+
+    Left: the fixed-family SpanRecall curves with everything (chunk sizes,
+    budgets, metric token sets) counted in cl100k_base BPE tokens — the
+    ordering to compare against the regex-unit curves figure. Right: the
+    headline paired deltas at B=400 computed within each unit; unit-robust
+    claims keep their sign and their CI clear of zero in both bars.
+    """
+    grids = {"regex": _by_config(regex_runs), "cl100k": _by_config(bpe_runs)}
+    budgets = [int(b) for b in regex_runs[0].config["budgets"]]
+    sizes = sorted({rr.config["chunk_size"] for rr in regex_runs})
+    n_questions = len(regex_runs[0].records)
+    fig, (ax_curves, ax_delta) = plt.subplots(
+        1, 2, figsize=(9.0, 3.4), width_ratios=(1.0, 1.15)
+    )
+
+    for size in sizes:
+        rr = grids["cl100k"][("fixed", size)]
+        cis = [mean_ci(rr.metric("recall", b)) for b in budgets]
+        ax_curves.fill_between(
+            budgets,
+            [c.ci_low for c in cis],
+            [c.ci_high for c in cis],
+            color=SIZE_RAMP[size],
+            alpha=0.22,
+            linewidth=0,
+        )
+        ax_curves.plot(
+            budgets,
+            [c.mean_diff for c in cis],
+            color=SIZE_RAMP[size],
+            linewidth=2,
+            marker="o",
+            markersize=4.5,
+            markeredgecolor=SURFACE,
+            markeredgewidth=1.0,
+            label=f"{size}",
+        )
+    ax_curves.set_title("fixed chunker, all counts in cl100k_base BPE tokens")
+    ax_curves.set_ylim(0, 1.0)
+    _log2_axis(ax_curves, budgets, "token budget B (BPE tokens, log scale)")
+    ax_curves.set_ylabel(f"SpanRecall@B (mean, {n_questions:,} questions)")
+    ax_curves.legend(title="chunk size (BPE tokens)", loc="lower right", ncols=2, title_fontsize=8)
+
+    pairs = (
+        (("fixed", 64), ("fixed", 256)),
+        (("fixed", 64), ("fixed", 512)),
+        (("sentence", 64), ("fixed", 64)),
+        (("sentence", 128), ("fixed", 128)),
+    )
+    unit_styles = {
+        "regex": ("#2a78d6", "regex word unit"),
+        "cl100k": ("#1baf7a", "cl100k BPE unit"),
+    }
+    budget = 400
+    width = 0.38
+    offsets = (-width / 2, width / 2)
+    for offset, (unit, (color, label)) in zip(offsets, unit_styles.items(), strict=True):
+        cis = [
+            diff_ci(
+                grids[unit][challenger].metric("recall", budget),
+                grids[unit][baseline].metric("recall", budget),
+            )
+            for challenger, baseline in pairs
+        ]
+        xs = [i + offset for i in range(len(pairs))]
+        ax_delta.bar(
+            xs,
+            [c.mean_diff for c in cis],
+            width=width,
+            color=color,
+            label=label,
+            zorder=3,
+        )
+        ax_delta.errorbar(
+            xs,
+            [c.mean_diff for c in cis],
+            yerr=[
+                [c.mean_diff - c.ci_low for c in cis],
+                [c.ci_high - c.mean_diff for c in cis],
+            ],
+            fmt="none",
+            ecolor=INK,
+            elinewidth=1.0,
+            capsize=2.5,
+            zorder=4,
+        )
+    ax_delta.axhline(0, color=AXIS, linewidth=0.8)
+    ax_delta.set_xticks(range(len(pairs)))
+    ax_delta.set_xticklabels(
+        [f"{c[0]}-{c[1]}\n− {b[0]}-{b[1]}" for c, b in pairs], fontsize=7.5
+    )
+    ax_delta.set_ylabel(f"ΔSpanRecall@{budget} (paired)")
+    ax_delta.set_title(f"headline paired deltas at B={budget}, by token unit")
+    ax_delta.grid(axis="y")
+    ax_delta.set_axisbelow(True)
+    ax_delta.legend(loc="upper right")
+
+    fig.suptitle(
+        f"Token-unit robustness check, {regex_runs[0].config['dataset']} / "
+        f"{regex_runs[0].config['retriever']} "
+        "(bands and error bars: 95% bootstrap CIs)",
+        fontsize=10.5,
+        color=INK,
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.97))
+    fig.savefig(out, bbox_inches="tight")
+    plt.close(fig)
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Render README figures from raw results.",
@@ -685,6 +798,23 @@ def main(argv: list[str] | None = None) -> None:
         rule = args.out_dir / f"budget_rule_{args.dataset}_{args.retriever}.png"
         fig_budget_rule(baseline, trunc, rule)
         written.append(rule)
+
+    bpe = load_raw(
+        args.raw_dir,
+        dataset=args.dataset,
+        retriever=args.retriever,
+        budget_rule="stop",
+        overlap=0,
+        seed=args.seed,
+        tokenizer="cl100k",
+    )
+    if bpe:
+        # Units differ, questions must not: the two grids score the same
+        # sample, so alignment across them is a real assertion, not a no-op.
+        check_aligned(baseline + bpe)
+        tok = args.out_dir / f"tokenizer_robustness_{args.dataset}_{args.retriever}.png"
+        fig_tokenizer_robustness(baseline, bpe, tok)
+        written.append(tok)
 
     by_retriever = {}
     for name in RETRIEVER_STYLES:

@@ -120,6 +120,14 @@ class SentenceChunker:
     A single sentence longer than the budget is split by a token window so the
     budget is a hard guarantee. `overlap_sentences` makes each chunk restart
     that many sentences before the previous chunk ended.
+
+    Chunk ranges are sentence-trimmed: inter-sentence whitespace belongs to
+    no chunk. Under the regex tokenizer that whitespace holds no tokens, so
+    chunks also partition the token sequence; under a BPE tokenizer, where a
+    token carries the whitespace preceding its word, the token straddling a
+    chunk start is covered by *overlap* rather than containment (scoring
+    counts it — `TokenIndex.tokens_overlapping` — while budget accounting,
+    which counts contained tokens, undercounts each chunk by at most one).
     """
 
     def __init__(
@@ -204,7 +212,9 @@ class RecursiveCharacterChunker:
         self, document: str, lo: int, hi: int, index: TokenIndex, level: int
     ) -> list[tuple[int, int]]:
         if index.count_in(lo, hi) <= self.max_tokens:
-            return [(lo, hi)] if index.count_in(lo, hi) > 0 else []
+            # Emptiness is judged by overlap for the same reason as in
+            # _merge: a one-word piece contains no complete BPE token.
+            return [(lo, hi)] if len(index.tokens_overlapping(lo, hi)) > 0 else []
         if level >= len(self.separators):
             # Token-window fallback for a piece with no usable separators.
             return [
@@ -233,7 +243,13 @@ class RecursiveCharacterChunker:
         chunks: list[Chunk] = []
         cur = None
         for lo, hi in leaves:
-            if index.count_in(lo, hi) == 0:
+            # Skip ranges holding no text worth a chunk. Tested by overlap,
+            # not containment: under a BPE tokenizer a single-word piece cut
+            # after a separator contains no *complete* token (its only token
+            # starts at the separator), but it plainly overlaps one — a
+            # containment test would silently drop the word. Under the regex
+            # tokenizer the two tests agree (ranges are token-aligned).
+            if len(index.tokens_overlapping(lo, hi)) == 0:
                 continue
             if cur is None:
                 cur = (lo, hi)
@@ -249,7 +265,16 @@ class RecursiveCharacterChunker:
     @staticmethod
     def _trimmed(document: str, index: TokenIndex, lo: int, hi: int) -> Chunk:
         """Shrink a range to token-aligned edges so chunks never carry
-        leading/trailing separator characters."""
-        tokens = index.tokens_in(lo, hi)
+        leading/trailing separator characters.
+
+        Alignment uses the tokens *overlapping* the range, clamped to it —
+        not the tokens contained in it. Under the regex tokenizer the two
+        are identical (every merge range is token-aligned, since separators
+        are whitespace and regex tokens never contain whitespace). Under a
+        BPE tokenizer they are not: a token carries its leading whitespace,
+        so a piece cut after a separator starts mid-token, and trimming to
+        contained tokens would cut the piece's first word out of the chunk.
+        """
+        tokens = index.tokens_overlapping(lo, hi)
         first, last = index.spans[tokens[0]], index.spans[tokens[-1]]
-        return _make_chunk(document, first.start, last.end)
+        return _make_chunk(document, max(lo, first.start), min(hi, last.end))

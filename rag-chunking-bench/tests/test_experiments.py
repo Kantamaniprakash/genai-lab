@@ -21,6 +21,7 @@ from experiments.run_grid import (
     GridConfig,
     make_chunker,
     make_retriever,
+    make_tokenizer,
     run_and_save,
     run_config,
 )
@@ -33,6 +34,7 @@ from experiments.summarize_ablations import render_ablations
 from experiments.summarize_chroma import render_moderation
 from experiments.summarize_retrievers import render_retrievers
 from experiments.summarize_seeds import render_seeds
+from experiments.summarize_tokenizers import render_tokenizers
 from src.data import Document, GoldSpan, QADataset, Question
 
 PARA_ZEBRA = (
@@ -75,6 +77,19 @@ def tiny_dataset() -> tuple[QADataset, tuple[Question, ...]]:
     return dataset, questions
 
 
+def _rewrite_config_field(path, key: str, value) -> None:
+    """Edit one config field of a saved result payload in place.
+
+    Lets loader-level tests cover non-default fields (e.g. a BPE tokenizer)
+    without needing the machinery that produces them at run time.
+    """
+    with gzip.open(path, "rt", encoding="utf-8") as f:
+        payload = json.load(f)
+    payload["config"][key] = value
+    with gzip.open(path, "wt", encoding="utf-8") as f:
+        json.dump(payload, f)
+
+
 def _config(**overrides) -> GridConfig:
     defaults = dict(
         dataset="tiny",
@@ -115,6 +130,21 @@ class TestFactories:
         trunc = _config(dataset="dev-v1.1", budget_rule="truncate")
         assert stop.config_id == "dev-v1.1_fixed32_o0_bm25_cap50_seed0"
         assert trunc.config_id == "dev-v1.1_fixed32_o0_bm25_cap50_seed0_truncate"
+
+    def test_config_id_encodes_nondefault_tokenizer(self):
+        # Same backward-compatibility pattern as budget_rule: the regex
+        # default is omitted, any other unit must be encoded.
+        bpe = _config(dataset="dev-v1.1", tokenizer="cl100k")
+        both = _config(dataset="dev-v1.1", tokenizer="cl100k", budget_rule="truncate")
+        assert bpe.config_id == "dev-v1.1_fixed32_o0_bm25_cap50_seed0_cl100k"
+        assert both.config_id == "dev-v1.1_fixed32_o0_bm25_cap50_seed0_truncate_cl100k"
+
+    def test_make_tokenizer(self):
+        from src.tokenization import RegexWordTokenizer
+
+        assert isinstance(make_tokenizer("regex"), RegexWordTokenizer)
+        with pytest.raises(ValueError, match="unknown tokenizer"):
+            make_tokenizer("cl9000")
 
 
 class TestRunMetadata:
@@ -275,6 +305,35 @@ class TestAggregate:
             json.dump(payload, f)
         (rr,) = load_raw(tmp_path)
         assert rr.config["budget_rule"] == "stop"
+        assert rr.label == "fixed-32"
+
+    def test_load_raw_tokenizer_filter_defaults_closed(self, tiny_dataset, tmp_path):
+        # Cross-unit runs share question ids with the primary grid, so
+        # check_aligned cannot catch an accidental mix — the loader must
+        # exclude them unless a caller asks explicitly.
+        dataset, questions = tiny_dataset
+        run_and_save(_config(), dataset, questions, tmp_path)
+        path, _ = run_and_save(
+            _config(chunker="sentence"), dataset, questions, tmp_path
+        )
+        _rewrite_config_field(path, "tokenizer", "cl100k")
+        assert [rr.label for rr in load_raw(tmp_path)] == ["fixed-32"]
+        bpe = load_raw(tmp_path, tokenizer="cl100k")
+        assert [rr.label for rr in bpe] == ["sentence-32/cl100k"]
+        assert len(load_raw(tmp_path, tokenizer=None)) == 2
+
+    def test_load_raw_fills_missing_tokenizer(self, tiny_dataset, tmp_path):
+        # Files written before the tokenizer field existed are regex-unit
+        # runs by construction.
+        dataset, questions = tiny_dataset
+        path, _ = run_and_save(_config(), dataset, questions, tmp_path)
+        with gzip.open(path, "rt", encoding="utf-8") as f:
+            payload = json.load(f)
+        del payload["config"]["tokenizer"]
+        with gzip.open(path, "wt", encoding="utf-8") as f:
+            json.dump(payload, f)
+        (rr,) = load_raw(tmp_path)
+        assert rr.config["tokenizer"] == "regex"
         assert rr.label == "fixed-32"
 
     def test_check_aligned_rejects_mismatch(self, tiny_dataset, tmp_path):
@@ -545,3 +604,72 @@ class TestSummarizeSeeds:
         self._save_seed_grids(tiny_dataset, tmp_path)
         with pytest.raises(SystemExit, match="budget 999"):
             render_seeds("tiny", "bm25", [0, 1], tmp_path, budget=999)
+
+
+class TestRunConfigCl100k:
+    """A real BPE-unit run end to end (skips without tiktoken/its vocab)."""
+
+    @pytest.fixture()
+    def bpe_available(self):
+        pytest.importorskip("tiktoken")
+        try:
+            make_tokenizer("cl100k")
+        except Exception as exc:  # vocabulary download needs network access
+            pytest.skip(f"cl100k_base vocabulary unavailable: {exc}")
+
+    def test_budgets_counted_in_bpe_tokens(self, bpe_available, tiny_dataset):
+        dataset, questions = tiny_dataset
+        result = run_config(_config(tokenizer="cl100k"), dataset, questions)
+        assert result["config"]["tokenizer"] == "cl100k"
+        # The lazily imported unit's version is part of reproducibility.
+        assert "tiktoken" in result["meta"]
+        for record in result["records"]:
+            for budget, cell in record["budgets"].items():
+                assert cell["tokens"] <= int(budget)
+        # Distinctive per-paragraph vocabulary: the zebra question must
+        # recover its answer within the 80-BPE-token budget, same as the
+        # regex-unit expectation.
+        assert result["records"][0]["budgets"]["80"]["recall"] == 1.0
+
+    def test_deterministic(self, bpe_available, tiny_dataset):
+        dataset, questions = tiny_dataset
+        cfg = _config(tokenizer="cl100k")
+        a = run_config(cfg, dataset, questions)
+        b = run_config(cfg, dataset, questions)
+        assert a["records"] == b["records"]
+        assert a["chunk_stats"] == b["chunk_stats"]
+
+
+class TestSummarizeTokenizers:
+    def _save_unit_grids(self, tiny_dataset, tmp_path, bpe_points=("fixed", "sentence")):
+        # Regex-unit files come from real runs; the cl100k-unit files are
+        # byte-copies relabeled at the config level, which exercises every
+        # loader/renderer path without needing the BPE vocabulary.
+        dataset, questions = tiny_dataset
+        for chunker in ("fixed", "sentence"):
+            path, _ = run_and_save(_config(chunker=chunker), dataset, questions, tmp_path)
+            if chunker in bpe_points:
+                clone = path.with_name(path.name.replace(".json.gz", "_cl100k.json.gz"))
+                clone.write_bytes(path.read_bytes())
+                _rewrite_config_field(clone, "tokenizer", "cl100k")
+
+    def test_render_tokenizers(self, tiny_dataset, tmp_path):
+        self._save_unit_grids(tiny_dataset, tmp_path)
+        text = render_tokenizers("tiny", "bm25", 0, tmp_path, hit_k=3)
+        assert "# Tokenizer robustness — tiny, bm25" in text
+        assert "## Unit conversion and realized chunk sizes" in text
+        assert "## SpanRecall@B (mean) by unit" in text
+        assert "## Size ordering (fixed family): monotone in size?" in text
+        assert "cl100k_base BPE" in text
+        assert "fixed-32" in text
+        assert "## hit@3 by unit" in text
+
+    def test_missing_unit_exits(self, tiny_dataset, tmp_path):
+        self._save_unit_grids(tiny_dataset, tmp_path, bpe_points=())
+        with pytest.raises(SystemExit, match="no baseline-grid results for tokenizer"):
+            render_tokenizers("tiny", "bm25", 0, tmp_path)
+
+    def test_mismatched_grid_points_exit(self, tiny_dataset, tmp_path):
+        self._save_unit_grids(tiny_dataset, tmp_path, bpe_points=("fixed",))
+        with pytest.raises(SystemExit, match="different grid points"):
+            render_tokenizers("tiny", "bm25", 0, tmp_path)

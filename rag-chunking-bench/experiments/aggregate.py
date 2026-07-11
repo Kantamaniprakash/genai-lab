@@ -41,6 +41,8 @@ class RunResult:
             base = f"{base}/o{self.config['overlap']}"
         if self.config["budget_rule"] != "stop":
             base = f"{base}/{self.config['budget_rule']}"
+        if self.config.get("tokenizer", "regex") != "regex":
+            base = f"{base}/{self.config['tokenizer']}"
         return base
 
     def qids(self) -> tuple[str, ...]:
@@ -64,6 +66,7 @@ def sort_key(rr: RunResult) -> tuple:
         cfg["chunk_size"],
         cfg["overlap"],
         cfg["budget_rule"],
+        cfg.get("tokenizer", "regex"),
     )
 
 
@@ -74,20 +77,29 @@ def load_raw(
     budget_rule: str | None = None,
     overlap: int | None = None,
     seed: int | None = None,
+    tokenizer: str | None = "regex",
 ) -> list[RunResult]:
     """Parse all raw result files, optionally filtered, in presentation order.
 
     ``None`` filters match everything. Files written before ``budget_rule``
-    existed are stop-rule runs by construction; the key is filled in on load
-    so downstream code never special-cases them. Different seeds sample
-    different question sets, so any caller doing paired comparisons must pin
-    a single seed or ``check_aligned`` will (correctly) refuse to proceed.
+    or ``tokenizer`` existed are stop-rule regex-unit runs by construction;
+    the keys are filled in on load so downstream code never special-cases
+    them. Different seeds sample different question sets, so any caller doing
+    paired comparisons must pin a single seed or ``check_aligned`` will
+    (correctly) refuse to proceed.
+
+    ``tokenizer`` is the one filter that defaults closed (``"regex"``)
+    rather than open: runs under a different token unit share question ids
+    with the primary grid, so ``check_aligned`` cannot catch the mistake of
+    pairing them — the scores would align and mean nothing. Callers that
+    want cross-unit files ask for them explicitly.
     """
     results = []
     for path in sorted(raw_dir.glob("*.json.gz")):
         with gzip.open(path, "rt", encoding="utf-8") as f:
             payload = json.load(f)
         payload["config"].setdefault("budget_rule", "stop")
+        payload["config"].setdefault("tokenizer", "regex")
         rr = RunResult(
             config=payload["config"],
             meta=payload["meta"],
@@ -104,6 +116,8 @@ def load_raw(
         if overlap is not None and rr.config["overlap"] != overlap:
             continue
         if seed is not None and rr.config["seed"] != seed:
+            continue
+        if tokenizer is not None and rr.config["tokenizer"] != tokenizer:
             continue
         results.append(rr)
     results.sort(key=sort_key)

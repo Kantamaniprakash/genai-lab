@@ -53,12 +53,18 @@ from src.data import (
 )
 from src.metrics import hit_at_k, span_scores, take_until_budget
 from src.retrievers import BM25Retriever, LSARetriever, Retriever, TfidfRetriever
-from src.tokenization import RegexWordTokenizer, TokenIndex
+from src.tokenization import (
+    RegexWordTokenizer,
+    TiktokenTokenizer,
+    TokenIndex,
+    Tokenizer,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 
 CHUNKERS = ("fixed", "sentence", "recursive")
 RETRIEVERS = ("bm25", "tfidf", "lsa", "dense")
+TOKENIZERS = ("regex", "cl100k")
 
 
 @dataclass(frozen=True)
@@ -70,6 +76,10 @@ class GridConfig:
     accepts only 0. ``budget_rule`` selects how the budget boundary is
     handled (see ``metrics.take_until_budget``); the default ``"stop"`` is
     the primary protocol, ``"truncate"`` the robustness variant.
+    ``tokenizer`` is the unit every token-denominated quantity is counted
+    in — chunk sizes, budgets, and metric token sets all switch together,
+    so a non-default tokenizer is a different measurement unit, not a
+    different treatment.
     """
 
     dataset: str
@@ -82,27 +92,43 @@ class GridConfig:
     per_doc_cap: int
     seed: int
     budget_rule: str = "stop"
+    tokenizer: str = "regex"
 
     @property
     def config_id(self) -> str:
-        # The default rule is omitted so ids (and result filenames) from
-        # grids run before the rule existed remain valid.
+        # Defaults are omitted so ids (and result filenames) from grids run
+        # before the budget_rule / tokenizer fields existed remain valid.
         rule = "" if self.budget_rule == "stop" else f"_{self.budget_rule}"
+        tok = "" if self.tokenizer == "regex" else f"_{self.tokenizer}"
         return (
             f"{self.dataset}_{self.chunker}{self.chunk_size}_o{self.overlap}"
-            f"_{self.retriever}_cap{self.per_doc_cap}_seed{self.seed}{rule}"
+            f"_{self.retriever}_cap{self.per_doc_cap}_seed{self.seed}{rule}{tok}"
         )
 
 
-def make_chunker(name: str, chunk_size: int, overlap: int) -> Chunker:
+def make_tokenizer(name: str) -> Tokenizer:
+    if name == "regex":
+        return RegexWordTokenizer()
+    if name == "cl100k":
+        return TiktokenTokenizer("cl100k_base")
+    raise ValueError(f"unknown tokenizer {name!r}")
+
+
+def make_chunker(
+    name: str, chunk_size: int, overlap: int, tokenizer: Tokenizer | None = None
+) -> Chunker:
     if name == "fixed":
-        return FixedTokenChunker(chunk_size=chunk_size, overlap=overlap)
+        return FixedTokenChunker(
+            chunk_size=chunk_size, overlap=overlap, tokenizer=tokenizer
+        )
     if name == "sentence":
-        return SentenceChunker(max_tokens=chunk_size, overlap_sentences=overlap)
+        return SentenceChunker(
+            max_tokens=chunk_size, overlap_sentences=overlap, tokenizer=tokenizer
+        )
     if name == "recursive":
         if overlap != 0:
             raise ValueError("recursive chunker has no overlap knob in v1")
-        return RecursiveCharacterChunker(max_tokens=chunk_size)
+        return RecursiveCharacterChunker(max_tokens=chunk_size, tokenizer=tokenizer)
     raise ValueError(f"unknown chunker {name!r}")
 
 
@@ -149,17 +175,18 @@ def run_metadata() -> dict[str, str]:
 
 
 def _optional_versions() -> dict[str, str]:
-    """Versions of the optional dense stack, when this process imported it.
+    """Versions of lazily imported stacks, when this process imported them.
 
     Dense scores are deterministic per environment but not portable across
-    torch/BLAS builds, so the versions belong in the result metadata. Checked
-    at result-assembly time (after the retrievers ran, hence after any lazy
-    import) and keyed on ``sys.modules`` so lexical-only runs never pull in
-    torch just to report a version that played no part in the run.
+    torch/BLAS builds, so the versions belong in the result metadata; the
+    BPE tokenizer's vocabulary is pinned by its library version. Checked at
+    result-assembly time (after the retrievers ran, hence after any lazy
+    import) and keyed on ``sys.modules`` so runs never import a package just
+    to report a version that played no part in the run.
     """
     return {
         module: sys.modules[module].__version__
-        for module in ("torch", "sentence_transformers")
+        for module in ("torch", "sentence_transformers", "tiktoken")
         if module in sys.modules
     }
 
@@ -175,8 +202,8 @@ def run_config(
     rerunning (a large-chunk config that cannot fit a single chunk under a
     small budget shows up as tokens=0, not as a mysterious zero score).
     """
-    tokenizer = RegexWordTokenizer()
-    chunker = make_chunker(cfg.chunker, cfg.chunk_size, cfg.overlap)
+    tokenizer = make_tokenizer(cfg.tokenizer)
+    chunker = make_chunker(cfg.chunker, cfg.chunk_size, cfg.overlap, tokenizer)
     by_doc: dict[str, list[Question]] = {}
     for q in questions:
         by_doc.setdefault(q.doc_id, []).append(q)
@@ -313,6 +340,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         choices=("stop", "truncate"),
         help="budget boundary handling (see metrics.take_until_budget)",
     )
+    parser.add_argument(
+        "--tokenizer",
+        default="regex",
+        choices=TOKENIZERS,
+        help="token unit for chunk sizes, budgets, and metrics",
+    )
     parser.add_argument("--raw-dir", type=Path, default=ROOT / "results" / "raw")
     parser.add_argument(
         "--force", action="store_true", help="rerun configs whose result files exist"
@@ -343,6 +376,7 @@ def main(argv: list[str] | None = None) -> None:
             per_doc_cap=args.per_doc_cap,
             seed=args.seed,
             budget_rule=args.budget_rule,
+            tokenizer=args.tokenizer,
         )
         for chunker in args.chunkers
         for size in args.sizes
