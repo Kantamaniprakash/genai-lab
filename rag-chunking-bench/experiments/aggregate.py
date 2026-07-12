@@ -19,7 +19,7 @@ from pathlib import Path
 
 from src.metrics import BootstrapResult, paired_bootstrap
 
-_CHUNKER_ORDER = {"fixed": 0, "sentence": 1, "recursive": 2}
+_CHUNKER_ORDER = {"fixed": 0, "sentence": 1, "recursive": 2, "semantic": 3}
 
 
 @dataclass(frozen=True)
@@ -33,6 +33,9 @@ class RunResult:
     # Only some retrievers report fit statistics (LSA: realized latent ranks);
     # absent for every other retriever and for files written before it existed.
     retriever_stats: dict | None = None
+    # Only the semantic chunker reports segmentation statistics (breakpoint
+    # counts, encoder identity); absent for every structural chunker.
+    chunker_stats: dict | None = None
 
     @property
     def label(self) -> str:
@@ -106,6 +109,7 @@ def load_raw(
             chunk_stats=payload["chunk_stats"],
             records=tuple(payload["records"]),
             retriever_stats=payload.get("retriever_stats"),
+            chunker_stats=payload.get("chunker_stats"),
         )
         if dataset is not None and rr.config["dataset"] != dataset:
             continue

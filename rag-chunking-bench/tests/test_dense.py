@@ -156,3 +156,19 @@ class TestGridIntegration:
         text = render_retrievers("tiny", ["bm25", "dense"], tmp_path)
         assert "Dense encoder truncation exposure" in text
         assert "all-MiniLM-L6-v2" in text
+
+    def test_semantic_chunker_run_records_real_encoder_stats(self):
+        # The semantic chunker resolves its default encoder through the same
+        # process-wide MiniLM instance as the dense retriever; a grid run
+        # must persist the encoder identity and segmentation exposure.
+        dataset, questions = _tiny_dataset()
+        result = run_config(
+            _config(chunker="semantic", retriever="bm25"), dataset, questions
+        )
+        stats = result["chunker_stats"]
+        assert stats["encoder"].endswith("all-MiniLM-L6-v2")
+        assert stats["n_sentences"] == 3  # CAT / VOLCANO / FINANCE
+        assert stats["n_gaps"] == 2
+        assert 0 <= stats["n_breakpoints"] <= stats["n_gaps"]
+        assert stats["sentences_over_window"] == 0
+        assert "torch" in result["meta"]

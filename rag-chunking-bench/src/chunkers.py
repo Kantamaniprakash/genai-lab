@@ -17,8 +17,15 @@ Implemented strategies (structural family):
   (paragraph > line > space), then greedily merges adjacent pieces under the
   budget; mirrors the semantics of LangChain's RecursiveCharacterTextSplitter.
 
-Semantic (embedding-driven) chunkers are added in a later phase; they plug in
-via the same `Chunker` protocol.
+Semantic (embedding-driven) family:
+
+- `SemanticChunker` — embedding-breakpoint segmentation: sentences whose
+  adjacent-embedding cosine distance exceeds a per-document percentile
+  threshold start a new segment, and sentences are greedily packed under the
+  token budget without ever packing across a breakpoint. This is the
+  percentile-breakpoint chunker popularized by Kamradt and shipped as
+  LangChain's `SemanticChunker`; Chroma's ClusterSemanticChunker (Smith &
+  Troynikov, 2024) is the clustering cousin of the same idea.
 """
 
 from __future__ import annotations
@@ -26,6 +33,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from typing import Protocol
+
+import numpy as np
 
 from .tokenization import RegexWordTokenizer, TokenIndex, Tokenizer
 
@@ -278,3 +287,147 @@ class RecursiveCharacterChunker:
         tokens = index.tokens_overlapping(lo, hi)
         first, last = index.spans[tokens[0]], index.spans[tokens[-1]]
         return _make_chunk(document, max(lo, first.start), min(hi, last.end))
+
+
+class SentenceEncoder(Protocol):
+    """The slice of the dense encoder interface the semantic chunker needs.
+
+    ``encode`` must return one L2-normalized embedding row per input text so
+    dot products are cosine similarities. ``src.dense.SentenceTransformerEncoder``
+    satisfies this; tests inject deterministic fakes.
+    """
+
+    def encode(self, texts: list[str]) -> np.ndarray:
+        ...
+
+
+class SemanticChunker:
+    """Embedding-breakpoint segmentation with greedy packing under a budget.
+
+    Sentences (from `split_sentences`) are embedded; the cosine distance
+    between each adjacent pair is compared against a per-document threshold —
+    the `percentile`-th percentile of that document's own distances, the
+    adaptive rule used by LangChain's SemanticChunker (default 95). A gap
+    whose distance strictly exceeds the threshold is a *breakpoint*: packing
+    never crosses it, so chunk boundaries prefer topic shifts. Within a
+    segment, sentences are packed greedily up to `max_tokens` exactly like
+    `SentenceChunker`; a single sentence over budget falls back to token
+    windows, so the budget remains a hard guarantee and offsets stay exact.
+
+    Two caveats, inherited from the embedding model rather than this class:
+
+    - **Determinism is per-environment.** Boundaries depend on float32
+      inference, so — like the dense retriever's scores — they reproduce
+      exactly on a fixed machine/torch build but are not portable across
+      BLAS builds. The grid runner records encoder and torch versions.
+    - **The encoder truncates.** Sentences longer than the encoder window
+      are embedded by prefix; `stats` counts them (`sentences_over_window`)
+      so exposure is visible per run.
+
+    The default encoder is the process-wide MiniLM encoder from `src.dense`
+    (imported lazily, so the core stays importable without torch); tests
+    inject deterministic fakes through the `encoder` parameter.
+    """
+
+    def __init__(
+        self,
+        max_tokens: int,
+        percentile: float = 95.0,
+        tokenizer: Tokenizer | None = None,
+        encoder: SentenceEncoder | None = None,
+    ):
+        if max_tokens < 1:
+            raise ValueError("max_tokens must be >= 1")
+        if not 0.0 < percentile < 100.0:
+            raise ValueError("percentile must be strictly between 0 and 100")
+        self.max_tokens = max_tokens
+        self.percentile = percentile
+        self.tokenizer = tokenizer or RegexWordTokenizer()
+        self._window = FixedTokenChunker(max_tokens, tokenizer=self.tokenizer)
+        self._encoder = encoder
+        self._n_documents = 0
+        self._n_sentences = 0
+        self._n_gaps = 0
+        self._n_breakpoints = 0
+        self._n_over_window = 0
+
+    def _enc(self) -> SentenceEncoder:
+        if self._encoder is None:
+            from .dense import default_encoder
+
+            self._encoder = default_encoder()
+        return self._encoder
+
+    @property
+    def stats(self) -> dict:
+        """Cumulative segmentation statistics across all `chunk` calls.
+
+        The grid runner persists these per configuration: breakpoint rate is
+        what separates "the threshold never fired and this degenerated to
+        sentence packing" from genuinely semantic boundaries, and the
+        over-window count bounds the prefix-embedding exposure. Reading
+        stats never loads the default encoder: before the first document
+        with two or more sentences, the encoder entry is ``None``.
+        """
+        encoder = self._encoder
+        return {
+            "encoder": None
+            if encoder is None
+            else getattr(encoder, "model_name", type(encoder).__name__),
+            "percentile": self.percentile,
+            "n_documents": self._n_documents,
+            "n_sentences": self._n_sentences,
+            "n_gaps": self._n_gaps,
+            "n_breakpoints": self._n_breakpoints,
+            "sentences_over_window": self._n_over_window,
+        }
+
+    def _breakpoints(self, texts: list[str]) -> frozenset[int]:
+        """Indices i such that packing must not cross the gap after texts[i]."""
+        if len(texts) < 2:
+            return frozenset()
+        encoder = self._enc()
+        embeddings = np.asarray(encoder.encode(texts), dtype=np.float64)
+        distances = 1.0 - np.einsum("ij,ij->i", embeddings[:-1], embeddings[1:])
+        # Per-document adaptive threshold; strict > means a document whose
+        # gaps are all equally distant (e.g. every embedding identical) has
+        # no breakpoints and packing degenerates to plain SentenceChunker.
+        threshold = float(np.percentile(distances, self.percentile))
+        breaks = frozenset(int(i) for i in np.flatnonzero(distances > threshold))
+        self._n_gaps += len(distances)
+        self._n_breakpoints += len(breaks)
+        window = getattr(encoder, "max_seq_length", None)
+        token_count = getattr(encoder, "token_count", None)
+        if window is not None and token_count is not None:
+            self._n_over_window += sum(1 for t in texts if token_count(t) > window)
+        return breaks
+
+    def chunk(self, document: str) -> list[Chunk]:
+        sentences = split_sentences(document)
+        if not sentences:
+            return []
+        index = TokenIndex(document, self.tokenizer)
+        counts = [index.count_in(lo, hi) for lo, hi in sentences]
+        breaks = self._breakpoints([document[lo:hi] for lo, hi in sentences])
+        self._n_documents += 1
+        self._n_sentences += len(sentences)
+        chunks: list[Chunk] = []
+        i = 0
+        while i < len(sentences):
+            if counts[i] > self.max_tokens:
+                # A breakpoint marks a gap *between* sentences, so windowing
+                # inside one oversized sentence cannot cross any breakpoint.
+                lo, hi = sentences[i]
+                for sub in self._window.chunk(document[lo:hi]):
+                    chunks.append(_make_chunk(document, lo + sub.start, lo + sub.end))
+                i += 1
+                continue
+            total, j = 0, i
+            while j < len(sentences) and total + counts[j] <= self.max_tokens:
+                total += counts[j]
+                j += 1
+                if j - 1 in breaks:
+                    break
+            chunks.append(_make_chunk(document, sentences[i][0], sentences[j - 1][1]))
+            i = j
+        return chunks

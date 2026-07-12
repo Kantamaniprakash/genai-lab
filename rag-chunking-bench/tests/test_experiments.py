@@ -34,7 +34,9 @@ from experiments.summarize_ablations import render_ablations
 from experiments.summarize_chroma import render_moderation
 from experiments.summarize_retrievers import render_retrievers
 from experiments.summarize_seeds import render_seeds
+from experiments.summarize_semantic import render_semantic
 from experiments.summarize_tokenizers import render_tokenizers
+from src.chunkers import SemanticChunker
 from src.data import Document, GoldSpan, QADataset, Question
 
 PARA_ZEBRA = (
@@ -111,9 +113,21 @@ class TestFactories:
         with pytest.raises(ValueError, match="overlap"):
             make_chunker("recursive", 128, overlap=8)
 
+    def test_semantic_factory_builds_without_loading_an_encoder(self):
+        # Construction must stay torch-free: the default encoder loads
+        # lazily on first use, so the CI environment (no dense group) can
+        # still expand grids and reject bad configs.
+        chunker = make_chunker("semantic", 128, 0)
+        assert isinstance(chunker, SemanticChunker)
+        assert chunker.stats["encoder"] is None
+
+    def test_semantic_rejects_overlap(self):
+        with pytest.raises(ValueError, match="overlap"):
+            make_chunker("semantic", 128, overlap=8)
+
     def test_unknown_chunker(self):
         with pytest.raises(ValueError, match="unknown chunker"):
-            make_chunker("semantic", 128, 0)
+            make_chunker("agentic", 128, 0)
 
     def test_unknown_retriever(self):
         with pytest.raises(ValueError, match="unknown retriever"):
@@ -673,3 +687,66 @@ class TestSummarizeTokenizers:
         self._save_unit_grids(tiny_dataset, tmp_path, bpe_points=("fixed",))
         with pytest.raises(SystemExit, match="different grid points"):
             render_tokenizers("tiny", "bm25", 0, tmp_path)
+
+
+class _StubEncoder:
+    """Constant-embedding encoder for plumbing tests: no breakpoints ever
+    fire (semantic degenerates to sentence packing, which the chunker tests
+    verify directly), so these tests exercise persistence and rendering
+    without torch. ``model_name`` checks that stats prefer it over the
+    class name, matching the real SentenceTransformerEncoder."""
+
+    model_name = "stub-encoder"
+
+    def encode(self, texts):
+        import numpy as np
+
+        return np.full((len(texts), 4), 0.5, dtype=np.float32)
+
+
+class TestSemanticGridAndSummary:
+    @pytest.fixture(autouse=True)
+    def _stub_default_encoder(self, monkeypatch):
+        # make_chunker builds SemanticChunker without an encoder; the lazy
+        # default resolves through src.dense.default_encoder at first use.
+        monkeypatch.setattr("src.dense.default_encoder", lambda: _StubEncoder())
+
+    def test_semantic_run_records_chunker_stats(self, tiny_dataset):
+        dataset, questions = tiny_dataset
+        result = run_config(_config(chunker="semantic"), dataset, questions)
+        stats = result["chunker_stats"]
+        assert stats["encoder"] == "stub-encoder"
+        assert stats["percentile"] == 95.0
+        assert stats["n_documents"] == 1
+        assert stats["n_gaps"] == stats["n_sentences"] - 1
+        assert stats["n_breakpoints"] == 0  # constant embeddings never break
+
+    def test_structural_runs_have_no_chunker_stats(self, tiny_dataset):
+        dataset, questions = tiny_dataset
+        assert "chunker_stats" not in run_config(_config(), dataset, questions)
+
+    def test_chunker_stats_roundtrip_through_load_raw(self, tiny_dataset, tmp_path):
+        dataset, questions = tiny_dataset
+        run_and_save(_config(chunker="semantic"), dataset, questions, tmp_path)
+        run_and_save(_config(chunker="fixed"), dataset, questions, tmp_path)
+        by_chunker = {rr.config["chunker"]: rr for rr in load_raw(tmp_path)}
+        assert by_chunker["semantic"].chunker_stats["encoder"] == "stub-encoder"
+        assert by_chunker["fixed"].chunker_stats is None
+
+    def test_render_semantic(self, tiny_dataset, tmp_path):
+        dataset, questions = tiny_dataset
+        for chunker in ("fixed", "sentence", "semantic"):
+            run_and_save(_config(chunker=chunker), dataset, questions, tmp_path)
+        results = load_raw(tmp_path)
+        text = render_semantic(results)
+        assert "# Semantic chunker comparison — tiny, bm25" in text
+        assert "## ΔSpanRecall: semantic − sentence at matched nominal size" in text
+        assert "## ΔSpanRecall: semantic − fixed at matched nominal size" in text
+        assert "stub-encoder @ p95" in text
+        assert "semantic-32" in text
+
+    def test_render_semantic_requires_semantic_runs(self, tiny_dataset, tmp_path):
+        dataset, questions = tiny_dataset
+        run_and_save(_config(chunker="fixed"), dataset, questions, tmp_path)
+        with pytest.raises(ValueError, match="no semantic-chunker runs"):
+            render_semantic(load_raw(tmp_path))

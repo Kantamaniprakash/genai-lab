@@ -40,6 +40,7 @@ from src.chunkers import (
     Chunker,
     FixedTokenChunker,
     RecursiveCharacterChunker,
+    SemanticChunker,
     SentenceChunker,
 )
 from src.data import (
@@ -62,7 +63,7 @@ from src.tokenization import (
 
 ROOT = Path(__file__).resolve().parent.parent
 
-CHUNKERS = ("fixed", "sentence", "recursive")
+CHUNKERS = ("fixed", "sentence", "recursive", "semantic")
 RETRIEVERS = ("bm25", "tfidf", "lsa", "dense")
 TOKENIZERS = ("regex", "cl100k")
 
@@ -129,6 +130,13 @@ def make_chunker(
         if overlap != 0:
             raise ValueError("recursive chunker has no overlap knob in v1")
         return RecursiveCharacterChunker(max_tokens=chunk_size, tokenizer=tokenizer)
+    if name == "semantic":
+        if overlap != 0:
+            raise ValueError("semantic chunker has no overlap knob in v1")
+        # Default percentile (95) and encoder (process-wide MiniLM); the
+        # encoder is shared with the dense retriever, so sentence embeddings
+        # are computed once per invocation however many sizes run.
+        return SemanticChunker(max_tokens=chunk_size, tokenizer=tokenizer)
     raise ValueError(f"unknown chunker {name!r}")
 
 
@@ -286,6 +294,14 @@ def run_config(
             "n_chunks_truncated": n_truncated,
             "n_chunks": len(counts),
         }
+    # The semantic chunker's boundaries depend on an embedding model, so its
+    # segmentation exposure (breakpoint rate, prefix-embedded sentences,
+    # encoder identity) belongs in the result the same way retriever_stats
+    # does — a reader must be able to tell a degenerate run (threshold never
+    # fired) from a genuinely semantic one without rerunning.
+    chunker_stats = getattr(chunker, "stats", None)
+    if chunker_stats is not None:
+        result["chunker_stats"] = chunker_stats
     return result
 
 

@@ -736,6 +736,124 @@ def fig_tokenizer_robustness(
     plt.close(fig)
 
 
+def fig_semantic_comparison(results: list[RunResult], out: Path) -> None:
+    """What embedding breakpoints buy over the sentence boundaries they refine.
+
+    Left: paired ΔSpanRecall (semantic − sentence) at matched nominal size,
+    grouped by size with one bar per budget (single-hue ordinal ramp — budget
+    is a magnitude, not an identity). Both sides pack identical sentences
+    under identical budgets; the semantic side only adds "never pack across a
+    breakpoint", so these deltas isolate the breakpoints themselves. Right:
+    realized mean chunk size against nominal — breakpoints can only shorten
+    chunks, and this panel shows how far below its nominal budget (grey
+    identity line) each family actually operates, the confound to keep in
+    view when reading the left panel.
+    """
+    grid = _by_config(results)
+    budgets = [int(b) for b in results[0].config["budgets"]]
+    sizes = sorted(
+        {
+            size
+            for family, size in grid
+            if family == "semantic" and ("sentence", size) in grid
+        }
+    )
+    n_questions = len(results[0].records)
+    ramp = ("#86b6ef", "#5598e7", "#2a78d6", "#184f95")
+    budget_ramp = {b: ramp[min(i, len(ramp) - 1)] for i, b in enumerate(budgets)}
+    fig, (ax_delta, ax_size) = plt.subplots(
+        1, 2, figsize=(9.0, 3.4), width_ratios=(1.35, 1.0)
+    )
+
+    width = 0.8 / len(budgets)
+    for bi, budget in enumerate(budgets):
+        cis = [
+            diff_ci(
+                grid[("semantic", size)].metric("recall", budget),
+                grid[("sentence", size)].metric("recall", budget),
+            )
+            for size in sizes
+        ]
+        xs = [i + (bi - (len(budgets) - 1) / 2) * width for i in range(len(sizes))]
+        ax_delta.bar(
+            xs,
+            [c.mean_diff for c in cis],
+            width=width * 0.92,
+            color=budget_ramp[budget],
+            label=f"B={budget}",
+            zorder=3,
+        )
+        ax_delta.errorbar(
+            xs,
+            [c.mean_diff for c in cis],
+            yerr=[
+                [c.mean_diff - c.ci_low for c in cis],
+                [c.ci_high - c.mean_diff for c in cis],
+            ],
+            fmt="none",
+            ecolor=INK,
+            elinewidth=1.0,
+            capsize=2.5,
+            zorder=4,
+        )
+    ax_delta.axhline(0, color=AXIS, linewidth=0.8)
+    ax_delta.set_xticks(range(len(sizes)))
+    ax_delta.set_xticklabels([str(s) for s in sizes])
+    ax_delta.set_xlabel("nominal chunk size (tokens)")
+    ax_delta.set_ylabel("ΔSpanRecall, semantic − sentence (paired)")
+    ax_delta.set_title("Do embedding breakpoints beat\nregex sentence boundaries?")
+    ax_delta.grid(axis="y")
+    ax_delta.set_axisbelow(True)
+    ax_delta.legend(title="budget", loc="best", title_fontsize=8, fontsize=7.5)
+
+    family_styles = {
+        "sentence": (CHUNKER_COLORS["sentence"], "o"),
+        "semantic": ("#9a5bd2", "D"),
+    }
+    all_sizes = sorted({size for _, size in grid})
+    ax_size.plot(
+        all_sizes,
+        all_sizes,
+        color=INK_MUTED,
+        linewidth=1.2,
+        linestyle="--",
+        label="nominal (identity)",
+        zorder=2,
+    )
+    for family, (color, marker) in family_styles.items():
+        family_sizes = [s for s in all_sizes if (family, s) in grid]
+        ax_size.plot(
+            family_sizes,
+            [grid[(family, s)].chunk_stats["tokens_mean"] for s in family_sizes],
+            color=color,
+            linewidth=2,
+            marker=marker,
+            markersize=5,
+            markeredgecolor=SURFACE,
+            markeredgewidth=1.0,
+            label=family,
+            zorder=3,
+        )
+    _log2_axis(ax_size, all_sizes, "nominal chunk size (tokens, log scale)")
+    ax_size.set_yscale("log", base=2)
+    ax_size.set_yticks(all_sizes)
+    ax_size.yaxis.set_major_formatter(ScalarFormatter())
+    ax_size.set_ylabel("realized mean tokens/chunk")
+    ax_size.set_title("Breakpoints only shorten:\nrealized vs. nominal size")
+    ax_size.legend(loc="upper left", fontsize=7.5)
+
+    fig.suptitle(
+        f"Semantic (embedding-breakpoint) chunker vs. sentence packing, "
+        f"{results[0].config['dataset']} / {results[0].config['retriever']} "
+        f"({n_questions:,} questions; error bars: 95% bootstrap CIs)",
+        fontsize=10.5,
+        color=INK,
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.97))
+    fig.savefig(out, bbox_inches="tight")
+    plt.close(fig)
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Render README figures from raw results.",
@@ -815,6 +933,11 @@ def main(argv: list[str] | None = None) -> None:
         tok = args.out_dir / f"tokenizer_robustness_{args.dataset}_{args.retriever}.png"
         fig_tokenizer_robustness(baseline, bpe, tok)
         written.append(tok)
+
+    if any(rr.config["chunker"] == "semantic" for rr in baseline):
+        semantic = args.out_dir / f"semantic_comparison_{args.dataset}_{args.retriever}.png"
+        fig_semantic_comparison(baseline, semantic)
+        written.append(semantic)
 
     by_retriever = {}
     for name in RETRIEVER_STYLES:
