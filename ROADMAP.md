@@ -42,7 +42,10 @@ the budget rule and every drop-one corpus and the tight-budget small-chunk
 edge turns out to be mostly a stop-rule artifact — findings 16–18; cl100k
 BPE tokenizer unit 2026-07-11: every headline claim is unit-invariant, and
 wiring the unit in exposed and fixed two containment-vs-overlap chunker
-bugs — finding 19).
+bugs — finding 19; semantic chunker 2026-07-12: the percentile
+embedding-breakpoint chunker's matched-nominal-size wins are realized-size
+drift — null where realized sizes coincide, sign-flipped on long golds at
+generous budgets, no systematic ranking gains — findings 20–21).
 
 1. **Harness** — offset-preserving chunkers, tokenization, span-level metrics,
    budget-matched retrieval protocol, dataset loaders. *(done — SQuAD +
@@ -55,8 +58,8 @@ bugs — finding 19).
    budget-rule check *(done: SQuAD + chroma)*, multi-seed sampling
    *(done, BM25)*, gold-length moderation *(done — finding 14)*, corpus
    jackknife *(done — finding 18)*, BPE tokenizer robustness *(done —
-   finding 19)*, semantic vs. structural chunking, per-corpus error
-   analysis.
+   finding 19)*, semantic vs. structural chunking *(done — findings
+   20–21)*, matched-realized-size protocol, per-corpus error analysis.
 4. **Writeup** — README as a full research report with real tables and limitations.
 
 **Environment constraints (recorded so results are honest).** CPU-only (4 cores,

@@ -11,11 +11,12 @@ Hands-on experiments with current Gen AI techniques — RAG, agents, evals, fine
 
 <!-- auto-generated from research/NOTES.md by scripts/sync_latest.py; do not hand-edit -->
 
-**2026-07-11 — Day 10: BPE tokenizer robustness — finding 19, and two chunker bugs the new unit exposed**
+**2026-07-12 — Day 11: semantic chunker — findings 20–21: breakpoints buy size drift, not boundary quality**
 
-- Finding 19 — every headline claim is unit-invariant under real BPE accounting.
+- Finding 20 — matched-nominal wins are realized-size drift.
+- Finding 21 — the size-drift account survives falsification.
 
-[Full entry →](rag-chunking-bench/research/NOTES.md#2026-07-11--day-10-bpe-tokenizer-robustness--finding-19-and-two-chunker-bugs-the-new-unit-exposed)
+[Full entry →](rag-chunking-bench/research/NOTES.md#2026-07-12--day-11-semantic-chunker--findings-2021-breakpoints-buy-size-drift-not-boundary-quality)
 <!-- latest-end -->
 
 ![Budget-matched SpanRecall@400 by chunking strategy and chunk size, with 95% bootstrap CIs](rag-chunking-bench/assets/hero_spanrecall_dev-v1.1_bm25.png)

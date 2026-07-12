@@ -951,3 +951,100 @@ change measurable there.
 - Whether the semantic chunker's realized-size distribution (finding 4)
   needs a matched-realized-size comparison protocol, not just matched
   nominal size — decide after seeing its chunk stats.
+
+---
+
+## 2026-07-12 — Day 11: semantic chunker — findings 20–21: breakpoints buy size drift, not boundary quality
+
+### Built (committed 4676495 BEFORE the grids ran, per house rule)
+
+- `SemanticChunker` (percentile-breakpoint variant — Kamradt level 4, the
+  LangChain default): adjacent-sentence MiniLM cosine distances, per-document
+  95th-percentile threshold, strict `>` so an all-equal document degenerates
+  to plain sentence packing; greedy packing never crosses a breakpoint;
+  oversized sentences reuse the token-window fallback so the budget stays
+  hard and offsets exact. Encoder is injectable (deterministic fakes in
+  tests: hash-based for the contract battery, orthogonal-topic for exact
+  breakpoint placement, constant for the degeneracy identity); the default
+  resolves lazily to the process-wide MiniLM encoder, so the core stays
+  importable without torch and embeddings are shared with the dense
+  retriever (per-invocation memoization made sizes 128–512 cost ~2 s each
+  after size 64 paid the ~60–100 s embedding bill).
+- `chunker_stats` persisted per config (encoder identity, breakpoint rate,
+  prefix-embedded sentence count) — the analogue of `retriever_stats`,
+  there to distinguish a degenerate run (threshold never fired) from a
+  semantic one without rerunning. `RunResult.chunker_stats` roundtrips.
+- `summarize_semantic` (matched-size paired tables vs sentence AND fixed,
+  realized-size stats front and center, breakpoint table) +
+  `fig_semantic_comparison` (delta bars + realized-vs-nominal panel). All
+  eight pre-existing dev-v1.1 PNGs and all seven chroma PNGs regenerate
+  bit-identically with the new family present (CHUNKER_ORDER-driven figures
+  ignore it by construction); the two main summaries gain semantic rows,
+  purely additive diffs. Tests 243 → **327**. One pre-existing test used
+  "semantic" as the unknown-chunker name; now "agentic".
+
+### Ran (8 configs: dev-v1.1 + chroma, BM25, sizes {64,128,256,512}, ~3.5 min total)
+
+Breakpoint rates: 5.2% of gaps (SQuAD), 5.0% (chroma) — p95 + strict >
+fires on ~5% by construction; not degenerate. Chroma: 181/9,046 sentences
+(2%) exceed the encoder window → prefix-embedded before breakpoints are
+placed (recorded in stats; chatlogs/finance have paragraph-length
+"sentences").
+
+### Findings (README §20–21)
+
+1. **Finding 20 — matched-nominal wins are realized-size drift.**
+   Breakpoints only shorten; the shortfall grows with nominal size (SQuAD
+   realized 46/100/190/314 vs sentence 48/109/234/475). Deltas track the
+   gap, not the boundaries: B=400 Δ(sem−sent) = −0.001 / +0.005 / +0.014* /
+   +0.194* across 64→512; the huge 512 cell is finding-5 stop-rule regime
+   (realized 475 barely fits B=400, realized 314 slips under). Control:
+   nominal 64, realized sizes 2.5% apart → null at every budget on both
+   datasets (SQuAD B400: −0.001 [−0.004, +0.001]). Same structure as the
+   recursive chunker in finding 4.
+2. **Finding 21 — the size-drift account survives falsification.**
+   Prediction: where larger effective chunks win (chroma long golds,
+   generous budgets — finding 13), semantic should LOSE. It does:
+   chroma-256 Δ(sem−sent) = **−0.026 [−0.044, −0.009]** @B1600 while the
+   same config "wins" +0.083 @B200. hit@k: 5 significant negatives (incl.
+   chroma-256 hit@1 −0.036, hit@5 −0.025) vs 1 grazing positive (SQuAD-128
+   hit@1 +0.012). Verdict: budget-matched + size-accounted, the percentile
+   chunker shows no boundary-quality effect beyond regex sentence packing
+   — it is an expensive way to buy a smaller chunk size. Corroborates Qu,
+   Tu & Bao (arXiv:2410.13070, verified today + added to references, with
+   the Kamradt notebook); our contribution is the mechanism and the
+   sign-flip test.
+
+### Process notes
+
+- The comparison design (same sentences, same budget, only the no-cross
+  constraint differs) is what makes the isolation clean — worth reusing for
+  any future chunker built on `split_sentences`.
+- `summarize.py` main tables now include semantic rows on regeneration;
+  `pairwise_same_size_rows` deliberately still covers only
+  sentence/recursive-vs-fixed (semantic gets its own summarizer).
+- Kamradt notebook URL and Qu et al. both verified reachable today before
+  citing (curl 403s on github.com web; verified via search + arXiv abs).
+
+### Next steps (Day 12, in order)
+
+1. **Matched-realized-size protocol** (the open question finding 20 makes
+   urgent, and the day-10 carry): compare semantic-512 (realized 314) not
+   against sentence-512 but against the sentence config whose realized mean
+   matches (interpolate: sentence packing at max_tokens ≈ 340–360 should
+   realize ~314; one calibration run finds it). If the deltas collapse to
+   ~0, finding 20's story is fully closed; if a residual remains, THAT is
+   the boundary-quality effect. Cheap: 2–4 configs, BM25, both datasets.
+2. Per-corpus × gold-tercile interaction table for chroma (day-7 carry;
+   `chatlogs` still the suggestive case).
+3. Truncate × overlap cross (day-8 carry, one invocation, both datasets).
+4. Consider `--percentile` as a GridConfig field (default-omitted from
+   config_id like budget_rule) if a threshold ablation is worth a day.
+
+### Open questions (carried + new)
+
+- Does semantic's breakpoint placement at least reduce *variance* of
+  per-question recall at matched realized size? (Check alongside next-step
+  1 — the paired per-question diffs are already on disk.)
+- Overlap-delta tercile split on chroma (day-8 carry).
+- 512-window encoder ablation (day-6 carry).

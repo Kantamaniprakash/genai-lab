@@ -31,9 +31,12 @@ far: fixed-k evaluation and budget-matched evaluation rank chunk sizes in
 opposite orders (finding 2); under budget matching the winning chunk size is
 set by the length of the gold evidence — smallest chunks dominate on
 short-answer SQuAD at every budget, but with sentence-scale evidence the
-advantage inverts at generous budgets (findings 13–14); and the effects
+advantage inverts at generous budgets (findings 13–14); the effects
 replicate across four retriever families, three sampling seeds, both
-budget-boundary rules, and two token units (regex word vs. cl100k_base BPE).
+budget-boundary rules, and two token units (regex word vs. cl100k_base BPE);
+and the popular percentile *semantic* chunker, once budget-matched and
+realized-size-accounted, shows no boundary-quality gain over cheap regex
+sentence packing — its apparent wins are chunk-size drift (findings 20–21).
 
 ## Motivation
 
@@ -102,7 +105,17 @@ scoring exact rather than fuzzy-matched.
 | `FixedTokenChunker` | sliding token window | size, overlap |
 | `SentenceChunker` | greedy packing of whole sentences under a token budget | max_tokens, sentence overlap |
 | `RecursiveCharacterChunker` | paragraph > line > space separator hierarchy with greedy merge (LangChain semantics, offset-preserving) | max_tokens |
-| semantic chunkers | embedding-similarity breakpoints (phase 2) | — |
+| `SemanticChunker` | embedding-breakpoint segmentation: sentences whose adjacent MiniLM-embedding cosine distance exceeds a per-document percentile threshold start a new segment; packing never crosses a breakpoint (the percentile chunker popularized by Kamradt and shipped in LangChain; Chroma's ClusterSemanticChunker is the clustering cousin) | max_tokens, percentile |
+
+`SemanticChunker` keeps the same hard guarantees as the structural family —
+exact offsets, token-window fallback so the budget is never exceeded — but
+its boundaries depend on float32 inference, so like the dense retriever's
+scores they are deterministic per environment rather than bit-portable
+across torch/BLAS builds; each run records the encoder identity plus
+segmentation exposure (breakpoint rate, prefix-embedded sentences) in
+`chunker_stats`. Because breakpoints can only shorten chunks, a semantic
+configuration operates below its nominal size — the finding-4 confound —
+so its comparison table reports realized sizes side by side.
 
 ### Retrievers
 
@@ -680,6 +693,84 @@ at the sizes studied here this is a ≤2% effect with no bearing on any
 comparison, since it applies identically to both sides of every paired
 delta.
 
+### Semantic chunking: embedding breakpoints buy size drift, not boundary quality
+
+The last chunker family the related work compares is semantic chunking —
+segmenting where adjacent-sentence embedding similarity drops, on the
+intuition that topically coherent chunks retrieve better (Smith &
+Troynikov's ClusterSemanticChunker; the percentile-breakpoint chunker
+popularized by Kamradt and shipped in LangChain). Setup: the percentile
+variant (MiniLM embeddings, per-document 95th-percentile threshold —
+the LangChain default) run on both datasets with BM25, sizes
+{64, 128, 256, 512}, against sentence packing at matched nominal size.
+This comparison is surgically clean: both sides pack the *same* regex
+sentences under the *same* budget, and the semantic side differs only in
+refusing to pack across a breakpoint — so the paired delta isolates the
+breakpoints themselves. The threshold fires on ~5% of gaps by construction
+(rates: 5.2% SQuAD, 5.0% Chroma), i.e. the chunker is genuinely semantic,
+not degenerate. Full tables:
+[`results/summary_dev-v1.1_bm25_semantic.md`](results/summary_dev-v1.1_bm25_semantic.md),
+[`results/summary_chroma_bm25_semantic.md`](results/summary_chroma_bm25_semantic.md).
+
+**20. At matched nominal size the semantic chunker "wins" — but the wins
+are realized-size drift, the finding-4 confound at work.** Breakpoints can
+only shorten chunks, and the shortfall grows with nominal size (SQuAD
+realized means: 46 vs. 48 at nominal 64, 100 vs. 109 at 128, 190 vs. 234
+at 256, 314 vs. 475 at 512). The paired deltas track that gap, not the
+boundaries: on SQuAD at B=400, Δ(semantic − sentence) runs −0.001 → +0.005
+→ **+0.014 [+0.001, +0.027]** → **+0.194 [+0.177, +0.211]** across nominal
+64 → 512. The spectacular 512 cell is the stop-rule regime of finding 5:
+sentence-512's realized 475-token chunks barely fit a 400-token budget
+(recall 0.033) while semantic-512's realized 314-token chunks slip under
+it (0.227) — operating further down the size axis, exactly like the
+recursive chunker in finding 4. The control cell is nominal 64, where the
+two families' realized sizes coincide (2.5% apart): there the delta is a
+null at *every* budget on *both* datasets — on SQuAD within ±0.005 with
+CIs to match (B=400: −0.001 [−0.004, +0.001]). Where breakpoints don't
+move the size distribution, they don't move recall.
+
+**21. The size-drift account survives its falsification test: on long
+golds at generous budgets the "advantage" flips sign.** If semantic wins
+by being effectively smaller, then in the regime where *larger* effective
+chunks win — sentence-scale golds at generous budgets, finding 13 — it
+should *lose*. It does: on Chroma, Δ(semantic − sentence) at nominal 256
+is **−0.026 [−0.044, −0.009]** at B=1600 (and point-negative at B=800),
+while the same configuration still "wins" **+0.083 [+0.059, +0.109]** at
+the tight B=200 where smaller-realized fits and larger doesn't. Ranking
+quality tells the same story: across the 24 hit@k cells, five are
+significantly negative — including Chroma-256's hit@1 −0.036 [−0.068,
+−0.004] and hit@5 −0.025 [−0.047, −0.006] — against a single positive
+that grazes zero (SQuAD-128 hit@1 +0.012 [+0.001, +0.022]); breakpoints
+do not systematically improve the ranked list. Across the 32 paired
+span-recall cells, every
+significant semantic gain sits where its realized size falls into a regime
+the structural grids already showed is favorable, and every significant
+loss where it falls out of one. Budget-matched and size-accounted, the
+popular percentile chunker shows **no detectable boundary-quality effect
+beyond cheap regex sentence packing** — an expensive way to buy a smaller
+chunk size. This agrees with Qu et al. (2024, arXiv:2410.13070), who found
+semantic chunking's gains too inconsistent to justify its cost across three
+retrieval tasks; the budget-matched paired protocol here adds the
+*mechanism* (realized-size drift) and a falsification test that the
+size-drift account passes. The honest open question it leaves: a protocol
+that matches *realized* (not nominal) size distributions would test
+boundary quality directly, and the cluster variant and other thresholds
+remain untested.
+
+![Semantic vs sentence, SQuAD](results/figures/semantic_comparison_dev-v1.1_bm25.png)
+
+*SQuAD/BM25. Left: paired ΔSpanRecall (semantic − sentence) at matched
+nominal size. Right: realized mean chunk size against nominal — the wins
+on the left appear exactly where the purple curve pulls away from the
+green, and vanish at nominal 64 where the two coincide.*
+
+![Semantic vs sentence, Chroma](results/figures/semantic_comparison_chroma_bm25.png)
+
+*The same comparison on Chroma's sentence-scale golds: the tight-budget
+"wins" persist (size drift again), but at B=1600 / nominal 256 the delta
+turns significantly negative — smaller-realized chunks are a liability
+exactly where finding 13 says larger evidence needs larger chunks.*
+
 ## Status
 
 - [x] Phase 1 (harness): offset-preserving chunkers + tokenization
@@ -705,7 +796,10 @@ delta.
       16–18 (225 tests)
 - [x] Phase 3: cl100k_base BPE tokenizer unit (12 configs) with the
       unit-invariance analysis — finding 19 (243 tests)
-- [ ] Phase 3: error analysis, semantic chunking
+- [x] Phase 3: semantic (embedding-breakpoint) chunker with
+      segmentation-exposure stats, SQuAD + Chroma grids (8 configs) —
+      findings 20–21 (327 tests)
+- [ ] Phase 3: per-corpus error analysis; matched-realized-size protocol
 - [ ] Phase 4: full writeup
 
 Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).
@@ -755,6 +849,17 @@ Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).
   grid — the Chroma, dense, and overlap results remain word-token-unit
   measurements, with no mechanism identified by which the unit would affect
   them differently.
+- The semantic-chunking verdict (findings 20–21) covers one variant (the
+  percentile-breakpoint rule at the LangChain-default 95th percentile), one
+  encoder (MiniLM, whose 256-wordpiece window prefix-embeds 2% of Chroma
+  sentences — 181 of 9,046 — before breakpoints are even placed), and BM25
+  retrieval. The clustering variant, other thresholds, and larger encoders
+  could still find boundaries that matter; what the finding establishes is
+  that the *default* configuration's wins are explained by realized-size
+  drift, and that a fair test of boundary quality requires matching realized
+  size distributions. Semantic-chunker boundaries, like dense scores, are
+  deterministic per environment but not bit-portable across torch/BLAS
+  builds (encoder and library versions are recorded in every result file).
 - Chroma corpora queries are LLM-generated (dataset provenance, not ours);
   SQuAD questions are human-written but crowd-sourced over single paragraphs.
 
@@ -779,6 +884,13 @@ Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).
   Chunking Strategies for Retrieval-Augmented Generation.* 2nd Workshop on
   Knowledge-Enhanced Information Retrieval, ECIR 2025.
   [arXiv:2504.19754](https://arxiv.org/abs/2504.19754)
+- Renyi Qu, Ruixuan Tu, Forrest Bao. *Is Semantic Chunking Worth the
+  Computational Cost?* 2024.
+  [arXiv:2410.13070](https://arxiv.org/abs/2410.13070)
+- Greg Kamradt. *5 Levels of Text Splitting.* 2023 — origin of the
+  percentile-breakpoint semantic chunker evaluated in findings 20–21
+  (level 4), later shipped as LangChain's `SemanticChunker`.
+  [github.com/FullStackRetrieval-com/RetrievalTutorials](https://github.com/FullStackRetrieval-com/RetrievalTutorials/blob/main/tutorials/LevelsOfTextSplitting/5_Levels_Of_Text_Splitting.ipynb)
 - Pranav Rajpurkar, Jian Zhang, Konstantin Lopyrev, Percy Liang. *SQuAD:
   100,000+ Questions for Machine Comprehension of Text.* EMNLP 2016.
   [arXiv:1606.05250](https://arxiv.org/abs/1606.05250)
@@ -794,16 +906,18 @@ Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).
 
 ```bash
 pip install -r requirements.txt
-python -m pytest tests/ -q          # 243 tests (dense tests skip without the dense stack)
+python -m pytest tests/ -q          # 327 tests (dense tests skip without the dense stack)
 python -m src.data                  # fetch SQuAD + Chroma corpora (pinned URLs + SHA256)
 python -m experiments.run_grid      # rerun the grid (results are resumable)
 python -m experiments.run_grid --tokenizer cl100k   # the BPE-unit grid (finding 19)
+python -m experiments.run_grid --chunkers semantic --sizes 64 128 256 512  # finding 20 (needs the dense stack)
 python -m experiments.summarize
 python -m experiments.summarize_ablations
 python -m experiments.summarize_retrievers
 python -m experiments.summarize_seeds
 python -m experiments.summarize_chroma
 python -m experiments.summarize_tokenizers
+python -m experiments.summarize_semantic
 python -m experiments.make_figures
 python -m experiments.make_hero_figure
 ```
