@@ -189,3 +189,39 @@ def paired_bootstrap(
     return BootstrapResult(
         mean_diff=float(diffs.mean()), ci_low=float(lo), ci_high=float(hi)
     )
+
+
+def paired_bootstrap_std(
+    scores_a: list[float],
+    scores_b: list[float],
+    n_resamples: int = 10_000,
+    seed: int = 0,
+    alpha: float = 0.05,
+) -> BootstrapResult:
+    """Percentile bootstrap CI for std(A) − std(B) over paired scores.
+
+    Answers a dispersion question the mean cannot: does system A make
+    per-question scores more *consistent* than system B, beyond any level
+    shift? Each resample draws one set of question indices and applies it to
+    both sides (the same joint resampling as `paired_bootstrap`), so shared
+    between-question difficulty moves both standard deviations together and
+    drops out of the difference. Sample standard deviations use ddof=1.
+
+    The point estimate lands in ``mean_diff`` — the field names one point
+    estimate and its interval regardless of the statistic.
+    """
+    if len(scores_a) != len(scores_b):
+        raise ValueError("paired score lists must have equal length")
+    if len(scores_a) < 2:
+        raise ValueError("cannot estimate a standard deviation from fewer than 2 questions")
+    a = np.asarray(scores_a, dtype=np.float64)
+    b = np.asarray(scores_b, dtype=np.float64)
+    rng = np.random.default_rng(seed)
+    idx = rng.integers(0, len(a), size=(n_resamples, len(a)))
+    resampled = a[idx].std(axis=1, ddof=1) - b[idx].std(axis=1, ddof=1)
+    lo, hi = np.quantile(resampled, [alpha / 2, 1 - alpha / 2])
+    return BootstrapResult(
+        mean_diff=float(a.std(ddof=1) - b.std(ddof=1)),
+        ci_low=float(lo),
+        ci_high=float(hi),
+    )

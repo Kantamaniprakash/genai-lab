@@ -21,6 +21,21 @@ from src.metrics import BootstrapResult, paired_bootstrap
 
 _CHUNKER_ORDER = {"fixed": 0, "sentence": 1, "recursive": 2, "semantic": 3}
 
+# The chunker families run under every retriever, seed, and token unit.
+# The semantic family (encoder-dependent, deliberately run on the primary
+# BM25 grid only) is absent from the secondary grids, so summaries that
+# join grids across retrievers / seeds / units pin their loads to the
+# structural families — otherwise their same-grid checks (correctly)
+# refuse to pair them.
+STRUCTURAL_CHUNKERS = ("fixed", "sentence", "recursive")
+
+# The canonical size axis of the benchmark grid. Consumers that assume a
+# complete chunker x size cartesian grid (the main summaries and figures)
+# pin their loads to these sizes so off-grid runs — e.g. sentence
+# configurations calibrated to match a semantic run's *realized* size —
+# never leak into tables or KeyError a figure that indexes (chunker, size).
+BASELINE_SIZES = (64, 128, 256, 512)
+
 
 @dataclass(frozen=True)
 class RunResult:
@@ -81,6 +96,8 @@ def load_raw(
     overlap: int | None = None,
     seed: int | None = None,
     tokenizer: str | None = "regex",
+    sizes: tuple[int, ...] | None = None,
+    chunkers: tuple[str, ...] | None = None,
 ) -> list[RunResult]:
     """Parse all raw result files, optionally filtered, in presentation order.
 
@@ -90,6 +107,11 @@ def load_raw(
     them. Different seeds sample different question sets, so any caller doing
     paired comparisons must pin a single seed or ``check_aligned`` will
     (correctly) refuse to proceed.
+
+    ``sizes`` restricts to the given chunk sizes; canonical-grid consumers
+    pass ``BASELINE_SIZES`` so calibrated off-grid sizes stay out of their
+    tables and figures. ``chunkers`` restricts to the given chunker
+    families; cross-grid summaries pass ``STRUCTURAL_CHUNKERS`` (see above).
 
     ``tokenizer`` is the one filter that defaults closed (``"regex"``)
     rather than open: runs under a different token unit share question ids
@@ -122,6 +144,10 @@ def load_raw(
         if seed is not None and rr.config["seed"] != seed:
             continue
         if tokenizer is not None and rr.config["tokenizer"] != tokenizer:
+            continue
+        if sizes is not None and rr.config["chunk_size"] not in sizes:
+            continue
+        if chunkers is not None and rr.config["chunker"] not in chunkers:
             continue
         results.append(rr)
     results.sort(key=sort_key)

@@ -24,14 +24,27 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from experiments.aggregate import RunResult, check_aligned, diff_ci, load_raw, mean
+from experiments.aggregate import (
+    BASELINE_SIZES,
+    STRUCTURAL_CHUNKERS,
+    RunResult,
+    check_aligned,
+    diff_ci,
+    load_raw,
+    mean,
+)
 from experiments.summarize import _table, fmt_diff
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
 def _load_by_retriever(
-    raw_dir: Path, dataset: str, retrievers: list[str], seed: int = 0
+    raw_dir: Path,
+    dataset: str,
+    retrievers: list[str],
+    seed: int = 0,
+    sizes: tuple[int, ...] | None = None,
+    chunkers: tuple[str, ...] | None = None,
 ) -> dict[str, list[RunResult]]:
     by_retriever: dict[str, list[RunResult]] = {}
     for retriever in retrievers:
@@ -42,6 +55,8 @@ def _load_by_retriever(
             budget_rule="stop",
             overlap=0,
             seed=seed,
+            sizes=sizes,
+            chunkers=chunkers,
         )
         if not runs:
             raise SystemExit(
@@ -62,8 +77,12 @@ def render_retrievers(
     raw_dir: Path,
     reference: str = "bm25",
     seed: int = 0,
+    sizes: tuple[int, ...] | None = None,
+    chunkers: tuple[str, ...] | None = None,
 ) -> str:
-    by_retriever = _load_by_retriever(raw_dir, dataset, retrievers, seed=seed)
+    by_retriever = _load_by_retriever(
+        raw_dir, dataset, retrievers, seed=seed, sizes=sizes, chunkers=chunkers
+    )
     if reference not in by_retriever:
         raise SystemExit(f"reference retriever {reference!r} not among {retrievers}")
     labels = [rr.label for rr in by_retriever[reference]]
@@ -233,7 +252,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     text = render_retrievers(
-        args.dataset, args.retrievers, args.raw_dir, args.reference, seed=args.seed
+        args.dataset,
+        args.retrievers,
+        args.raw_dir,
+        args.reference,
+        seed=args.seed,
+        sizes=BASELINE_SIZES,
+        chunkers=STRUCTURAL_CHUNKERS,
     )
     out = args.out_dir / f"summary_{args.dataset}_retrievers.md"
     out.parent.mkdir(parents=True, exist_ok=True)

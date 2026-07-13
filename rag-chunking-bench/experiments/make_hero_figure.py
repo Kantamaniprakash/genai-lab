@@ -19,7 +19,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from experiments.aggregate import check_aligned, load_raw, mean_ci
+from experiments.aggregate import BASELINE_SIZES, check_aligned, load_raw, mean_ci
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -146,6 +146,7 @@ def main(argv: list[str] | None = None) -> None:
         budget_rule="stop",
         overlap=0,
         seed=args.seed,
+        sizes=BASELINE_SIZES,
     )
     if not baseline:
         raise SystemExit(f"no results for {args.dataset}/{args.retriever} in {args.raw_dir}")

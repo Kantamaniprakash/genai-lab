@@ -13,6 +13,7 @@ from src.metrics import (
     gold_token_set,
     hit_at_k,
     paired_bootstrap,
+    paired_bootstrap_std,
     retrieved_token_set,
     span_scores,
     take_until_budget,
@@ -212,3 +213,53 @@ class TestPairedBootstrap:
     def test_rejects_empty(self):
         with pytest.raises(ValueError):
             paired_bootstrap([], [])
+
+
+class TestPairedBootstrapStd:
+    def test_identical_scores_give_zero_interval(self):
+        scores = [0.2, 0.5, 0.9, 0.4]
+        r = paired_bootstrap_std(scores, scores, n_resamples=200, seed=0)
+        assert r.mean_diff == 0.0
+        assert (r.ci_low, r.ci_high) == (0.0, 0.0)
+        assert not r.significant
+
+    def test_constant_shift_has_zero_std_difference(self):
+        # A level shift changes the mean but not the dispersion: the mean
+        # bootstrap flags it, the std bootstrap must not.
+        a = [0.3, 0.6, 0.9, 0.1, 0.7]
+        b = [x - 0.2 for x in a]
+        r = paired_bootstrap_std(a, b, n_resamples=500, seed=0)
+        assert r.mean_diff == pytest.approx(0.0)
+        assert not r.significant
+
+    def test_point_estimate_matches_sample_stds(self):
+        a = [0.0, 1.0, 0.0, 1.0]  # sum of squared deviations 1.0, ddof=1
+        b = [0.5, 0.5, 0.5, 0.5]  # sample std = 0
+        r = paired_bootstrap_std(a, b, n_resamples=200, seed=0)
+        assert r.mean_diff == pytest.approx((1 / 3) ** 0.5, abs=1e-9)
+
+    def test_wider_scores_give_positive_significant_difference(self):
+        a = [0.0, 1.0] * 10
+        b = [0.5, 0.5] * 10
+        r = paired_bootstrap_std(a, b, n_resamples=2000, seed=1)
+        assert r.mean_diff > 0
+        assert r.significant
+
+    def test_deterministic_given_seed(self):
+        a = [0.1, 0.9, 0.4, 0.7, 0.2, 0.6]
+        b = [0.2, 0.5, 0.5, 0.6, 0.1, 0.9]
+        r1 = paired_bootstrap_std(a, b, n_resamples=500, seed=42)
+        r2 = paired_bootstrap_std(a, b, n_resamples=500, seed=42)
+        assert (r1.mean_diff, r1.ci_low, r1.ci_high) == (
+            r2.mean_diff,
+            r2.ci_low,
+            r2.ci_high,
+        )
+
+    def test_rejects_mismatched_lengths(self):
+        with pytest.raises(ValueError):
+            paired_bootstrap_std([0.1], [0.1, 0.2])
+
+    def test_rejects_fewer_than_two_questions(self):
+        with pytest.raises(ValueError):
+            paired_bootstrap_std([0.1], [0.2])

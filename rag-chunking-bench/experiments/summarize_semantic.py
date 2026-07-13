@@ -29,7 +29,14 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from experiments.aggregate import RunResult, check_aligned, diff_ci, load_raw, mean
+from experiments.aggregate import (
+    BASELINE_SIZES,
+    RunResult,
+    check_aligned,
+    diff_ci,
+    load_raw,
+    mean,
+)
 from experiments.summarize import _table, fmt_diff
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -227,6 +234,7 @@ def main(argv: list[str] | None = None) -> None:
         budget_rule="stop",
         overlap=0,
         seed=args.seed,
+        sizes=BASELINE_SIZES,
     )
     if not results:
         raise SystemExit(f"no results for {args.dataset}/{args.retriever} in {args.raw_dir}")

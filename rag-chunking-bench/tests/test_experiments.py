@@ -17,6 +17,7 @@ from experiments.aggregate import (
     mean_ci,
     sort_key,
 )
+from experiments.calibrate_matched import calibrate
 from experiments.run_grid import (
     GridConfig,
     make_chunker,
@@ -32,6 +33,7 @@ from experiments.summarize import (
 )
 from experiments.summarize_ablations import render_ablations
 from experiments.summarize_chroma import render_moderation
+from experiments.summarize_matched import match_by_realized_size, render_matched
 from experiments.summarize_retrievers import render_retrievers
 from experiments.summarize_seeds import render_seeds
 from experiments.summarize_semantic import render_semantic
@@ -286,6 +288,16 @@ class TestAggregate:
         self._saved_results(tiny_dataset, tmp_path)
         assert load_raw(tmp_path, dataset="other") == []
         assert len(load_raw(tmp_path, retriever="bm25")) == 2
+
+    def test_load_raw_sizes_filter(self, tiny_dataset, tmp_path):
+        dataset, questions = tiny_dataset
+        run_and_save(_config(chunk_size=16), dataset, questions, tmp_path)
+        run_and_save(_config(chunk_size=32), dataset, questions, tmp_path)
+        run_and_save(_config(chunk_size=48), dataset, questions, tmp_path)
+        # Default open: off-grid sizes load unless the caller pins the grid.
+        assert len(load_raw(tmp_path)) == 3
+        pinned = load_raw(tmp_path, sizes=(16, 32))
+        assert [rr.label for rr in pinned] == ["fixed-16", "fixed-32"]
 
     def test_load_raw_budget_rule_and_overlap_filters(self, tiny_dataset, tmp_path):
         dataset, questions = tiny_dataset
@@ -750,3 +762,138 @@ class TestSemanticGridAndSummary:
         run_and_save(_config(chunker="fixed"), dataset, questions, tmp_path)
         with pytest.raises(ValueError, match="no semantic-chunker runs"):
             render_semantic(load_raw(tmp_path))
+
+
+class TestCalibrateMatched:
+    # Twelve sentences of exactly 6 regex tokens each (5 words + period), so
+    # zero-overlap sentence packing at max_tokens m puts floor(m/6) sentences
+    # in every chunk and the realized mean is a step function computable by
+    # hand: m in [6, 11] -> 6.0, [12, 17] -> 12.0, [18, 23] -> 18.0, ...
+    UNIFORM_DOC = " ".join(
+        f"Alpha{i} beta{i} gamma{i} delta{i} epsilon{i}." for i in range(12)
+    )
+
+    def test_finds_exact_target(self):
+        best, achieved = calibrate([self.UNIFORM_DOC], target=18.0, hi=24)
+        assert achieved == pytest.approx(18.0)
+        assert 18 <= best <= 23
+
+    def test_picks_closer_neighbor_below_target(self):
+        # Target 12.5 sits between achievable means 12.0 and 18.0; the
+        # predecessor is closer.
+        best, achieved = calibrate([self.UNIFORM_DOC], target=12.5, hi=24)
+        assert achieved == pytest.approx(12.0)
+        assert 12 <= best <= 17
+
+    def test_unreachable_target_clamps_to_hi(self):
+        best, achieved = calibrate([self.UNIFORM_DOC], target=100.0, hi=24)
+        assert best == 24
+        assert achieved == pytest.approx(24.0)
+
+    def test_realized_mean_monotone_over_range(self):
+        # The binary search's precondition, checked directly on a messy
+        # multi-document corpus with non-uniform sentence lengths.
+        docs = [PARA_ZEBRA + " " + PARA_VOLCANO, PARA_MARKET]
+        means = [calibrate(docs, target=0.1, hi=m)[1] for m in range(8, 64, 5)]
+        assert all(a <= b + 1e-9 for a, b in zip(means, means[1:], strict=False))
+
+
+def _fake_run(chunker: str, size: int, tokens_mean: float) -> RunResult:
+    """Minimal aligned RunResult for pairing tests (2 questions, 1 budget)."""
+    records = tuple(
+        {
+            "qid": f"q{i}",
+            "doc_id": "d",
+            "budgets": {"40": {"recall": 0.5, "precision": 0.1, "iou": 0.1,
+                               "chunks": 1, "tokens": 30}},
+            "hits": {"1": True, "3": True},
+        }
+        for i in range(2)
+    )
+    return RunResult(
+        config={
+            "dataset": "tiny", "chunker": chunker, "chunk_size": size,
+            "overlap": 0, "retriever": "bm25", "budgets": (40,),
+            "hit_ks": (1, 3), "per_doc_cap": 50, "seed": 0,
+            "budget_rule": "stop", "tokenizer": "regex",
+        },
+        meta={},
+        chunk_stats={"n_chunks": 10, "tokens_min": 1, "tokens_median": int(tokens_mean),
+                     "tokens_mean": tokens_mean, "tokens_max": size},
+        records=records,
+    )
+
+
+class TestMatchByRealizedSize:
+    def test_pairs_drifted_run_with_calibrated_partner(self):
+        semantic = _fake_run("semantic", 512, 314.0)
+        nominal = _fake_run("sentence", 512, 475.0)
+        calibrated = _fake_run("sentence", 341, 315.0)
+        pairs = match_by_realized_size([semantic, nominal, calibrated])
+        assert len(pairs) == 1
+        assert pairs[0].nominal is nominal
+        assert pairs[0].matched is calibrated
+        assert pairs[0].well_matched
+
+    def test_already_matched_run_pairs_with_its_nominal_partner(self):
+        semantic = _fake_run("semantic", 64, 46.0)
+        nominal = _fake_run("sentence", 64, 47.6)
+        pairs = match_by_realized_size([semantic, nominal])
+        assert pairs[0].matched is nominal
+        assert pairs[0].well_matched
+
+    def test_distant_nearest_partner_is_flagged(self):
+        semantic = _fake_run("semantic", 512, 314.0)
+        nominal = _fake_run("sentence", 512, 475.0)
+        pairs = match_by_realized_size([semantic, nominal])
+        assert pairs[0].matched is nominal
+        assert not pairs[0].well_matched
+
+    def test_ties_break_to_smaller_nominal_size(self):
+        semantic = _fake_run("semantic", 128, 100.0)
+        lo = _fake_run("sentence", 110, 98.0)
+        hi = _fake_run("sentence", 118, 102.0)
+        nominal = _fake_run("sentence", 128, 109.0)
+        pairs = match_by_realized_size([semantic, nominal, lo, hi])
+        assert pairs[0].matched is lo
+
+    def test_requires_semantic_and_sentence_runs(self):
+        with pytest.raises(ValueError, match="no semantic-chunker runs"):
+            match_by_realized_size([_fake_run("sentence", 64, 50.0)])
+        with pytest.raises(ValueError, match="no sentence-chunker runs"):
+            match_by_realized_size([_fake_run("semantic", 64, 50.0)])
+
+    def test_requires_same_nominal_partner(self):
+        semantic = _fake_run("semantic", 512, 314.0)
+        other = _fake_run("sentence", 341, 315.0)
+        with pytest.raises(ValueError, match="no sentence run at the same"):
+            match_by_realized_size([semantic, other])
+
+
+class TestRenderMatched:
+    @pytest.fixture(autouse=True)
+    def _stub_default_encoder(self, monkeypatch):
+        monkeypatch.setattr("src.dense.default_encoder", lambda: _StubEncoder())
+
+    def test_render_matched(self, tiny_dataset, tmp_path):
+        dataset, questions = tiny_dataset
+        for chunker, size in (("sentence", 24), ("sentence", 32), ("semantic", 32)):
+            run_and_save(
+                _config(chunker=chunker, chunk_size=size), dataset, questions, tmp_path
+            )
+        results = load_raw(tmp_path)
+        text = render_matched(results)
+        assert "# Matched-realized-size comparison — tiny, bm25" in text
+        assert "## Pairings (realized mean chunk size, regex tokens)" in text
+        assert "matched *realized* size" in text
+        assert "## Per-question dispersion at matched *realized* size" in text
+        # The stub encoder never fires a breakpoint, so semantic-32 IS
+        # sentence packing: its realized mean equals sentence-32's and the
+        # realized-size partner is the nominal partner.
+        assert "sentence-32 @" in text
+
+    def test_render_matched_requires_semantic(self, tiny_dataset, tmp_path):
+        dataset, questions = tiny_dataset
+        run_and_save(_config(chunker="sentence"), dataset, questions, tmp_path)
+        with pytest.raises(ValueError, match="no semantic-chunker runs"):
+            render_matched(load_raw(tmp_path))

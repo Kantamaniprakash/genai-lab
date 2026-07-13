@@ -107,6 +107,17 @@ class GridConfig:
         )
 
 
+def load_dataset(name: str, data_dir: Path) -> QADataset:
+    """Load a benchmark dataset by name, downloading its files if absent."""
+    if name == "chroma":
+        download_chroma(data_dir)
+        return load_chroma(data_dir)
+    data_path = data_dir / f"{name}.json"
+    if not data_path.exists():
+        download_squad(data_dir)
+    return load_squad(data_path, name=name)
+
+
 def make_tokenizer(name: str) -> Tokenizer:
     if name == "regex":
         return RegexWordTokenizer()
@@ -371,14 +382,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
-    if args.dataset == "chroma":
-        download_chroma(ROOT / "data")
-        dataset = load_chroma(ROOT / "data")
-    else:
-        data_path = ROOT / "data" / f"{args.dataset}.json"
-        if not data_path.exists():
-            download_squad(ROOT / "data")
-        dataset = load_squad(data_path, name=args.dataset)
+    dataset = load_dataset(args.dataset, ROOT / "data")
     questions = sample_questions(dataset, args.per_doc_cap, args.seed)
     configs = [
         GridConfig(

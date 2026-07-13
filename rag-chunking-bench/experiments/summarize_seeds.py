@@ -23,7 +23,15 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from experiments.aggregate import RunResult, check_aligned, diff_ci, load_raw, mean
+from experiments.aggregate import (
+    BASELINE_SIZES,
+    STRUCTURAL_CHUNKERS,
+    RunResult,
+    check_aligned,
+    diff_ci,
+    load_raw,
+    mean,
+)
 from experiments.summarize import _table, fmt_diff
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -39,7 +47,12 @@ HEADLINE_PAIRS = (
 
 
 def _load_seed_grids(
-    raw_dir: Path, dataset: str, retriever: str, seeds: list[int]
+    raw_dir: Path,
+    dataset: str,
+    retriever: str,
+    seeds: list[int],
+    sizes: tuple[int, ...] | None = None,
+    chunkers: tuple[str, ...] | None = None,
 ) -> dict[int, list[RunResult]]:
     grids: dict[int, list[RunResult]] = {}
     for seed in seeds:
@@ -50,6 +63,8 @@ def _load_seed_grids(
             budget_rule="stop",
             overlap=0,
             seed=seed,
+            sizes=sizes,
+            chunkers=chunkers,
         )
         if not runs:
             raise SystemExit(
@@ -65,9 +80,17 @@ def _load_seed_grids(
 
 
 def render_seeds(
-    dataset: str, retriever: str, seeds: list[int], raw_dir: Path, budget: int = 400
+    dataset: str,
+    retriever: str,
+    seeds: list[int],
+    raw_dir: Path,
+    budget: int = 400,
+    sizes: tuple[int, ...] | None = None,
+    chunkers: tuple[str, ...] | None = None,
 ) -> str:
-    grids = _load_seed_grids(raw_dir, dataset, retriever, seeds)
+    grids = _load_seed_grids(
+        raw_dir, dataset, retriever, seeds, sizes=sizes, chunkers=chunkers
+    )
     first = grids[seeds[0]]
     labels = [rr.label for rr in first]
     cfg = first[0].config
@@ -147,7 +170,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
-    text = render_seeds(args.dataset, args.retriever, args.seeds, args.raw_dir, args.budget)
+    text = render_seeds(
+        args.dataset,
+        args.retriever,
+        args.seeds,
+        args.raw_dir,
+        args.budget,
+        sizes=BASELINE_SIZES,
+        chunkers=STRUCTURAL_CHUNKERS,
+    )
     out = args.out_dir / f"summary_{args.dataset}_{args.retriever}_seeds.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text + "\n", encoding="utf-8")

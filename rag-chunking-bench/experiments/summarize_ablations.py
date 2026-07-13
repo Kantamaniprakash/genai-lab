@@ -27,7 +27,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from experiments.aggregate import RunResult, diff_ci, load_raw, mean
+from experiments.aggregate import BASELINE_SIZES, RunResult, diff_ci, load_raw, mean
 from experiments.summarize import _table, fmt_diff
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -234,10 +234,19 @@ def render_rule_section(
 
 
 def render_ablations(
-    dataset: str, retriever: str, raw_dir: Path, seed: int = 0
+    dataset: str,
+    retriever: str,
+    raw_dir: Path,
+    seed: int = 0,
+    sizes: tuple[int, ...] | None = None,
 ) -> str:
     stop_all = load_raw(
-        raw_dir, dataset=dataset, retriever=retriever, budget_rule="stop", seed=seed
+        raw_dir,
+        dataset=dataset,
+        retriever=retriever,
+        budget_rule="stop",
+        seed=seed,
+        sizes=sizes,
     )
     overlap_runs = [rr for rr in stop_all if rr.config["overlap"] > 0]
     baselines = {
@@ -252,6 +261,7 @@ def render_ablations(
         budget_rule="truncate",
         overlap=0,
         seed=seed,
+        sizes=sizes,
     )
     stop_runs = {_key(rr): rr for rr in stop_all if rr.config["overlap"] == 0}
     if not overlap_runs and not trunc_runs:
@@ -296,7 +306,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
-    text = render_ablations(args.dataset, args.retriever, args.raw_dir, seed=args.seed)
+    text = render_ablations(
+        args.dataset, args.retriever, args.raw_dir, seed=args.seed, sizes=BASELINE_SIZES
+    )
     out = args.out_dir / f"summary_{args.dataset}_{args.retriever}_ablations.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text + "\n", encoding="utf-8")

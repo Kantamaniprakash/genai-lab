@@ -24,7 +24,14 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.ticker import ScalarFormatter
 
-from experiments.aggregate import RunResult, check_aligned, diff_ci, load_raw, mean_ci
+from experiments.aggregate import (
+    BASELINE_SIZES,
+    RunResult,
+    check_aligned,
+    diff_ci,
+    load_raw,
+    mean_ci,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -854,6 +861,101 @@ def fig_semantic_comparison(results: list[RunResult], out: Path) -> None:
     plt.close(fig)
 
 
+def fig_matched_realized(pairs_by_dataset: dict, out: Path) -> None:
+    """The finding-20 test: do semantic deltas survive realized-size matching?
+
+    One panel per (dataset, semantic nominal size) whose sentence partner
+    drifts: each shows the paired ΔSpanRecall (semantic − sentence) against
+    budget under two pairings — the sentence run at the same *nominal* size
+    (grey; realized-size drift included) and the sentence run calibrated to
+    the same *realized* mean size (purple; drift controlled). Under the
+    size-drift account the purple series hugs zero everywhere the grey one
+    departs from it; a purple departure would be a genuine boundary effect.
+
+    ``pairs_by_dataset`` maps dataset name to the ``MatchedPair`` list from
+    ``experiments.summarize_matched.match_by_realized_size``.
+    """
+    panels = [
+        (dataset, pair)
+        for dataset, pairs in pairs_by_dataset.items()
+        for pair in pairs
+        if pair.matched is not pair.nominal and pair.well_matched
+    ]
+    if not panels:
+        raise ValueError("no well-matched drifted pairs to plot")
+    n_rows = len(pairs_by_dataset)
+    n_cols = max(
+        sum(1 for d, _ in panels if d == dataset) for dataset in pairs_by_dataset
+    )
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=(3.2 * n_cols, 2.9 * n_rows),
+        sharey=True,
+        squeeze=False,
+    )
+    styles = {
+        "nominal": (INK_MUTED, "o", "vs sentence at same nominal size"),
+        "realized": ("#9a5bd2", "D", "vs sentence at same realized size"),
+    }
+    for row, dataset in enumerate(pairs_by_dataset):
+        row_panels = [pair for d, pair in panels if d == dataset]
+        for col in range(n_cols):
+            ax = axes[row][col]
+            if col >= len(row_panels):
+                ax.set_visible(False)
+                continue
+            pair = row_panels[col]
+            budgets = [int(b) for b in pair.semantic.config["budgets"]]
+            for kind, partner in (("nominal", pair.nominal), ("realized", pair.matched)):
+                color, marker, label = styles[kind]
+                cis = [
+                    diff_ci(
+                        pair.semantic.metric("recall", b), partner.metric("recall", b)
+                    )
+                    for b in budgets
+                ]
+                ax.fill_between(
+                    budgets,
+                    [c.ci_low for c in cis],
+                    [c.ci_high for c in cis],
+                    color=color,
+                    alpha=0.16,
+                    linewidth=0,
+                )
+                ax.plot(
+                    budgets,
+                    [c.mean_diff for c in cis],
+                    color=color,
+                    marker=marker,
+                    markersize=4,
+                    linewidth=1.6,
+                    label=label,
+                )
+            ax.axhline(0, color=AXIS, linewidth=0.8)
+            _log2_axis(ax, budgets, "budget B (tokens, log scale)" if row == n_rows - 1 else "")
+            sem = pair.semantic.chunk_stats["tokens_mean"]
+            ax.set_title(
+                f"{dataset} · {pair.semantic.label} (realized {sem:.0f})\n"
+                f"{pair.nominal.label} @ {pair.nominal.chunk_stats['tokens_mean']:.0f}"
+                f"  vs  {pair.matched.label} @ "
+                f"{pair.matched.chunk_stats['tokens_mean']:.0f}",
+                fontsize=8.5,
+            )
+            if col == 0:
+                ax.set_ylabel("ΔSpanRecall, semantic − sentence")
+    handles, labels = axes[0][0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", ncol=2, bbox_to_anchor=(0.5, -0.02))
+    fig.suptitle(
+        "Semantic-chunker deltas under nominal-size vs realized-size matching",
+        fontsize=11,
+        y=1.0,
+    )
+    fig.tight_layout(rect=(0, 0.04, 1, 0.99))
+    fig.savefig(out, bbox_inches="tight")
+    plt.close(fig)
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Render README figures from raw results.",
@@ -877,6 +979,7 @@ def main(argv: list[str] | None = None) -> None:
         budget_rule="stop",
         overlap=0,
         seed=args.seed,
+        sizes=BASELINE_SIZES,
     )
     if not baseline:
         raise SystemExit(f"no results for {args.dataset}/{args.retriever} in {args.raw_dir}")
@@ -896,6 +999,7 @@ def main(argv: list[str] | None = None) -> None:
         retriever=args.retriever,
         budget_rule="stop",
         seed=args.seed,
+        sizes=BASELINE_SIZES,
     )
     if any(rr.config["overlap"] > 0 for rr in stop_all):
         check_aligned(stop_all)
@@ -910,6 +1014,7 @@ def main(argv: list[str] | None = None) -> None:
         budget_rule="truncate",
         overlap=0,
         seed=args.seed,
+        sizes=BASELINE_SIZES,
     )
     if trunc:
         check_aligned(baseline + trunc)
@@ -925,6 +1030,7 @@ def main(argv: list[str] | None = None) -> None:
         overlap=0,
         seed=args.seed,
         tokenizer="cl100k",
+        sizes=BASELINE_SIZES,
     )
     if bpe:
         # Units differ, questions must not: the two grids score the same
@@ -943,7 +1049,7 @@ def main(argv: list[str] | None = None) -> None:
     for name in RETRIEVER_STYLES:
         runs = load_raw(
             args.raw_dir, dataset=args.dataset, retriever=name,
-            budget_rule="stop", overlap=0, seed=args.seed,
+            budget_rule="stop", overlap=0, seed=args.seed, sizes=BASELINE_SIZES,
         )
         if runs:
             by_retriever[name] = runs
@@ -972,7 +1078,7 @@ def main(argv: list[str] | None = None) -> None:
     for label, (dataset, retriever) in crossover_inputs.items():
         runs = load_raw(
             args.raw_dir, dataset=dataset, retriever=retriever,
-            budget_rule="stop", overlap=0, seed=args.seed,
+            budget_rule="stop", overlap=0, seed=args.seed, sizes=BASELINE_SIZES,
         )
         if runs:
             check_aligned(runs)
@@ -986,6 +1092,37 @@ def main(argv: list[str] | None = None) -> None:
         crossover = args.out_dir / "gold_length_crossover.png"
         fig_gold_length_crossover(runs_by_line, gold_stats(args.data_dir), crossover)
         written.append(crossover)
+
+    # The matched-realized-size figure also spans datasets and additionally
+    # needs the calibrated off-grid sentence runs, so it renders only when a
+    # drifted pair has its calibrated partner on disk — independently of
+    # --dataset.
+    from experiments.summarize_matched import match_by_realized_size
+
+    pairs_by_dataset = {}
+    for dataset in ("dev-v1.1", "chroma"):
+        runs = [
+            rr
+            for rr in load_raw(
+                args.raw_dir, dataset=dataset, retriever=args.retriever,
+                budget_rule="stop", overlap=0, seed=args.seed,
+            )
+            if rr.config["chunker"] in ("sentence", "semantic")
+        ]
+        if not any(rr.config["chunker"] == "semantic" for rr in runs):
+            continue
+        check_aligned(runs)
+        pairs = match_by_realized_size(runs)
+        # Only render pairings whose realized means genuinely coincide: with
+        # no calibrated runs on disk the nearest sentence run is a canonical
+        # size a whole size-step away, and plotting it would reintroduce the
+        # very size confound the figure exists to remove.
+        if any(p.matched is not p.nominal and p.well_matched for p in pairs):
+            pairs_by_dataset[dataset] = pairs
+    if pairs_by_dataset:
+        matched = args.out_dir / f"matched_realized_{args.retriever}.png"
+        fig_matched_realized(pairs_by_dataset, matched)
+        written.append(matched)
 
     for path in written:
         print(f"wrote {path.relative_to(ROOT)}")

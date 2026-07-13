@@ -25,6 +25,8 @@ import argparse
 from pathlib import Path
 
 from experiments.aggregate import (
+    BASELINE_SIZES,
+    STRUCTURAL_CHUNKERS,
     RunResult,
     check_aligned,
     diff_ci,
@@ -48,7 +50,13 @@ HEADLINE_PAIRS = (
 
 
 def _load_unit_grids(
-    raw_dir: Path, dataset: str, retriever: str, seed: int, tokenizers: list[str]
+    raw_dir: Path,
+    dataset: str,
+    retriever: str,
+    seed: int,
+    tokenizers: list[str],
+    sizes: tuple[int, ...] | None = None,
+    chunkers: tuple[str, ...] | None = None,
 ) -> dict[str, dict[tuple[str, int], RunResult]]:
     """One baseline grid per token unit, keyed by (chunker, chunk_size).
 
@@ -65,6 +73,8 @@ def _load_unit_grids(
             overlap=0,
             seed=seed,
             tokenizer=tok,
+            sizes=sizes,
+            chunkers=chunkers,
         )
         if not runs:
             raise SystemExit(
@@ -108,9 +118,13 @@ def render_tokenizers(
     raw_dir: Path,
     tokenizers: list[str] | None = None,
     hit_k: int = 5,
+    sizes: tuple[int, ...] | None = None,
+    chunkers: tuple[str, ...] | None = None,
 ) -> str:
     tokenizers = tokenizers or ["regex", "cl100k"]
-    grids = _load_unit_grids(raw_dir, dataset, retriever, seed, tokenizers)
+    grids = _load_unit_grids(
+        raw_dir, dataset, retriever, seed, tokenizers, sizes=sizes, chunkers=chunkers
+    )
     points = sorted(grids[tokenizers[0]], key=lambda p: (p[0] != "fixed", p))
     any_run = next(iter(grids[tokenizers[0]].values()))
     budgets = [int(b) for b in any_run.config["budgets"]]
@@ -273,7 +287,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     text = render_tokenizers(
-        args.dataset, args.retriever, args.seed, args.raw_dir, args.tokenizers, args.hit_k
+        args.dataset,
+        args.retriever,
+        args.seed,
+        args.raw_dir,
+        args.tokenizers,
+        args.hit_k,
+        sizes=BASELINE_SIZES,
+        chunkers=STRUCTURAL_CHUNKERS,
     )
     out = args.out_dir / f"summary_{args.dataset}_{args.retriever}_tokenizers.md"
     out.parent.mkdir(parents=True, exist_ok=True)

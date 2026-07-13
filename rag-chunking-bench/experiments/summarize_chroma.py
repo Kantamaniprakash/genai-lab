@@ -27,7 +27,13 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from experiments.aggregate import RunResult, check_aligned, diff_ci, load_raw
+from experiments.aggregate import (
+    BASELINE_SIZES,
+    RunResult,
+    check_aligned,
+    diff_ci,
+    load_raw,
+)
 from experiments.summarize import _table, find_baseline, fmt_diff
 from src.data import CHROMA_CORPORA, load_chroma
 from src.tokenization import RegexWordTokenizer, TokenIndex
@@ -261,6 +267,7 @@ def main(argv: list[str] | None = None) -> None:
         budget_rule="stop",
         overlap=0,
         seed=args.seed,
+        sizes=BASELINE_SIZES,
     )
     if not results:
         raise SystemExit(f"no results for chroma/{args.retriever} in {args.raw_dir}")

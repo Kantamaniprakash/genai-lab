@@ -15,6 +15,7 @@ import argparse
 from pathlib import Path
 
 from experiments.aggregate import (
+    BASELINE_SIZES,
     RunResult,
     check_aligned,
     diff_ci,
@@ -206,6 +207,7 @@ def main(argv: list[str] | None = None) -> None:
         budget_rule="stop",
         overlap=0,
         seed=args.seed,
+        sizes=BASELINE_SIZES,
     )
     if not results:
         raise SystemExit(f"no results for {args.dataset}/{args.retriever} in {args.raw_dir}")
