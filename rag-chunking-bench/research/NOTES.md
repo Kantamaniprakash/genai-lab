@@ -1048,3 +1048,126 @@ placed (recorded in stats; chatlogs/finance have paragraph-length
   1 — the paired per-question diffs are already on disk.)
 - Overlap-delta tercile split on chroma (day-8 carry).
 - 512-window encoder ablation (day-6 carry).
+
+---
+
+## 2026-07-13 — Day 12: matched-realized-size protocol — findings 22–23: the semantic wins vanish, and matched means prove insufficient
+
+### Repo state note
+
+Local clone was on a detached HEAD equal to origin/main with a stale local
+`main`; reattached and fast-forwarded before starting (no content change).
+
+### Built (committed e07218a BEFORE any grid ran, per house rule)
+
+- `experiments/calibrate_matched.py` — for each semantic run on disk, binary
+  search for the sentence `max_tokens` whose corpus-wide realized mean
+  matches the semantic run's. The search is *exact*, not heuristic: under
+  zero overlap chunks cover every token once, so realized mean = total
+  tokens / n_chunks, and greedy packing never produces more chunks at a
+  larger budget — realized mean is a nondecreasing step function of
+  max_tokens (argument in the module docstring). Calibration is
+  chunking-only (no retrieval), ~seconds per target with a per-size cache.
+- `experiments/summarize_matched.py` — pairs every semantic run with (a) its
+  same-nominal sentence partner and (b) the sentence run nearest in realized
+  mean (`match_by_realized_size`; ties to smaller nominal; pairs with >5%
+  relative gap are rendered but flagged). Renders both pairings side by
+  side, plus hit@k and a per-question dispersion section.
+- `metrics.paired_bootstrap_std` — jointly-resampled percentile CI for
+  std(A) − std(B), for the day-11 open question ("do breakpoints at least
+  reduce per-question variance?"). Same index resampling on both sides so
+  shared question difficulty cancels.
+- **`load_raw` grew `sizes` and `chunkers` filters** — off-grid calibrated
+  sizes must not leak into canonical tables, and figures index a full
+  (chunker, size) grid that off-grid files would KeyError. Every
+  canonical-grid entry point now pins `BASELINE_SIZES`; the cross-grid
+  summarizers (retrievers / seeds / tokenizers) additionally pin
+  `STRUCTURAL_CHUNKERS`, which ALSO fixed a latent day-11 regression: the
+  semantic grid exists only for BM25/seed-0/regex, so those summarizers'
+  same-grid checks had refused to regenerate since it landed (nobody had
+  rerun them). All 17 committed summaries and all 15 locally-generated PNGs
+  verified bit-identical after the refactor.
+- `fig_matched_realized` — 2×4 panels (dataset × nominal size), three series
+  per panel: Δ vs nominal partner (stop), Δ vs realized partner (stop), Δ vs
+  realized partner (truncate). Only renders well-matched drifted pairs.
+- Discovery while verifying: `assets/hero_spanrecall_dev-v1.1_bm25.png` is
+  NOT locally reproducible byte-for-byte — it was rendered in the Tier 2 PR's
+  environment. Local renders are deterministic (two runs hash-identical) and
+  visually identical to the committed file; left the committed file
+  untouched. Every figure generated in THIS environment reproduces exactly.
+- Tests 327 → **347** (std bootstrap incl. level-shift null; calibration on
+  a hand-computable uniform-sentence corpus + monotonicity property; pairing
+  incl. tie-break and flag; renderer; loader filters).
+
+### Ran (32 configs total, all BM25: 8 calibrated-sentence stop + 8 semantic truncate + 8 calibrated-sentence truncate + summaries under both rules)
+
+Calibrated sizes — SQuAD: 63/118/211/339 for semantic nominal 64/128/256/512
+(realized gaps 0.85/0.37/0.00/0.10%); chroma: 62/118/210/353 (0.15/0.21/
+0.18/0.10%). sentence-211 hits semantic-256's realized 190.34 *exactly*.
+
+### Findings (README §22–23)
+
+1. **Finding 22 — at matched realized size the semantic chunker gains
+   nothing anywhere, and its long-gold penalty survives full size
+   control.** The artifact-free cells (budget-free hit@k; truncate-rule
+   recall at B ≫ chunk size) are uniformly null: 24/24 realized-matched
+   hit@k cells (one graze +0.007), all SQuAD truncate B=1600 cells |Δ| ≤
+   0.007, and the dispersion bootstrap shows no consistency benefit (day-11
+   open question closed, answer no). What survives is finding 21's
+   NEGATIVE: chroma semantic-512 vs sentence-353 at B=1600 is −0.042*
+   (stop) / **−0.038 [−0.065, −0.011]** (truncate) — breakpoints measurably
+   fragment long evidence. Verdict upgraded from "no detectable gain" to
+   "no gain anywhere, real penalty in the regime semantic chunking is
+   marketed for."
+2. **Finding 23 — matched mean ≠ matched distribution; the stop rule
+   converts residual dispersion into ±0.5 deltas.** Calibration equalizes
+   means exactly (SQuAD: 314.3 vs 314.0, 961 vs 962 chunks) but semantic
+   mixes breakpoint-shortened segments with budget-filled 512-token chunks
+   (max 512 vs sentence's cap 339). Under stop, whichever side's top chunk
+   exceeds B retrieves nothing: at B=400 semantic-512 spends 77 tokens
+   mean (0.34 chunks — 2/3 of questions retrieve NOTHING) vs sentence-339's
+   321 (exactly 1.00) → Δ = −0.533 [−0.554, −0.511]; at B=200 the artifact
+   flips to +0.068 because the narrow distribution is now the one that
+   never fits. Truncate deletes the boundary artifact; what remains is a
+   real tight-budget dispersion penalty — same spend, fewer distinct
+   regions (1.34 vs 2.00 chunks at B=400, −0.103) — fading to null by
+   B=1600. Methodological rule added to finding 4: compare realized
+   *distributions* or evaluate under truncate at B ≫ max chunk;
+   matched-mean comparisons can manufacture arbitrarily large effects in
+   either direction.
+
+### Process notes
+
+- The stop-rule matched table looked catastrophic at first read (−0.533 in
+  a "controlled" comparison); the `chunks`/`tokens` utilization fields
+  stored since day 3 resolved it in minutes without rerunning anything —
+  third time the instrument-the-bottleneck rule has paid off (LSA ranks
+  day 5, encoder exposure day 6).
+- hit@k is identical under both budget rules (ranking never consults the
+  budget), which makes it the cleanest boundary-quality metric in the
+  matched protocol — worth remembering for any future chunker comparison.
+- 3-series figure needed the light/dark purple split (stop vs truncate at
+  matched realized) — reusing the semantic family color for both rules with
+  different markers read as one series at small sizes.
+
+### Next steps (Day 13, in order)
+
+1. **Per-corpus error analysis** (last phase-3 item): per-corpus × gold-
+   tercile interaction table for chroma (day-7 carry; `chatlogs` the
+   suggestive case) + a look at the questions where fixed-64 loses hardest
+   at B=1600 — is it always multi-reference long-gold questions?
+2. Consider whether the truncate × overlap cross (day-8 carry) is still
+   worth a run before the writeup phase, or gets recorded as
+   deliberately-unrun in limitations.
+3. Then phase 4: the full-writeup pass (README is already section-complete;
+   the writeup phase is coherence editing, a results-navigation table up
+   top, and a proper limitations sweep).
+
+### Open questions (carried)
+
+- Overlap-delta tercile split on chroma (day-8 carry).
+- 512-window encoder ablation (day-6 carry) — likely limitations material
+  rather than a run, decide during writeup.
+- Cluster-variant semantic chunker and non-95 percentiles: recorded as
+  untested in README §21; a `--percentile` ablation is one GridConfig field
+  away if ever needed (day-11 note).

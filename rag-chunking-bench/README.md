@@ -35,8 +35,12 @@ advantage inverts at generous budgets (findings 13–14); the effects
 replicate across four retriever families, three sampling seeds, both
 budget-boundary rules, and two token units (regex word vs. cl100k_base BPE);
 and the popular percentile *semantic* chunker, once budget-matched and
-realized-size-accounted, shows no boundary-quality gain over cheap regex
-sentence packing — its apparent wins are chunk-size drift (findings 20–21).
+compared at matched *realized* size, shows no boundary-quality gain over
+cheap regex sentence packing anywhere — its apparent wins are chunk-size
+drift, and on long-gold corpora it retains a measurable penalty (findings
+20–22); the matched-size protocol itself turns out to need care, because
+realized-size *dispersion* interacts with the budget rule strongly enough
+to manufacture ±0.5 recall deltas at matched means (finding 23).
 
 ## Motivation
 
@@ -755,7 +759,8 @@ retrieval tasks; the budget-matched paired protocol here adds the
 size-drift account passes. The honest open question it leaves: a protocol
 that matches *realized* (not nominal) size distributions would test
 boundary quality directly, and the cluster variant and other thresholds
-remain untested.
+remain untested. (The next section runs exactly that protocol — findings
+22–23.)
 
 ![Semantic vs sentence, SQuAD](results/figures/semantic_comparison_dev-v1.1_bm25.png)
 
@@ -770,6 +775,81 @@ green, and vanish at nominal 64 where the two coincide.*
 "wins" persist (size drift again), but at B=1600 / nominal 256 the delta
 turns significantly negative — smaller-realized chunks are a liability
 exactly where finding 13 says larger evidence needs larger chunks.*
+
+### Matched realized size: the semantic wins vanish, and matched means prove insufficient
+
+Finding 20 left a protocol on the table: if the semantic chunker's
+matched-nominal wins are realized-size drift, compare it against sentence
+packing at matched **realized** size and the wins should vanish.
+`experiments/calibrate_matched.py` binary-searches the sentence
+`max_tokens` whose corpus-wide realized mean equals each semantic run's
+(exact, by a monotonicity argument in the module docstring; chunking only,
+no retrieval). The calibration is sharp — relative gaps of 0.0–0.9%
+across all eight cells, e.g. sentence-211 realizes 190.34 tokens on SQuAD
+against semantic-256's 190.34 — and the calibrated grids ran under both
+budget rules on both datasets. Full tables:
+[`results/summary_dev-v1.1_bm25_matched.md`](results/summary_dev-v1.1_bm25_matched.md),
+[`results/summary_chroma_bm25_matched.md`](results/summary_chroma_bm25_matched.md),
+and the `_truncate` variants alongside them.
+
+**22. At matched realized size the semantic chunker gains nothing anywhere
+— and its long-gold penalty survives full size control.** The clean cells
+are the ones no budget-boundary artifact can reach: ranking metrics, which
+never consult a budget, and truncate-rule recall at budgets well above the
+largest chunk. Both return the same verdict. All 24 realized-matched
+hit@k cells are null but one graze (SQuAD-256 hit@5, +0.007 [+0.000,
++0.014]); no cell shows the ranking gain that would justify an embedding
+pass over the corpus. Truncate-rule recall at B=1600 is null on SQuAD at
+every size (|Δ| ≤ 0.007), and the per-question dispersion bootstrap
+(std(semantic) − std(sentence), jointly resampled) finds no consistency
+benefit either — closing the day-11 open question. The one thing that
+does survive realized-size matching is the *negative* from finding 21: on
+Chroma's sentence-scale golds at B=1600, semantic-512 loses to its
+realized-matched partner under both budget rules (**−0.042 [−0.072,
+−0.013]** stop, **−0.038 [−0.065, −0.011]** truncate). Breakpoints do not
+merely fail to help long-gold retrieval — they measurably fragment it,
+exactly as the finding-14 tercile mechanism predicts for evidence that
+straddles a topic-shift boundary. The finding-21 verdict upgrades: the
+percentile chunker buys a smaller chunk size, no boundary-quality gain
+anywhere, and a real penalty precisely in the regime (long evidence,
+generous budgets) where practitioners reach for semantic chunking.
+
+**23. Matching the realized mean is not matching the realized
+distribution — under stop-rule budgeting the residual dispersion
+manufactures deltas up to ±0.5.** Calibration equalizes the mean (SQuAD:
+314 tokens on both sides, 961 vs. 962 chunks) but not the shape: semantic-512
+mixes breakpoint-shortened segments with budget-filled chunks (max 512),
+while calibrated sentence-339 packs tightly under its cap (max 339). Under
+stop-before-exceed, whichever side's top-ranked chunk exceeds the
+remaining budget retrieves *nothing* — so at B=400 semantic-512 spends 77
+tokens on average (0.34 chunks; two thirds of questions retrieve nothing)
+against sentence-339's 321 (exactly 1.00 chunks), and the "size-controlled"
+delta reads **−0.533 [−0.554, −0.511]**; at B=200 the artifact flips sign
+(**+0.068**) because now the narrow distribution is the one that never
+fits. The truncate rule deletes the boundary artifact (both sides spend
+exactly B) and the swings collapse roughly five-fold, but a genuine
+dispersion penalty remains at tight budgets: the wide distribution
+concentrates the same budget into fewer distinct document regions (1.34
+vs. 2.00 chunks at B=400) — **−0.103 [−0.120, −0.085]** on SQuAD, fading
+monotonically to null by B=1600. The methodological rule this adds to
+finding 4: *matched mean chunk size* is still not a controlled chunker
+comparison. Compare realized **distributions**, or evaluate under a
+truncate-style rule at budgets well above the largest chunk — otherwise
+the budget boundary converts distribution shape into recall deltas of
+either sign, large enough to dwarf every real effect in this benchmark.
+
+![Nominal- vs realized-size matching](results/figures/matched_realized_bm25.png)
+
+*Δ(semantic − sentence) SpanRecall by budget under three pairings; rows:
+SQuAD, Chroma; columns: nominal 64–512. Grey: same nominal size (stop) —
+finding 20's drift-confounded comparison. Light purple: same realized mean,
+still stop rule — the mean is controlled but the budget boundary turns the
+remaining dispersion difference into ±0.5 swings (finding 23). Dark purple:
+same realized mean under truncate — the artifact gone, a tight-budget
+dispersion penalty fades to null everywhere except Chroma's
+long-gold 512 cell, the surviving boundary-fragmentation effect
+(finding 22). At nominal 64, where drift never existed, all three
+pairings agree on zero.*
 
 ## Status
 
@@ -799,7 +879,10 @@ exactly where finding 13 says larger evidence needs larger chunks.*
 - [x] Phase 3: semantic (embedding-breakpoint) chunker with
       segmentation-exposure stats, SQuAD + Chroma grids (8 configs) —
       findings 20–21 (327 tests)
-- [ ] Phase 3: per-corpus error analysis; matched-realized-size protocol
+- [x] Phase 3: matched-realized-size protocol — calibration script,
+      calibrated sentence grids under both budget rules (24 configs),
+      matched summary with dispersion bootstrap — findings 22–23 (347 tests)
+- [ ] Phase 3: per-corpus error analysis
 - [ ] Phase 4: full writeup
 
 Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).

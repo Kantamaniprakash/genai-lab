@@ -45,7 +45,12 @@ wiring the unit in exposed and fixed two containment-vs-overlap chunker
 bugs — finding 19; semantic chunker 2026-07-12: the percentile
 embedding-breakpoint chunker's matched-nominal-size wins are realized-size
 drift — null where realized sizes coincide, sign-flipped on long golds at
-generous budgets, no systematic ranking gains — findings 20–21).
+generous budgets, no systematic ranking gains — findings 20–21;
+matched-realized-size protocol 2026-07-13: at matched realized size the
+semantic chunker gains nothing anywhere and its long-gold penalty
+survives, while matched *means* prove insufficient — realized-size
+dispersion × the stop rule manufactures ±0.5 deltas, truncate at
+B ≫ chunk size is the honest regime — findings 22–23).
 
 1. **Harness** — offset-preserving chunkers, tokenization, span-level metrics,
    budget-matched retrieval protocol, dataset loaders. *(done — SQuAD +
@@ -59,7 +64,8 @@ generous budgets, no systematic ranking gains — findings 20–21).
    *(done, BM25)*, gold-length moderation *(done — finding 14)*, corpus
    jackknife *(done — finding 18)*, BPE tokenizer robustness *(done —
    finding 19)*, semantic vs. structural chunking *(done — findings
-   20–21)*, matched-realized-size protocol, per-corpus error analysis.
+   20–21)*, matched-realized-size protocol *(done — findings 22–23)*,
+   per-corpus error analysis.
 4. **Writeup** — README as a full research report with real tables and limitations.
 
 **Environment constraints (recorded so results are honest).** CPU-only (4 cores,

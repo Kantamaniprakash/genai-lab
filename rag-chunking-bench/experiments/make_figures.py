@@ -865,20 +865,26 @@ def fig_matched_realized(pairs_by_dataset: dict, out: Path) -> None:
     """The finding-20 test: do semantic deltas survive realized-size matching?
 
     One panel per (dataset, semantic nominal size) whose sentence partner
-    drifts: each shows the paired ΔSpanRecall (semantic − sentence) against
-    budget under two pairings — the sentence run at the same *nominal* size
-    (grey; realized-size drift included) and the sentence run calibrated to
-    the same *realized* mean size (purple; drift controlled). Under the
-    size-drift account the purple series hugs zero everywhere the grey one
-    departs from it; a purple departure would be a genuine boundary effect.
+    drifts; each shows the paired ΔSpanRecall (semantic − sentence) against
+    budget under three pairings. Grey: the sentence run at the same *nominal*
+    size under the stop rule — the naive comparison, drift included. Light
+    purple: the sentence run calibrated to the same *realized* mean, still
+    under the stop rule — the mean is controlled, but the semantic side's
+    wider realized-size distribution interacts with the budget boundary
+    (whichever side's top chunk exceeds the remaining budget retrieves
+    nothing), so the artifact swings both ways. Dark purple: the same
+    realized-matched pairing under the truncate rule, which removes the
+    boundary artifact — what remains is the dispersion penalty at tight
+    budgets and, on long golds, a persistent negative at generous ones.
 
-    ``pairs_by_dataset`` maps dataset name to the ``MatchedPair`` list from
-    ``experiments.summarize_matched.match_by_realized_size``.
+    ``pairs_by_dataset`` maps dataset name to ``{"stop": [MatchedPair, ...],
+    "truncate": [...]}`` from ``summarize_matched.match_by_realized_size``;
+    panels require the same nominal sizes present under both rules.
     """
     panels = [
         (dataset, pair)
-        for dataset, pairs in pairs_by_dataset.items()
-        for pair in pairs
+        for dataset, by_rule in pairs_by_dataset.items()
+        for pair in by_rule["stop"]
         if pair.matched is not pair.nominal and pair.well_matched
     ]
     if not panels:
@@ -890,15 +896,20 @@ def fig_matched_realized(pairs_by_dataset: dict, out: Path) -> None:
     fig, axes = plt.subplots(
         n_rows,
         n_cols,
-        figsize=(3.2 * n_cols, 2.9 * n_rows),
-        sharey=True,
+        figsize=(3.3 * n_cols, 3.0 * n_rows),
+        sharey="row",
         squeeze=False,
     )
-    styles = {
-        "nominal": (INK_MUTED, "o", "vs sentence at same nominal size"),
-        "realized": ("#9a5bd2", "D", "vs sentence at same realized size"),
-    }
+    series = (
+        ("nominal", "stop", INK_MUTED, "o", "same nominal size (stop rule)"),
+        ("realized", "stop", "#c39be0", "D", "same realized size (stop rule)"),
+        ("realized", "truncate", "#7b3fbf", "s", "same realized size (truncate rule)"),
+    )
     for row, dataset in enumerate(pairs_by_dataset):
+        by_rule = pairs_by_dataset[dataset]
+        trunc_by_size = {
+            p.semantic.config["chunk_size"]: p for p in by_rule["truncate"]
+        }
         row_panels = [pair for d, pair in panels if d == dataset]
         for col in range(n_cols):
             ax = axes[row][col]
@@ -906,12 +917,14 @@ def fig_matched_realized(pairs_by_dataset: dict, out: Path) -> None:
                 ax.set_visible(False)
                 continue
             pair = row_panels[col]
+            trunc_pair = trunc_by_size[pair.semantic.config["chunk_size"]]
             budgets = [int(b) for b in pair.semantic.config["budgets"]]
-            for kind, partner in (("nominal", pair.nominal), ("realized", pair.matched)):
-                color, marker, label = styles[kind]
+            for which, rule, color, marker, label in series:
+                src = pair if rule == "stop" else trunc_pair
+                partner = src.nominal if which == "nominal" else src.matched
                 cis = [
                     diff_ci(
-                        pair.semantic.metric("recall", b), partner.metric("recall", b)
+                        src.semantic.metric("recall", b), partner.metric("recall", b)
                     )
                     for b in budgets
                 ]
@@ -920,7 +933,7 @@ def fig_matched_realized(pairs_by_dataset: dict, out: Path) -> None:
                     [c.ci_low for c in cis],
                     [c.ci_high for c in cis],
                     color=color,
-                    alpha=0.16,
+                    alpha=0.15,
                     linewidth=0,
                 )
                 ax.plot(
@@ -933,25 +946,30 @@ def fig_matched_realized(pairs_by_dataset: dict, out: Path) -> None:
                     label=label,
                 )
             ax.axhline(0, color=AXIS, linewidth=0.8)
-            _log2_axis(ax, budgets, "budget B (tokens, log scale)" if row == n_rows - 1 else "")
+            _log2_axis(
+                ax,
+                budgets,
+                "budget B (tokens, log scale)" if row == n_rows - 1 else "",
+            )
             sem = pair.semantic.chunk_stats["tokens_mean"]
             ax.set_title(
                 f"{dataset} · {pair.semantic.label} (realized {sem:.0f})\n"
-                f"{pair.nominal.label} @ {pair.nominal.chunk_stats['tokens_mean']:.0f}"
-                f"  vs  {pair.matched.label} @ "
+                f"vs {pair.nominal.label} @ "
+                f"{pair.nominal.chunk_stats['tokens_mean']:.0f} / "
+                f"{pair.matched.label} @ "
                 f"{pair.matched.chunk_stats['tokens_mean']:.0f}",
                 fontsize=8.5,
             )
             if col == 0:
                 ax.set_ylabel("ΔSpanRecall, semantic − sentence")
     handles, labels = axes[0][0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="lower center", ncol=2, bbox_to_anchor=(0.5, -0.02))
+    fig.legend(handles, labels, loc="lower center", ncol=3, bbox_to_anchor=(0.5, -0.015))
     fig.suptitle(
         "Semantic-chunker deltas under nominal-size vs realized-size matching",
         fontsize=11,
         y=1.0,
     )
-    fig.tight_layout(rect=(0, 0.04, 1, 0.99))
+    fig.tight_layout(rect=(0, 0.05, 1, 0.99))
     fig.savefig(out, bbox_inches="tight")
     plt.close(fig)
 
@@ -1101,24 +1119,29 @@ def main(argv: list[str] | None = None) -> None:
 
     pairs_by_dataset = {}
     for dataset in ("dev-v1.1", "chroma"):
-        runs = [
-            rr
-            for rr in load_raw(
-                args.raw_dir, dataset=dataset, retriever=args.retriever,
-                budget_rule="stop", overlap=0, seed=args.seed,
-            )
-            if rr.config["chunker"] in ("sentence", "semantic")
-        ]
-        if not any(rr.config["chunker"] == "semantic" for rr in runs):
-            continue
-        check_aligned(runs)
-        pairs = match_by_realized_size(runs)
-        # Only render pairings whose realized means genuinely coincide: with
-        # no calibrated runs on disk the nearest sentence run is a canonical
-        # size a whole size-step away, and plotting it would reintroduce the
-        # very size confound the figure exists to remove.
-        if any(p.matched is not p.nominal and p.well_matched for p in pairs):
-            pairs_by_dataset[dataset] = pairs
+        by_rule = {}
+        for rule in ("stop", "truncate"):
+            runs = [
+                rr
+                for rr in load_raw(
+                    args.raw_dir, dataset=dataset, retriever=args.retriever,
+                    budget_rule=rule, overlap=0, seed=args.seed,
+                )
+                if rr.config["chunker"] in ("sentence", "semantic")
+            ]
+            if not any(rr.config["chunker"] == "semantic" for rr in runs):
+                break
+            check_aligned(runs)
+            pairs = match_by_realized_size(runs)
+            # Only render pairings whose realized means genuinely coincide:
+            # with no calibrated runs on disk the nearest sentence run is a
+            # canonical size a whole size-step away, and plotting it would
+            # reintroduce the very size confound the figure exists to remove.
+            if not any(p.matched is not p.nominal and p.well_matched for p in pairs):
+                break
+            by_rule[rule] = pairs
+        if set(by_rule) == {"stop", "truncate"}:
+            pairs_by_dataset[dataset] = by_rule
     if pairs_by_dataset:
         matched = args.out_dir / f"matched_realized_{args.retriever}.png"
         fig_matched_realized(pairs_by_dataset, matched)

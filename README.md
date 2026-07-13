@@ -11,12 +11,12 @@ Hands-on experiments with current Gen AI techniques — RAG, agents, evals, fine
 
 <!-- auto-generated from research/NOTES.md by scripts/sync_latest.py; do not hand-edit -->
 
-**2026-07-12 — Day 11: semantic chunker — findings 20–21: breakpoints buy size drift, not boundary quality**
+**2026-07-13 — Day 12: matched-realized-size protocol — findings 22–23: the semantic wins vanish, and matched means prove insufficient**
 
-- Finding 20 — matched-nominal wins are realized-size drift.
-- Finding 21 — the size-drift account survives falsification.
+- Finding 22 — at matched realized size the semantic chunker gains nothing anywhere, and its long-gold penalty survives full size control.
+- Finding 23 — matched mean ≠ matched distribution; the stop rule converts residual dispersion into ±0.5 deltas.
 
-[Full entry →](rag-chunking-bench/research/NOTES.md#2026-07-12--day-11-semantic-chunker--findings-2021-breakpoints-buy-size-drift-not-boundary-quality)
+[Full entry →](rag-chunking-bench/research/NOTES.md#2026-07-13--day-12-matched-realized-size-protocol--findings-2223-the-semantic-wins-vanish-and-matched-means-prove-insufficient)
 <!-- latest-end -->
 
 ![Budget-matched SpanRecall@400 by chunking strategy and chunk size, with 95% bootstrap CIs](rag-chunking-bench/assets/hero_spanrecall_dev-v1.1_bm25.png)
@@ -58,7 +58,7 @@ carries a 95% paired bootstrap confidence interval:
   (+0.13–0.19 SpanRecall at B=400) outweighs the retriever effect at small
   chunk sizes (≤ 0.053) several times over.
 
-Full tables, figures, findings 1–19 (now spanning four retriever
+Full tables, figures, findings 1–23 (now spanning four retriever
 families, two datasets, three sampling seeds, both budget-boundary rules,
 and two token units), and an honest
 [Limitations](rag-chunking-bench/README.md#limitations) section (small
