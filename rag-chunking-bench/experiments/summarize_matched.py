@@ -110,8 +110,9 @@ def _delta_row(pair: MatchedPair, partner: RunResult, budgets: list[int]) -> lis
 def render_matched(results: list[RunResult]) -> str:
     """Markdown for the matched-realized-size comparison.
 
-    ``results`` must be aligned zero-overlap stop-rule sentence and semantic
-    runs — the canonical grid plus the calibrated sentence sizes.
+    ``results`` must be aligned zero-overlap sentence and semantic runs
+    under one budget rule — the canonical grid plus the calibrated sentence
+    sizes.
     """
     check_aligned(results)
     pairs = match_by_realized_size(results)
@@ -120,12 +121,17 @@ def render_matched(results: list[RunResult]) -> str:
     hit_ks = [int(k) for k in cfg["hit_ks"]]
     budget_cols = [f"B={b}" for b in budgets]
     n_questions = len(results[0].records)
+    rule = {
+        "stop": "stop-before-exceed",
+        "truncate": "truncate-final-chunk",
+    }.get(cfg["budget_rule"], cfg["budget_rule"])
 
     lines = [
-        f"# Matched-realized-size comparison — {cfg['dataset']}, {cfg['retriever']}",
+        f"# Matched-realized-size comparison — {cfg['dataset']}, {cfg['retriever']}"
+        + ("" if cfg["budget_rule"] == "stop" else f", {rule} rule"),
         "",
         f"{n_questions} questions, budgets in regex word tokens, budget rule "
-        "stop-before-exceed, zero overlap everywhere. Paired comparisons use "
+        f"{rule}, zero overlap everywhere. Paired comparisons use "
         "10,000 bootstrap resamples over questions; bold = 95% CI excludes 0. "
         "Each semantic run appears twice: against the sentence run at the "
         "same *nominal* size (the finding-20 comparison, which mixes boundary "
@@ -245,6 +251,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--dataset", default="dev-v1.1")
     parser.add_argument("--retriever", default="bm25")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument(
+        "--budget-rule",
+        default="stop",
+        choices=("stop", "truncate"),
+        help="stop shows the raw protocol; truncate removes the budget-"
+        "boundary artifact, which realized-mean matching alone cannot "
+        "(the realized-size *distributions* still differ)",
+    )
     parser.add_argument("--raw-dir", type=Path, default=ROOT / "results" / "raw")
     parser.add_argument("--out-dir", type=Path, default=ROOT / "results")
     return parser.parse_args(argv)
@@ -260,7 +274,7 @@ def main(argv: list[str] | None = None) -> None:
             args.raw_dir,
             dataset=args.dataset,
             retriever=args.retriever,
-            budget_rule="stop",
+            budget_rule=args.budget_rule,
             overlap=0,
             seed=args.seed,
         )
@@ -269,7 +283,8 @@ def main(argv: list[str] | None = None) -> None:
     if not results:
         raise SystemExit(f"no results for {args.dataset}/{args.retriever} in {args.raw_dir}")
     text = render_matched(results)
-    out = args.out_dir / f"summary_{args.dataset}_{args.retriever}_matched.md"
+    suffix = "" if args.budget_rule == "stop" else f"_{args.budget_rule}"
+    out = args.out_dir / f"summary_{args.dataset}_{args.retriever}_matched{suffix}.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text + "\n", encoding="utf-8")
     print(text)
