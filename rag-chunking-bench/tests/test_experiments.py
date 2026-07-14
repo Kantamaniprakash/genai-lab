@@ -33,6 +33,12 @@ from experiments.summarize import (
 )
 from experiments.summarize_ablations import render_ablations
 from experiments.summarize_chroma import render_moderation
+from experiments.summarize_errors import (
+    DECOMP_STRATA,
+    composition_residual,
+    loss_strata,
+    render_errors,
+)
 from experiments.summarize_matched import match_by_realized_size, render_matched
 from experiments.summarize_retrievers import render_retrievers
 from experiments.summarize_seeds import render_seeds
@@ -420,41 +426,48 @@ class TestSummarize:
         assert len(rows[0]) == 3
 
 
-class TestSummarizeChroma:
+def _chroma_like() -> tuple[QADataset, tuple[Question, ...]]:
     """Chroma-style fixture: qids carry a `corpus:` prefix, gold lengths vary."""
+    doc = Document(
+        doc_id="tiny",
+        title="tiny",
+        text="\n\n".join([PARA_ZEBRA, PARA_VOLCANO, PARA_MARKET]),
+    )
+    long_answer = "Wholesale prices are settled by hand signals"
+    questions = (
+        _question("finance:001", doc, "When did the sanctuary open?", "1974"),
+        _question("finance:002", doc, "What lines the rim?", "Basalt columns"),
+        _question("chatlogs:001", doc, "How are prices settled?", long_answer),
+    )
+    dataset = QADataset(name="chroma", documents={doc.doc_id: doc}, questions=questions)
+    return dataset, questions
 
+
+def _chroma_stats(dataset) -> dict[str, tuple[int, int]]:
+    from src.tokenization import RegexWordTokenizer, TokenIndex
+
+    index = TokenIndex(dataset.documents["tiny"].text, RegexWordTokenizer())
+    return {
+        q.qid: (
+            len(
+                {
+                    t
+                    for s in q.gold_alternatives[0]
+                    for t in index.tokens_overlapping(s.start, s.end)
+                }
+            ),
+            len(q.gold_alternatives[0]),
+        )
+        for q in dataset.questions
+    }
+
+
+class TestSummarizeChroma:
     def _chroma_like(self) -> tuple[QADataset, tuple[Question, ...]]:
-        doc = Document(
-            doc_id="tiny",
-            title="tiny",
-            text="\n\n".join([PARA_ZEBRA, PARA_VOLCANO, PARA_MARKET]),
-        )
-        long_answer = "Wholesale prices are settled by hand signals"
-        questions = (
-            _question("finance:001", doc, "When did the sanctuary open?", "1974"),
-            _question("finance:002", doc, "What lines the rim?", "Basalt columns"),
-            _question("chatlogs:001", doc, "How are prices settled?", long_answer),
-        )
-        dataset = QADataset(name="chroma", documents={doc.doc_id: doc}, questions=questions)
-        return dataset, questions
+        return _chroma_like()
 
     def _stats(self, dataset) -> dict[str, tuple[int, int]]:
-        from src.tokenization import RegexWordTokenizer, TokenIndex
-
-        index = TokenIndex(dataset.documents["tiny"].text, RegexWordTokenizer())
-        return {
-            q.qid: (
-                len(
-                    {
-                        t
-                        for s in q.gold_alternatives[0]
-                        for t in index.tokens_overlapping(s.start, s.end)
-                    }
-                ),
-                len(q.gold_alternatives[0]),
-            )
-            for q in dataset.questions
-        }
+        return _chroma_stats(dataset)
 
     def test_render_moderation_sections_and_groups(self, tmp_path):
         dataset, questions = self._chroma_like()
@@ -491,6 +504,154 @@ class TestSummarizeChroma:
         stats.pop("chatlogs:001")
         with pytest.raises(SystemExit, match="out of sync"):
             render_moderation(results, stats, "fixed-16", "fixed-32")
+
+
+class TestSummarizeErrors:
+    """Unit tests on synthetic vectors plus a render smoke test.
+
+    The composition-residual cases are built so the point estimates are
+    hand-computable *exactly*: deltas constant within a stratum make every
+    bootstrap resample reproduce the same means, collapsing the CI onto the
+    point estimate.
+    """
+
+    # 12 questions: terciles are thirds in order; corpus A holds the first
+    # two questions of each tercile, corpus B the rest.
+    TERCILES = [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]]
+    CORPUS_A = [0, 1, 4, 5, 8, 9]
+
+    def test_composition_residual_pure_composition_is_exactly_zero(self):
+        import numpy as np
+
+        # Delta depends only on the tercile, so corpus A's observed mean is
+        # exactly what its composition predicts.
+        deltas = np.array([0.1] * 4 + [0.2] * 4 + [0.3] * 4)
+        observed, predicted, residual = composition_residual(
+            deltas, self.CORPUS_A, self.TERCILES
+        )
+        assert observed == pytest.approx(0.2)
+        assert predicted == pytest.approx(0.2)
+        assert residual.mean_diff == pytest.approx(0.0)
+        assert not residual.significant
+
+    def test_composition_residual_detects_corpus_shift(self):
+        import numpy as np
+
+        deltas = np.array([0.1] * 4 + [0.2] * 4 + [0.3] * 4)
+        deltas[self.CORPUS_A] += 0.5
+        observed, predicted, residual = composition_residual(
+            deltas, self.CORPUS_A, self.TERCILES
+        )
+        assert observed == pytest.approx(0.7)
+        assert predicted == pytest.approx(0.2)
+        assert residual.mean_diff == pytest.approx(0.5)
+        assert residual.significant
+
+    def test_composition_residual_undefined_without_outside_questions(self):
+        import numpy as np
+
+        # Corpus covers one tercile entirely: no leave-out questions remain
+        # to estimate that stratum's mean from.
+        deltas = np.zeros(12)
+        assert composition_residual(deltas, [0, 1, 2, 3], self.TERCILES) is None
+
+    def test_composition_residual_skips_terciles_the_corpus_misses(self):
+        import numpy as np
+
+        # Corpus sits only in the first tercile; the other strata get zero
+        # weight and their (extreme) values must not leak into the prediction.
+        deltas = np.array([0.1] * 4 + [9.0] * 4 + [-9.0] * 4)
+        observed, predicted, residual = composition_residual(
+            deltas, [0, 1], self.TERCILES
+        )
+        assert observed == pytest.approx(0.1)
+        assert predicted == pytest.approx(0.1)
+        assert residual.mean_diff == pytest.approx(0.0)
+
+    def test_loss_strata_partition_and_classification(self):
+        import numpy as np
+
+        deltas = np.array([-0.5, -0.3, -0.1, 0.0, 0.3])
+        challenger_recall = np.array([0.0, 0.2, 0.0, 1.0, 1.0])
+        strata = loss_strata(deltas, challenger_recall, threshold=0.25)
+        by_label = {label.split(" (")[0]: indices for label, indices in strata}
+        assert by_label["complete miss"] == [0]
+        assert by_label["partial-coverage loss"] == [1]
+        assert by_label["within ±0.25"] == [2, 3]
+        assert by_label["win"] == [4]
+        # The strata are a partition: every question lands in exactly one.
+        combined = sorted(i for _, indices in strata for i in indices)
+        assert combined == list(range(len(deltas)))
+
+    def test_decomposition_strata_partition_and_sum_exactly(self):
+        import numpy as np
+
+        ctrl = np.array([0.0, 0.4, 1.0, 0.0, 0.9, 1.0])
+        deltas = np.array([0.3, 0.1, -0.2, 0.0, 0.25, -0.05])
+        masks = [predicate(ctrl) for _, predicate in DECOMP_STRATA]
+        assert np.all(sum(m.astype(int) for m in masks) == 1)
+        contributions = [float((deltas * m).mean()) for m in masks]
+        assert sum(contributions) == pytest.approx(float(deltas.mean()))
+
+    def _saved_runs(self, tmp_path):
+        dataset, questions = _chroma_like()
+        for size in (16, 32):
+            run_and_save(
+                _config(dataset="chroma", chunk_size=size), dataset, questions, tmp_path
+            )
+        run_and_save(
+            _config(dataset="chroma", chunk_size=16, overlap=4),
+            dataset,
+            questions,
+            tmp_path,
+        )
+        results = load_raw(tmp_path, overlap=0)
+        overlap_runs = load_raw(tmp_path)
+        return results, overlap_runs, _chroma_stats(dataset)
+
+    def test_render_errors_sections(self, tmp_path):
+        results, overlap_runs, stats = self._saved_runs(tmp_path)
+        text = render_errors(
+            results, overlap_runs, stats, "fixed-16", "fixed-32",
+            ["fixed-16/o4"], analysis_budget=80,
+        )
+        assert "# Chroma error analysis — where the deltas live (bm25)" in text
+        assert "## Corpus × gold-length composition" in text
+        assert "## Per-corpus ΔSpanRecall within" in text
+        assert "## Composition test at B=80" in text
+        # Fixture-scale corpora have no leave-out questions in their own
+        # terciles, so the composition rows degrade to the em-dash path.
+        assert "| finance (n=2) | — | — | — |" in text
+        assert "## Anatomy of the deltas at B=80" in text
+        assert "### Worst questions (most negative Δ)" in text
+        assert "## Overlap gains decomposed by control state" in text
+        assert "new region (ctrl = 0)" in text
+        assert "### fixed-16/o4 vs fixed-16" in text
+
+    def test_render_errors_rejects_missing_pair(self, tmp_path):
+        results, overlap_runs, stats = self._saved_runs(tmp_path)
+        with pytest.raises(SystemExit, match="not on disk"):
+            render_errors(
+                results, overlap_runs, stats, "fixed-16", "fixed-32",
+                ["fixed-16/o8"], analysis_budget=80,
+            )
+
+    def test_render_errors_rejects_out_of_sync_stats(self, tmp_path):
+        results, overlap_runs, stats = self._saved_runs(tmp_path)
+        stats.pop("chatlogs:001")
+        with pytest.raises(SystemExit, match="out of sync"):
+            render_errors(
+                results, overlap_runs, stats, "fixed-16", "fixed-32",
+                ["fixed-16/o4"], analysis_budget=80,
+            )
+
+    def test_render_errors_rejects_offgrid_budget(self, tmp_path):
+        results, overlap_runs, stats = self._saved_runs(tmp_path)
+        with pytest.raises(SystemExit, match="not in grid budgets"):
+            render_errors(
+                results, overlap_runs, stats, "fixed-16", "fixed-32",
+                ["fixed-16/o4"], analysis_budget=1600,
+            )
 
 
 class TestSummarizeAblations:

@@ -974,6 +974,218 @@ def fig_matched_realized(pairs_by_dataset: dict, out: Path) -> None:
     plt.close(fig)
 
 
+def fig_error_analysis(
+    results: list[RunResult],
+    pairs: list[tuple[RunResult, RunResult]],
+    gold_stats: dict[str, tuple[int, int]],
+    out: Path,
+    challenger: tuple[str, int] = ("fixed", 64),
+    baseline: tuple[str, int] = ("fixed", 256),
+    analysis_budget: int = 1600,
+    threshold: float = 0.25,
+    min_budget: int = 400,
+) -> None:
+    """Question-level anatomy of the Chroma deltas (README findings 24–26).
+
+    Left: every question's paired size delta at the generous budget against
+    its gold-evidence length — the crossover's loss tail is long-gold and
+    multi-reference, except for a handful of complete ranking misses (ringed)
+    where the small-chunk config never surfaced the region at all. Vertical
+    guides mark the (global) tercile boundaries used everywhere else.
+    Middle: per corpus, the observed delta (filled) against the delta its
+    gold-length composition predicts (open, leave-one-corpus-out), with the
+    95% CI of composition-consistent outcomes — residuals inside the whisker
+    mean corpus identity adds nothing beyond its gold-length mix.
+    Right: each overlap configuration's gain over its zero-overlap control,
+    decomposed exactly into the three control-state contributions; the ink
+    dot is the net delta. Budgets below ``min_budget`` are excluded for the
+    same stop-rule-artifact reason as the crossover figure.
+    """
+    import numpy as np
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Patch
+    from matplotlib.transforms import blended_transform_factory
+
+    from experiments.summarize_chroma import gold_terciles
+    from experiments.summarize_errors import (
+        DECOMP_STRATA,
+        composition_residual,
+        corpus_indices,
+    )
+
+    grid = _by_config(results)
+    run_a, run_b = grid[challenger], grid[baseline]
+    label_a = f"{challenger[0]}-{challenger[1]}"
+    label_b = f"{baseline[0]}-{baseline[1]}"
+    qids = run_a.qids()
+    deltas = np.asarray(run_a.metric("recall", analysis_budget)) - np.asarray(
+        run_b.metric("recall", analysis_budget)
+    )
+    lengths = np.asarray([gold_stats[qid][0] for qid in qids])
+    refs = np.asarray([gold_stats[qid][1] for qid in qids])
+    recall_a = np.asarray(run_a.metric("recall", analysis_budget))
+
+    fig, (ax_scatter, ax_comp, ax_decomp) = plt.subplots(
+        1, 3, figsize=(12.8, 3.9), width_ratios=[1.2, 0.85, 1.3]
+    )
+
+    # -- Panel A: per-question delta vs gold-evidence length ----------------
+    single, multi = refs == 1, refs >= 2
+    miss = (deltas <= -threshold) & (recall_a == 0.0)
+    for mask, color, marker, label in (
+        (single, "#2a78d6", "o", "1 reference"),
+        (multi, "#eda100", "D", "2+ references"),
+    ):
+        ax_scatter.scatter(
+            lengths[mask], deltas[mask], s=14, marker=marker, color=color,
+            alpha=0.45, linewidths=0, label=label,
+        )
+    ax_scatter.scatter(
+        lengths[miss], deltas[miss], s=64, marker="o", facecolors="none",
+        edgecolors=INK, linewidths=1.0, label=f"complete miss ({label_a} recall 0)",
+    )
+    # Binned means over gold-length deciles put the trend on top of the cloud.
+    edges = np.quantile(lengths, np.linspace(0, 1, 11))
+    bin_x, bin_y = [], []
+    for lo, hi in zip(edges[:-1], edges[1:], strict=False):
+        mask = (lengths >= lo) & (lengths <= hi)
+        if mask.sum() >= 5:
+            bin_x.append(float(np.median(lengths[mask])))
+            bin_y.append(float(deltas[mask].mean()))
+    ax_scatter.plot(
+        bin_x, bin_y, color=INK, linewidth=1.8, marker="o", markersize=4,
+        markeredgecolor=SURFACE, markeredgewidth=0.8, label="decile-bin mean",
+    )
+    tercile_labels = [label for label, _ in gold_terciles(qids, gold_stats)]
+    boundaries = [int(s) for s in
+                  [tercile_labels[0].split()[2], tercile_labels[2].split()[2]]]
+    for x in boundaries:
+        ax_scatter.axvline(x, color=AXIS, linewidth=0.8, linestyle=(0, (4, 3)))
+    ax_scatter.axhline(0, color=INK_MUTED, linewidth=0.9)
+    ax_scatter.set_xscale("log", base=2)
+    ax_scatter.set_xticks([8, 16, 32, 64, 128, 256])
+    ax_scatter.xaxis.set_major_formatter(ScalarFormatter())
+    ax_scatter.set_xlabel("gold evidence length (regex tokens, log scale)")
+    ax_scatter.set_ylabel(f"ΔSpanRecall@{analysis_budget} ({label_a} − {label_b})")
+    ax_scatter.set_title(
+        "The loss tail is long-gold and multi-reference —\nplus a few complete ranking misses"
+    )
+    # Pad below the recall floor so the two-column legend sits fully under
+    # the −1.0 cluster instead of on top of it.
+    ax_scatter.set_ylim(-1.62, 1.12)
+    ax_scatter.legend(
+        loc="lower left", ncol=2, fontsize=7.5, columnspacing=1.0,
+        labelcolor=INK_SECONDARY,
+    )
+
+    # -- Panel B: observed vs composition-predicted corpus deltas -----------
+    terciles = [indices for _, indices in gold_terciles(qids, gold_stats)]
+    corpora = corpus_indices(qids)
+    for row, (_corpus, indices) in enumerate(reversed(corpora.items())):
+        estimate = composition_residual(deltas, indices, terciles)
+        if estimate is None:
+            continue
+        observed, predicted, residual = estimate
+        ax_comp.plot(
+            [predicted + residual.ci_low, predicted + residual.ci_high],
+            [row, row], color="#86b6ef", linewidth=3.5, solid_capstyle="round",
+            zorder=1,
+        )
+        ax_comp.plot(
+            predicted, row, marker="o", markersize=7, markerfacecolor=SURFACE,
+            markeredgecolor="#2a78d6", markeredgewidth=1.4, zorder=2,
+        )
+        ax_comp.plot(
+            observed, row, marker="o", markersize=7, color="#184f95",
+            markeredgecolor=SURFACE, markeredgewidth=0.8, zorder=3,
+        )
+    ax_comp.axvline(0, color=INK_MUTED, linewidth=0.9)
+    ax_comp.set_yticks(range(len(corpora)), list(reversed(corpora)))
+    ax_comp.tick_params(axis="y", labelsize=8, colors=INK_SECONDARY)
+    ax_comp.set_xlabel(f"ΔSpanRecall@{analysis_budget} ({label_a} − {label_b})")
+    ax_comp.set_title(
+        "Corpus deltas match their gold-length\ncomposition (whisker: 95% CI of prediction)"
+    )
+    ax_comp.grid(axis="x")
+    ax_comp.set_axisbelow(True)
+    # Pad below the last corpus row so the legend gets a clear band.
+    ax_comp.set_ylim(-1.7, len(corpora) - 0.5)
+    ax_comp.legend(
+        handles=[
+            Line2D([], [], marker="o", linestyle="", color="#184f95", label="observed"),
+            Line2D([], [], marker="o", linestyle="", markerfacecolor=SURFACE,
+                   markeredgecolor="#2a78d6", label="predicted from composition"),
+        ],
+        loc="lower left", fontsize=7.5, labelcolor=INK_SECONDARY,
+    )
+
+    # -- Panel C: overlap gains decomposed by control state -----------------
+    stratum_colors = {"new region": "#1baf7a", "extension": "#2a78d6",
+                      "redundancy tax": "#eda100"}
+    budgets = [int(b) for b in results[0].config["budgets"] if int(b) >= min_budget]
+    slot = len(budgets) + 1
+    for p, (run, control) in enumerate(pairs):
+        for j, budget in enumerate(budgets):
+            x = p * slot + j
+            d = np.asarray(run.metric("recall", budget)) - np.asarray(
+                control.metric("recall", budget)
+            )
+            ctrl = np.asarray(control.metric("recall", budget))
+            pos, neg = 0.0, 0.0
+            for name, predicate in DECOMP_STRATA:
+                contribution = float((d * predicate(ctrl)).mean())
+                short = name.split(" (")[0]
+                if contribution >= 0:
+                    bottom, pos = pos, pos + contribution
+                else:
+                    bottom, neg = neg + contribution, neg + contribution
+                ax_decomp.bar(
+                    x, abs(contribution), bottom=bottom, width=0.72,
+                    color=stratum_colors[short], edgecolor=SURFACE, linewidth=0.8,
+                )
+            ax_decomp.plot(
+                x, float(d.mean()), marker="o", markersize=4.5, color=INK,
+                markeredgecolor=SURFACE, markeredgewidth=0.8, zorder=4,
+            )
+        center = p * slot + (len(budgets) - 1) / 2
+        ax_decomp.text(
+            center, -0.14, f"{run.label}\nvs o0",
+            transform=blended_transform_factory(ax_decomp.transData, ax_decomp.transAxes),
+            ha="center", va="top", fontsize=7.5, color=INK_SECONDARY,
+        )
+    ax_decomp.set_xticks(
+        [p * slot + j for p in range(len(pairs)) for j in range(len(budgets))],
+        [f"{b}" for _ in pairs for b in budgets],
+        fontsize=6.5,
+    )
+    ax_decomp.axhline(0, color=INK_MUTED, linewidth=0.9)
+    ax_decomp.set_xlabel("token budget B", labelpad=26)
+    ax_decomp.set_ylabel("contribution to ΔSpanRecall vs o0")
+    ax_decomp.set_title(
+        "Overlap = new regions + extension − redundancy tax\n(dot: net gain; parts sum exactly)"
+    )
+    ax_decomp.grid(axis="y")
+    ax_decomp.set_axisbelow(True)
+    # Headroom above the tallest stack so the legend never touches a bar.
+    lo, hi = ax_decomp.get_ylim()
+    ax_decomp.set_ylim(lo, hi + 0.28 * (hi - lo))
+    ax_decomp.legend(
+        handles=[Patch(color=c, label=s) for s, c in stratum_colors.items()]
+        + [Line2D([], [], marker="o", linestyle="", color=INK, label="net Δ")],
+        loc="upper right", ncol=2, fontsize=7.5, labelcolor=INK_SECONDARY,
+    )
+
+    fig.suptitle(
+        f"Where the Chroma deltas live: question-level anatomy under BM25 "
+        f"(stop rule, {len(qids)} questions)",
+        fontsize=10.5,
+        color=INK,
+    )
+    fig.tight_layout(rect=(0, 0.02, 1, 0.96))
+    fig.savefig(out, bbox_inches="tight")
+    plt.close(fig)
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Render README figures from raw results.",
@@ -1110,6 +1322,34 @@ def main(argv: list[str] | None = None) -> None:
         crossover = args.out_dir / "gold_length_crossover.png"
         fig_gold_length_crossover(runs_by_line, gold_stats(args.data_dir), crossover)
         written.append(crossover)
+
+    # The error-analysis figure is Chroma/BM25-specific and needs the overlap
+    # runs plus gold lengths recomputed from the corpus text, so it renders
+    # only when all of its inputs exist — independently of --dataset.
+    chroma_all = load_raw(
+        args.raw_dir, dataset="chroma", retriever="bm25",
+        budget_rule="stop", seed=args.seed, sizes=BASELINE_SIZES,
+    )
+    chroma_labels = {rr.label for rr in chroma_all}
+    from experiments.summarize_errors import DEFAULT_OVERLAP_PAIRS, overlap_pairs
+
+    wanted = DEFAULT_OVERLAP_PAIRS.split(",")
+    if (
+        {"fixed-64", "fixed-256"} <= chroma_labels
+        and all(label in chroma_labels for label in wanted)
+        and (args.data_dir / "chroma" / "questions_df.csv").exists()
+    ):
+        from experiments.summarize_chroma import gold_stats
+
+        check_aligned(chroma_all)
+        errors = args.out_dir / "error_analysis_chroma_bm25.png"
+        fig_error_analysis(
+            [rr for rr in chroma_all if rr.config["overlap"] == 0],
+            overlap_pairs(chroma_all, wanted),
+            gold_stats(args.data_dir),
+            errors,
+        )
+        written.append(errors)
 
     # The matched-realized-size figure also spans datasets and additionally
     # needs the calibrated off-grid sentence runs, so it renders only when a
