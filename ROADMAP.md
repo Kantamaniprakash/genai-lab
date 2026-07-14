@@ -22,7 +22,7 @@ chunkers, chunk sizes, and retrievers — with paired bootstrap confidence inter
 on span-level metrics — is a genuine gap at a scale one person can execute
 rigorously. It also feeds directly back into my `financial-rag-chatbot`.
 
-**Phase.** 3 of 4 underway — baselines (first grid 2026-07-04:
+**Phase.** 3 of 4 complete; phase 4 (writeup) next — baselines (first grid 2026-07-04:
 fixed-k vs budget-matched ranking reversal; overlap ablation + truncate-rule
 robustness check 2026-07-05: overlap = boundary repair, size ordering
 survives the rule change — findings 6–7; cross-retriever grid 2026-07-06:
@@ -50,7 +50,14 @@ matched-realized-size protocol 2026-07-13: at matched realized size the
 semantic chunker gains nothing anywhere and its long-gold penalty
 survives, while matched *means* prove insufficient — realized-size
 dispersion × the stop rule manufactures ±0.5 deltas, truncate at
-B ≫ chunk size is the honest regime — findings 22–23).
+B ≫ chunk size is the honest regime — findings 22–23; per-question error
+analysis 2026-07-14, no new runs: the per-corpus heterogeneity is
+gold-length composition (leave-one-corpus-out composition test, no
+significant residual anywhere), the hard-loss tail splits into
+partial-coverage losses on long multi-ref golds plus a small set of
+complete ranking misses on short golds, and every overlap gain decomposes
+exactly into new-region placement + extension − a redundancy tax, with
+stitching real only at tight budgets — findings 24–26).
 
 1. **Harness** — offset-preserving chunkers, tokenization, span-level metrics,
    budget-matched retrieval protocol, dataset loaders. *(done — SQuAD +
@@ -65,7 +72,7 @@ B ≫ chunk size is the honest regime — findings 22–23).
    jackknife *(done — finding 18)*, BPE tokenizer robustness *(done —
    finding 19)*, semantic vs. structural chunking *(done — findings
    20–21)*, matched-realized-size protocol *(done — findings 22–23)*,
-   per-corpus error analysis.
+   per-corpus error analysis *(done — findings 24–26; phase complete)*.
 4. **Writeup** — README as a full research report with real tables and limitations.
 
 **Environment constraints (recorded so results are honest).** CPU-only (4 cores,

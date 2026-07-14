@@ -11,12 +11,13 @@ Hands-on experiments with current Gen AI techniques — RAG, agents, evals, fine
 
 <!-- auto-generated from research/NOTES.md by scripts/sync_latest.py; do not hand-edit -->
 
-**2026-07-13 — Day 12: matched-realized-size protocol — findings 22–23: the semantic wins vanish, and matched means prove insufficient**
+**2026-07-14 — Day 13: per-question error analysis — findings 24–26: composition explains the corpora, the loss tail splits by mechanism, overlap decomposes exactly**
 
-- Finding 22 — at matched realized size the semantic chunker gains nothing anywhere, and its long-gold penalty survives full size control.
-- Finding 23 — matched mean ≠ matched distribution; the stop rule converts residual dispersion into ±0.5 deltas.
+- Finding 24 — corpus identity adds nothing beyond gold-length mix.
+- Finding 25 — the loss tail is two mechanisms, the small one a ranking failure on SHORT golds.
+- Finding 26 — overlap = placement + extension − redundancy tax; stitching is budget-limited.
 
-[Full entry →](rag-chunking-bench/research/NOTES.md#2026-07-13--day-12-matched-realized-size-protocol--findings-2223-the-semantic-wins-vanish-and-matched-means-prove-insufficient)
+[Full entry →](rag-chunking-bench/research/NOTES.md#2026-07-14--day-13-per-question-error-analysis--findings-2426-composition-explains-the-corpora-the-loss-tail-splits-by-mechanism-overlap-decomposes-exactly)
 <!-- latest-end -->
 
 ![Budget-matched SpanRecall@400 by chunking strategy and chunk size, with 95% bootstrap CIs](rag-chunking-bench/assets/hero_spanrecall_dev-v1.1_bm25.png)

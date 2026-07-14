@@ -1171,3 +1171,109 @@ Calibrated sizes — SQuAD: 63/118/211/339 for semantic nominal 64/128/256/512
 - Cluster-variant semantic chunker and non-95 percentiles: recorded as
   untested in README §21; a `--percentile` ablation is one GridConfig field
   away if ever needed (day-11 note).
+
+---
+
+## 2026-07-14 — Day 13: per-question error analysis — findings 24–26: composition explains the corpora, the loss tail splits by mechanism, overlap decomposes exactly
+
+### Repo state note
+
+Same detached-HEAD situation as day 12 (local `main` stale behind
+origin/main); reattached and fast-forwarded before starting. Fresh
+container, so `data/` was re-fetched (`python -m src.data`, all SHA256 pins
+matched) before the gold-length analyses could run.
+
+### Built (committed 8ffa7c3 BEFORE any analysis output, per house rule)
+
+- `experiments/summarize_errors.py` — the phase-3 closer. Three instruments,
+  all over runs already on disk (zero new retrieval): (1) corpus ×
+  gold-length tercile tables plus a **composition test** — observed corpus
+  delta vs the delta predicted by reweighting *leave-one-corpus-out* tercile
+  means with the corpus's own tercile mix, residual CI from a stratified
+  bootstrap (corpus sample and each leave-out stratum resampled
+  independently); (2) a **loss taxonomy** at the analysis budget splitting
+  Δ ≤ −0.25 questions into complete misses (challenger recall exactly 0 — a
+  ranking failure) vs partial-coverage losses, with per-stratum gold
+  length / multi-ref share / hit@5 / corpus counts and a worst-questions
+  table; (3) an **exact decomposition of every overlap gain** by the
+  zero-overlap control's state on the same question — new region (ctrl = 0),
+  extension (0 < ctrl < 1), redundancy tax (ctrl = 1) — the three masked
+  contributions sum to the total by construction, each bootstrapped over the
+  full question set with membership attached to the question. Plus the
+  tercile × reference-count moderation view of the same four pairs.
+- `fig_error_analysis` in make_figures (three panels: per-question Δ vs gold
+  length with ringed complete misses; observed-vs-predicted composition
+  forest; signed stacked decomposition bars with net dots). All fifteen
+  pre-existing figures regenerate bit-identically; render is deterministic.
+- Tests 347 → **357**. The composition-residual cases use deltas constant
+  within strata so obs/pred/residual are hand-computable *exactly* (pure
+  composition → residual exactly 0; injected corpus shift → residual exactly
+  the shift; corpus owning a whole tercile → None).
+
+### Ran (summarizer + figure only; ~2 min, dominated by 10k-resample bootstraps)
+
+### Findings (README §24–26)
+
+1. **Finding 24 — corpus identity adds nothing beyond gold-length mix.**
+   Long-tercile B=1600 delta negative in all five corpora (pubmed −0.123*,
+   wikitexts −0.098*, chatlogs −0.061*); short tercile null in 4/5. The
+   composition test leaves no significant residual anywhere (extremes:
+   state_of_the_union +0.042 [−0.009, +0.098], pubmed −0.040 [−0.097,
+   +0.014]). The day-7 "chatlogs is suggestive" thread closes: chatlogs
+   merely has 50% of its questions in the long tercile vs 14% for
+   state_of_the_union. Sharpen of finding 14: the moderator IS gold length.
+2. **Finding 25 — the loss tail is two mechanisms, the small one a ranking
+   failure on SHORT golds.** 55/472 hard losses at B=1600: 49
+   partial-coverage (median 75 gold tokens, 63% multi-ref, challenger hit@5
+   0.80 — region found, window too small: finding 14 per-question) and 6
+   complete misses on short single-ref golds (median 17 tokens; hit@5 0.00
+   vs 1.00 — ~25 retrieved chunks never included the answer). The day-12
+   hypothesis ("always multi-reference long-gold?") is 89% right and the
+   remaining 11% is the interesting part: a 64-token window around a short
+   gold carries too little question context to outrank confusable text —
+   the lexical-ranker twin of finding 12's encoder-window mechanism. Wins
+   mirror it: fixed-256 hit@5 drops to 0.41 in the win stratum.
+3. **Finding 26 — overlap = placement + extension − redundancy tax;
+   stitching is budget-limited.** The tax (questions the control already
+   answered perfectly) is significant in EVERY non-degenerate cell (−0.015
+   to −0.058) — the protocol's redundancy accounting made visible
+   per-question. Large windows at tight budgets gain by placement
+   (fixed-256/o64 @B400: +0.084 of +0.059 net is new-region), small windows
+   persist by extension (fixed-64/o32 @B1600: +0.032 of +0.024). Finding
+   17's stitching: real at B=400 on long golds (3/4 pairs significant),
+   gone by B=800 everywhere; what persists sits on within-window
+   single-reference golds (fixed-64 mid tercile +0.052*; fixed-128 short
+   +0.027*). Practical rule amended with a budget clause (README §26).
+
+### Process notes
+
+- The day-8 carry (overlap tercile split) delivered the opposite of the
+  expected headline — the naive tercile table looked incoherent until the
+  control-state decomposition reframed it. Lesson repeated from days 5/6/12:
+  when a moderation table confuses, decompose by mechanism before
+  interpreting cells.
+- The exact-decomposition trick (masked per-question deltas, membership
+  travels with the question through the bootstrap) is reusable for ANY
+  paired comparison here — candidate for the writeup's methods section.
+- Composition-test design point worth keeping: predict from leave-one-out
+  strata, never pooled ones, or the corpus predicts itself.
+
+### Next steps (Day 14, in order)
+
+1. **Phase 4 writeup begins.** README is section-complete with 26 findings;
+   do the coherence pass: a findings-navigation table up top (finding →
+   one-line claim → section anchor), reconcile early-finding phrasings with
+   later refinements (finding 1 vs 13; 6/16/17 vs 26; 20 vs 22–23), and a
+   full limitations sweep.
+2. During that sweep, record the deliberately-unrun items with reasons:
+   truncate × overlap cross (day-8 carry — finding 26 now explains the
+   overlap mechanism; the cross would only re-price the tax under the other
+   stop rule), 512-window encoder ablation (day-6 carry), cluster-variant
+   semantic chunker / percentile sweep (day-11 note).
+3. Hero figure / abstract numbers: check both still match the final tables
+   after the writeup edits (they should — no numbers changed today).
+
+### Open questions (carried)
+
+- None new. Remaining carries all fold into the writeup-phase decisions
+  listed above.
