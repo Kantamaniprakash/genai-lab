@@ -182,6 +182,7 @@ python -m experiments.summarize_ablations     # overlap + budget-rule tables -> 
 python -m experiments.summarize_retrievers    # retriever x chunker tables -> results/summary_*_retrievers.md
 python -m experiments.summarize_seeds         # per-seed robustness tables -> results/summary_*_seeds.md
 python -m experiments.summarize_chroma        # per-corpus + gold-length moderation -> results/summary_chroma_*_moderation.md
+python -m experiments.summarize_errors        # composition test, loss taxonomy, overlap decomposition -> results/summary_chroma_*_errors.md
 python -m experiments.make_figures            # figures -> results/figures/
 python -m experiments.make_hero_figure        # headline figure -> assets/
 ```
@@ -851,6 +852,93 @@ long-gold 512 cell, the surviving boundary-fragmentation effect
 (finding 22). At nominal 64, where drift never existed, all three
 pairings agree on zero.*
 
+### Error analysis: which questions move the deltas
+
+Setup: no new retrieval runs — every pooled Chroma/BM25 delta reported above
+is re-attributed to question strata computed from the runs already on disk
+plus gold statistics recomputed from the corpus text: corpus × gold-length
+tercile cells with a formal composition test, a loss taxonomy of the
+crossover comparison at B=1600, and an exact three-way decomposition of
+every overlap gain by what its zero-overlap control did on the same
+question. Full tables:
+[`results/summary_chroma_bm25_errors.md`](results/summary_chroma_bm25_errors.md).
+
+![Question-level anatomy of the Chroma deltas](results/figures/error_analysis_chroma_bm25.png)
+
+*Left: each question's fixed-64 − fixed-256 delta at B=1600 against its
+gold-evidence length (dashed guides: tercile boundaries) — the loss tail is
+long-gold and multi-reference, except for a handful of ringed complete
+misses on short golds. Middle: observed per-corpus deltas (filled) against
+what each corpus's gold-length composition alone predicts (open, whisker =
+95% CI of the prediction) — every corpus lands inside its whisker. Right:
+overlap gains decomposed into new-region finds + coverage extension −
+redundancy tax; the dot is the net. B=200 is omitted from the right panel
+for the stop-rule-artifact reason of finding 13's figure.*
+
+**24. The per-corpus differences are gold-length composition, not domain.**
+Within the long-gold tercile the B=1600 delta is negative in all five
+corpora (significantly in three: pubmed **−0.123 [−0.206, −0.040]**,
+wikitexts **−0.098**, chatlogs **−0.061**); within the short tercile it is
+null in four of five. The composition test makes this precise: predicting
+each corpus's delta by reweighting leave-one-corpus-out tercile means with
+that corpus's own tercile mix leaves no significant residual anywhere —
+state_of_the_union, the only corpus still positive at B=1600, has the
+largest residual (+0.042 [−0.009, +0.098]), and pubmed, the most negative,
+sits at −0.040 [−0.097, +0.014]. Chatlogs "behaves worst" simply because
+50% of its questions fall in the long tercile versus 14% for
+state_of_the_union. Domain identity — medical abstracts vs speeches vs chat
+transcripts — adds nothing detectable beyond the length of the evidence to
+be retrieved, which sharpens finding 14: the moderator *is* the gold
+length.
+
+**25. The loss tail is two failure modes, and the smaller one is a ranking
+failure on short golds.** Of the 55/472 questions that lose ≥ 0.25
+SpanRecall under fixed-64 at B=1600, 49 are partial-coverage losses
+matching finding 14's mechanism question-by-question: median 75 gold
+tokens, 63% multi-reference, and fixed-64 *does* rank a gold-bearing chunk
+into its top five 80% of the time — the region is found, but 64-token
+windows cover too little of it within the budget. The other 6 are complete
+misses: fixed-64 retrieves zero gold tokens while fixed-256 scores a
+perfect 1.000 — and these sit on *short*, single-reference golds (median 17
+tokens; e.g. `finance:009`, a 5-token gold). Their hit@5 is 0.00 vs the
+baseline's 1.00, so ~25 retrieved chunks never included the answer: a
+64-token window around a short gold span carries too little of the
+question's surrounding lexical context to outrank confusable text elsewhere
+in a 23k–145k-token corpus. Chunk size sets not only how much a retrieval
+*covers* (finding 14) but how much scoring evidence the ranker *sees* per
+candidate — the lexical-ranker counterpart of finding 12's encoder-window
+mechanism. The mirror stratum says the same thing: in the 22 wins ≥ +0.25,
+it is fixed-256's ranking that fails (hit@5 0.41 vs fixed-64's 0.50).
+
+**26. Overlap = placement + extension − a redundancy tax; stitching is
+real but budget-limited.** Splitting each overlap gain by its
+control's state on the same question decomposes it exactly, and the parts
+are individually significant almost everywhere even when the net is null:
+fixed-256/o64 at B=1600 is +0.002 [n.s.] = **+0.009** new-region
+**+0.019** extension **−0.026** tax. The tax — questions the control
+already answered perfectly, where duplicated tokens can only crowd useful
+chunks out of the budget — is significant in every non-degenerate cell
+(−0.015 to −0.058): under budget matching, overlap is never free, it must
+out-earn this. The mix identifies the mechanism by regime. Large windows at
+tight budgets gain mostly by *placement* (fixed-256/o64 at B=400: +0.084 of
+the gross gain is new-region — with room for ~1.5 chunks, a 4×-denser grid
+of candidate positions decides whether the one affordable chunk covers gold
+at all); small windows persist by *extension* (fixed-64/o32 at B=1600:
++0.032 of the +0.024 net). And the moderation view puts a budget bound on
+finding 17's stitching account: long-gold gains are real but transient —
+significant at B=400 in three of four pairs (+0.049 / +0.060 / +0.062) and
+gone by B=800 everywhere (fixed-64/o32 at B=1600: +0.003 n.s.) — while the
+gains that *persist* to generous budgets sit in terciles whose golds fit
+inside the window (fixed-64/o32, middle tercile: **+0.052 [+0.026,
++0.079]**; fixed-128/o32, short tercile: **+0.027**; both beyond-window
+terciles null or point-negative) and in *single-reference* questions
+(**+0.031** vs +0.014 n.s. multi-reference). Overlap stitches long
+evidence only while the budget is too tight for plain adjacency to cover
+it; what it durably buys is whole-span capture of golds no longer than the
+window. Finding 16's practical rule gains a budget clause: overlap for
+longer-than-chunk evidence helps at tight budgets, but what justifies it at
+generous ones is evidence that fits *inside* the chunk.
+
 ## Status
 
 - [x] Phase 1 (harness): offset-preserving chunkers + tokenization
@@ -882,7 +970,9 @@ pairings agree on zero.*
 - [x] Phase 3: matched-realized-size protocol — calibration script,
       calibrated sentence grids under both budget rules (24 configs),
       matched summary with dispersion bootstrap — findings 22–23 (347 tests)
-- [ ] Phase 3: per-corpus error analysis
+- [x] Phase 3: per-corpus error analysis — corpus × tercile composition
+      test, loss taxonomy, exact overlap decomposition (no new runs) —
+      findings 24–26 (357 tests)
 - [ ] Phase 4: full writeup
 
 Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).
@@ -989,7 +1079,7 @@ Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).
 
 ```bash
 pip install -r requirements.txt
-python -m pytest tests/ -q          # 327 tests (dense tests skip without the dense stack)
+python -m pytest tests/ -q          # 357 tests (dense tests skip without the dense stack)
 python -m src.data                  # fetch SQuAD + Chroma corpora (pinned URLs + SHA256)
 python -m experiments.run_grid      # rerun the grid (results are resumable)
 python -m experiments.run_grid --tokenizer cl100k   # the BPE-unit grid (finding 19)
@@ -1001,6 +1091,7 @@ python -m experiments.summarize_seeds
 python -m experiments.summarize_chroma
 python -m experiments.summarize_tokenizers
 python -m experiments.summarize_semantic
+python -m experiments.summarize_errors
 python -m experiments.make_figures
 python -m experiments.make_hero_figure
 ```
