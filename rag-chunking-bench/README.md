@@ -26,21 +26,63 @@ protocol**: retrievers are compared at equal retrieved-token budgets using
 span-level (token-overlap) metrics against gold evidence spans, with paired
 bootstrap confidence intervals over questions. The goal is a defensible
 answer to "which chunking decisions survive budget control, and by how much,"
-at a scale (CPU, open data) that anyone can reproduce. Headline results so
-far: fixed-k evaluation and budget-matched evaluation rank chunk sizes in
-opposite orders (finding 2); under budget matching the winning chunk size is
-set by the length of the gold evidence — smallest chunks dominate on
-short-answer SQuAD at every budget, but with sentence-scale evidence the
-advantage inverts at generous budgets (findings 13–14); the effects
-replicate across four retriever families, three sampling seeds, both
-budget-boundary rules, and two token units (regex word vs. cl100k_base BPE);
-and the popular percentile *semantic* chunker, once budget-matched and
-compared at matched *realized* size, shows no boundary-quality gain over
-cheap regex sentence packing anywhere — its apparent wins are chunk-size
-drift, and on long-gold corpora it retains a measurable penalty (findings
-20–22); the matched-size protocol itself turns out to need care, because
-realized-size *dispersion* interacts with the budget rule strongly enough
-to manufacture ±0.5 recall deltas at matched means (finding 23).
+at a scale (CPU, open data) that anyone can reproduce. The experimental
+program — 26 findings across baselines, five robustness axes, and a closing
+error analysis — is complete. Headline results: fixed-k evaluation and
+budget-matched evaluation rank chunk sizes in opposite orders (finding 2);
+under budget matching the winning chunk size is set by the length of the
+gold evidence — smallest chunks dominate on short-answer SQuAD at every
+budget, but with sentence-scale evidence the advantage inverts at generous
+budgets (findings 13–14); the effects replicate across four retriever
+families, three sampling seeds, both budget-boundary rules, and two token
+units (regex word vs. cl100k_base BPE); the popular percentile *semantic*
+chunker, once budget-matched and compared at matched *realized* size, shows
+no boundary-quality gain over cheap regex sentence packing anywhere — its
+apparent wins are chunk-size drift, and on long-gold corpora it retains a
+measurable penalty (findings 20–22); and the matched-size protocol itself
+turns out to need care, because realized-size *dispersion* interacts with
+the budget rule strongly enough to manufacture ±0.5 recall deltas at
+matched means (finding 23). A question-level error analysis closes the
+loop: apparent per-corpus differences are entirely gold-length composition,
+the residual loss tail splits into two identifiable mechanisms, and every
+overlap gain decomposes exactly into new-region placement plus coverage
+extension minus a redundancy tax (findings 24–26).
+
+## The 26 findings at a glance
+
+One line per finding; each link lands on the section with the full setup,
+tables, and paired bootstrap CIs. If you only read three: **2** (the
+fixed-k confound), **14** (chunk size should match evidence length), and
+**23** (why "matched chunk size" comparisons need care).
+
+| # | Claim | Section |
+|---|---|---|
+| 1 | Under budget matching, smaller chunks win at every budget on SQuAD's short golds | [Baseline](#baseline-findings-the-size-effect-and-the-fixed-k-confound) |
+| 2 | Fixed-k evaluation reverses that ranking — the retrieved-token confound is real and large | [Baseline](#baseline-findings-the-size-effect-and-the-fixed-k-confound) |
+| 3 | Sentence alignment adds a modest, significant edge at matched size | [Baseline](#baseline-findings-the-size-effect-and-the-fixed-k-confound) |
+| 4 | Nominal chunk size is confounded by under-filling — report realized sizes | [Baseline](#baseline-findings-the-size-effect-and-the-fixed-k-confound) |
+| 5 | Stop-before-exceed zeroes any config whose chunks exceed the budget — a protocol artifact kept visible | [Baseline](#baseline-findings-the-size-effect-and-the-fixed-k-confound) |
+| 6 | Overlap is boundary repair: fixed windows gain at tight budgets, sentence packing just pays | [Overlap ablation](#overlap-ablation-overlap-is-boundary-repair-not-free-recall) |
+| 7 | Small chunks still win when every config spends its full budget | [Budget-rule robustness](#budget-rule-robustness-the-size-effect-is-not-a-stop-rule-artifact) |
+| 8 | Every chunking effect transfers to TF-IDF and LSA — and chunking moves recall more than retriever choice | [Retriever robustness](#retriever-robustness-the-chunking-effects-are-not-bm25-artifacts) |
+| 9 | BM25 ≥ TF-IDF ≥ LSA nearly everywhere, and the retriever gap grows with chunk size | [Retriever robustness](#retriever-robustness-the-chunking-effects-are-not-bm25-artifacts) |
+| 10 | Every headline claim replicates under three independent question samples | [Seed robustness](#sampling-seed-robustness-the-headline-effects-do-not-ride-on-the-draw) |
+| 11 | The chunking effects are retriever-family-independent — dense MiniLM included | [Dense retrieval](#dense-retrieval-the-effects-transfer-and-the-encoder-window-becomes-a-mechanism) |
+| 12 | Past the encoder window, dense retrieval is prefix retrieval — even hit@5 turns down | [Dense retrieval](#dense-retrieval-the-effects-transfer-and-the-encoder-window-becomes-a-mechanism) |
+| 13 | With sentence-scale golds, the small-chunk advantage inverts at generous budgets | [Long-reference corpora](#long-reference-corpora-gold-evidence-length-sets-where-smaller-stops-winning) |
+| 14 | The inversion is gold-length-driven: match chunk size to evidence length | [Long-reference corpora](#long-reference-corpora-gold-evidence-length-sets-where-smaller-stops-winning) |
+| 15 | The inversion requires a retriever that reads whole chunks; precision finally discriminates | [Long-reference corpora](#long-reference-corpora-gold-evidence-length-sets-where-smaller-stops-winning) |
+| 16 | On long golds, overlap's gains persist across budgets — and reach sentence packing | [Overlap on long golds](#overlap-on-long-gold-corpora-boundary-repair-becomes-evidence-stitching) |
+| 17 | Boundary repair is not the whole story: where golds outgrow the window, overlap becomes evidence stitching | [Overlap on long golds](#overlap-on-long-gold-corpora-boundary-repair-becomes-evidence-stitching) |
+| 18 | The crossover survives the budget rule and every drop-one corpus; much of the tight-budget small-chunk edge was the stop rule | [Crossover robustness](#crossover-robustness-the-inversion-survives-the-budget-rule-and-every-corpus) |
+| 19 | Every headline claim is unit-invariant under cl100k_base BPE accounting | [Tokenizer robustness](#tokenizer-unit-robustness-the-claims-survive-real-bpe-accounting) |
+| 20 | The semantic chunker's matched-nominal wins are realized-size drift, not boundary quality | [Semantic chunking](#semantic-chunking-embedding-breakpoints-buy-size-drift-not-boundary-quality) |
+| 21 | The drift account passes falsification: the "advantage" flips sign on long golds at generous budgets | [Semantic chunking](#semantic-chunking-embedding-breakpoints-buy-size-drift-not-boundary-quality) |
+| 22 | At matched realized size the semantic chunker gains nothing anywhere, and its long-gold penalty survives | [Matched realized size](#matched-realized-size-the-semantic-wins-vanish-and-matched-means-prove-insufficient) |
+| 23 | Matched mean ≠ matched distribution: the stop rule turns residual dispersion into ±0.5 deltas | [Matched realized size](#matched-realized-size-the-semantic-wins-vanish-and-matched-means-prove-insufficient) |
+| 24 | Per-corpus differences are gold-length composition, not domain | [Error analysis](#error-analysis-which-questions-move-the-deltas) |
+| 25 | The loss tail is two mechanisms: partial coverage on long multi-reference golds, plus rare complete ranking misses on short golds | [Error analysis](#error-analysis-which-questions-move-the-deltas) |
+| 26 | Overlap = placement + extension − a redundancy tax; stitching is budget-limited | [Error analysis](#error-analysis-which-questions-move-the-deltas) |
 
 ## Motivation
 
@@ -219,7 +261,7 @@ dominate at every budget: 64-token chunks are never worse than larger ones,
 and configs whose chunks exceed the budget collapse to ~0 (stop-before-exceed
 retrieves nothing — see finding 4). CI bands are barely visible at n=2,400.*
 
-### Findings so far
+### Baseline findings: the size effect and the fixed-k confound
 
 **1. Under budget matching, smaller chunks win — significantly.** At B=400,
 fixed-64 beats the fixed-256 baseline by **+0.134 [+0.117, +0.152]**
@@ -314,7 +356,8 @@ for it in index size or retrieved duplicates. This control holds on SQuAD
 at every size and budget; finding 17 shows the regime where it breaks. Practical reading: if you use
 fixed windows with a tight context budget, ~25% overlap is worth it; if you
 chunk on sentence boundaries, skip overlap entirely — advice findings 16–17
-amend for corpora whose gold evidence outgrows the chunk.
+amend for corpora whose gold evidence outgrows the chunk, and finding 26
+prices mechanism by mechanism (placement + extension − a redundancy tax).
 
 ### Budget-rule robustness: the size effect is not a stop-rule artifact
 
@@ -521,7 +564,9 @@ findings 1 and 10 this gives the benchmark's most practical rule so far:
 **the optimal chunk size scales with the length of the evidence a question
 needs** — ~3-token answers favor the smallest chunks at every budget;
 sentence-to-paragraph evidence favors 128–256-token chunks once the budget
-is loose enough to afford them.
+is loose enough to afford them. (Finding 24 later sharpens the moderator
+claim: corpus identity adds nothing detectable beyond gold-length
+composition.)
 
 **15. The inversion requires a retriever that can read the whole chunk —
 and precision finally has something to say.** Under dense MiniLM retrieval
@@ -603,7 +648,8 @@ under-fills its nominal budget (realized mean 51 vs. 64 tokens at nominal
 that finding 13 charges to operating smaller. The practical rule of finding
 6 survives with an amendment: with fixed windows, ~25% overlap; with
 boundary-aware chunkers, add overlap only when the evidence you expect to
-retrieve is longer than your chunks.
+retrieve is longer than your chunks. (Finding 26 adds the budget clause:
+that longer-than-chunk case pays only while the budget is tight.)
 
 ### Crossover robustness: the inversion survives the budget rule and every corpus
 
@@ -973,7 +1019,12 @@ generous ones is evidence that fits *inside* the chunk.
 - [x] Phase 3: per-corpus error analysis — corpus × tercile composition
       test, loss taxonomy, exact overlap decomposition (no new runs) —
       findings 24–26 (357 tests)
-- [ ] Phase 4: full writeup
+- [x] Phase 4: writeup coherence pass — findings-at-a-glance navigation
+      table, cross-finding reconciliation (1↔13, 6/16–17↔26, 14↔24,
+      20–21↔22–23), limitations sweep incl. deliberately-unrun ablations
+- [ ] Phase 4: final reproduction audit — regenerate every summary table and
+      figure from the committed raw results in a clean environment and
+      verify them against the committed files — then release polish
 
 Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).
 
@@ -1022,17 +1073,35 @@ Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).
   grid — the Chroma, dense, and overlap results remain word-token-unit
   measurements, with no mechanism identified by which the unit would affect
   them differently.
-- The semantic-chunking verdict (findings 20–21) covers one variant (the
+- The semantic-chunking verdict (findings 20–23) covers one variant (the
   percentile-breakpoint rule at the LangChain-default 95th percentile), one
   encoder (MiniLM, whose 256-wordpiece window prefix-embeds 2% of Chroma
   sentences — 181 of 9,046 — before breakpoints are even placed), and BM25
-  retrieval. The clustering variant, other thresholds, and larger encoders
-  could still find boundaries that matter; what the finding establishes is
-  that the *default* configuration's wins are explained by realized-size
-  drift, and that a fair test of boundary quality requires matching realized
-  size distributions. Semantic-chunker boundaries, like dense scores, are
-  deterministic per environment but not bit-portable across torch/BLAS
-  builds (encoder and library versions are recorded in every result file).
+  retrieval. The matched-realized-size protocol (findings 22–23) is the fair
+  test of boundary quality for this configuration, and it found none — plus
+  a surviving long-gold penalty — but the clustering variant, other
+  percentile thresholds, and larger encoders could still find boundaries
+  that matter and remain untested (a `--percentile` sweep is one grid flag
+  away). Semantic-chunker boundaries, like dense scores, are deterministic
+  per environment but not bit-portable across torch/BLAS builds (encoder
+  and library versions are recorded in every result file).
+- The error analysis (findings 24–26) anatomizes the BM25/Chroma runs — the
+  loss taxonomy at the B=1600 analysis budget with a ≥0.25 threshold, both
+  choices stated in the summary — so the per-question anatomy of the other
+  retrievers' deltas is uncharacterized, though their pooled effects match
+  BM25's (findings 8, 11).
+- Two ablations were deliberately left unrun, with reasons rather than
+  results. (1) The overlap × truncate-rule cross: every overlap ablation
+  (findings 6, 16–17, 26) uses the stop rule. Finding 26's exact
+  decomposition identifies where overlap earns (new-region placement,
+  coverage extension) and what it pays (the redundancy tax); rerunning under
+  truncate would re-price the tax at the budget boundary but cannot change
+  which mechanisms exist, and the main size-effect claims were already shown
+  rule-robust (findings 7, 18). (2) A larger-window dense encoder: the
+  window mechanism (findings 12, 15) is established by per-run truncation
+  exposure, not by an encoder swap; swapping in a 512-wordpiece encoder
+  would confound window length with model quality and scale, and larger
+  encoders are impractical on this CPU budget anyway.
 - Chroma corpora queries are LLM-generated (dataset provenance, not ours);
   SQuAD questions are human-written but crowd-sourced over single paragraphs.
 
