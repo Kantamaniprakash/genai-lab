@@ -22,7 +22,12 @@ chunkers, chunk sizes, and retrievers — with paired bootstrap confidence inter
 on span-level metrics — is a genuine gap at a scale one person can execute
 rigorously. It also feeds directly back into my `financial-rag-chatbot`.
 
-**Phase.** 3 of 4 complete; phase 4 (writeup) next — baselines (first grid 2026-07-04:
+**Phase.** 4 of 4 in progress — the writeup coherence pass landed 2026-07-15
+(findings-at-a-glance navigation table, cross-finding reconciliation,
+limitations sweep recording the deliberately-unrun ablations with reasons);
+what remains is the clean-environment reproduction audit and release polish,
+then the flagship closes and the next one comes off the backlog. Phases 1–3
+complete — baselines (first grid 2026-07-04:
 fixed-k vs budget-matched ranking reversal; overlap ablation + truncate-rule
 robustness check 2026-07-05: overlap = boundary repair, size ordering
 survives the rule change — findings 6–7; cross-retriever grid 2026-07-06:
@@ -73,7 +78,9 @@ stitching real only at tight budgets — findings 24–26).
    finding 19)*, semantic vs. structural chunking *(done — findings
    20–21)*, matched-realized-size protocol *(done — findings 22–23)*,
    per-corpus error analysis *(done — findings 24–26; phase complete)*.
-4. **Writeup** — README as a full research report with real tables and limitations.
+4. **Writeup** — README as a full research report with real tables and
+   limitations. *(in progress: coherence pass done 2026-07-15; reproduction
+   audit + release polish remain)*
 
 **Environment constraints (recorded so results are honest).** CPU-only (4 cores,
 16 GB RAM). Network access widened on 2026-07-03: HuggingFace and the tiktoken

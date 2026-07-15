@@ -1277,3 +1277,108 @@ matched) before the gold-length analyses could run.
 
 - None new. Remaining carries all fold into the writeup-phase decisions
   listed above.
+
+---
+
+## 2026-07-15 — Day 14: phase 4 opens — the coherence pass: navigation, reconciliation, limitations
+
+Writeup day, no new runs: the README got its findings-at-a-glance
+navigation table (26 one-line claims, each anchor-linked to its section),
+the early findings were reconciled with their later refinements by
+explicit cross-references instead of leaving the reader to collate them,
+and the limitations section absorbed the deliberately-unrun ablations
+with the reasons they stay unrun. Every headline number cited in the
+README was re-checked against the committed summary tables before
+editing, and the full test suite passes both without the dense stack
+(339 + 3 skipped) and with it (355 + 2 = 357, matching the README's
+claim).
+
+### Repo state note
+
+Same detached-HEAD situation as days 12–13; reattached to `main`,
+fast-forwarded to origin/fe4c853 before starting. No data fetch needed —
+today touched only prose.
+
+### Done (committed 97b1d5c)
+
+- **Navigation table** (`## The 26 findings at a glance`, right after the
+  abstract): one row per finding, claim compressed to a line, section
+  links generated with the same slug rule as `scripts/sync_latest.py`
+  and verified programmatically — all 26 references resolve against the
+  file's actual headings. Added a three-finding shortlist for skimmers
+  (2, 14, 23). The stale `### Findings so far` heading became
+  `### Baseline findings: the size effect and the fixed-k confound`
+  (nothing else linked to the old anchor; grepped the repo first).
+- **Abstract**: "results so far" framing replaced with
+  program-complete framing, and the error-analysis findings 24–26 added
+  as the closing clause (composition, loss taxonomy, exact overlap
+  decomposition).
+- **Reconciliation cross-refs** where an early finding's practical rule
+  was later amended and the amendment lived 400 lines away: finding 6 →
+  26 (the overlap price now itemized as placement + extension − tax),
+  finding 17 → 26 (the budget clause on the longer-than-chunk rule),
+  finding 14 → 24 (the moderator is gold-length composition, corpus
+  identity adds nothing). Finding 1 → 13–15 and 20/21 → 22–23 already
+  carried their pointers from the days they landed; verified, left
+  alone.
+- **Limitations sweep**: the semantic bullet was stale — it still said a
+  fair boundary-quality test "requires matching realized size
+  distributions" as if that test were future work, when day 12 ran it;
+  now states findings 22–23 as the executed test and narrows the open
+  residue to cluster variant / other percentiles / larger encoders. Two
+  new bullets: the error-analysis scope (BM25/Chroma anatomy only,
+  B=1600 taxonomy budget and ≥0.25 threshold stated), and the two
+  deliberately-unrun ablations with reasons — overlap × truncate cross
+  (finding 26 identifies the mechanisms; truncate would only re-price
+  the tax, and rule-robustness is already established by findings 7/18)
+  and the larger-window dense encoder (window mechanism established by
+  exposure instrumentation; an encoder swap confounds window with model
+  quality and exceeds the CPU budget).
+- **Status section**: phase-4 coherence pass checked off; the remaining
+  phase-4 item is now concrete — a clean-environment reproduction audit
+  regenerating every summary and figure from committed raw results and
+  verifying against the committed files, then release polish.
+
+### Verified (day-13 carry item 3)
+
+- Abstract and hero caption carry no numbers that could go stale
+  (qualitative by design); the specific deltas cited in findings 1, 13,
+  18, 22 re-checked against `summary_dev-v1.1_bm25.md`,
+  `summary_chroma_bm25_moderation.md`, `summary_chroma_bm25_ablations.md`,
+  and both matched summaries — all match. Finding 18's −0.041/−0.047
+  correspond to the truncate-table means (0.794−0.834, 0.874−0.921)
+  with paired CIs in the moderation summary.
+
+### Process notes
+
+- The composition-test bullet nearly went into limitations as "single
+  corpus set" — but that duplicates the existing per-corpus-n bullet.
+  Rule of thumb for limitation sweeps: each bullet should name a
+  *distinct* threat, or reviewers read padding.
+- Writing the one-line claims was itself a useful audit: every finding
+  compressed to a line without losing its qualifier except 18, which
+  needed both halves (rule-robust crossover AND the artifact-share of
+  the tight-budget edge) — a hint that 18 is really two findings, kept
+  as one to preserve the numbering that the summaries and notes already
+  cite.
+
+### Next steps (Day 15, in order)
+
+1. **Reproduction audit**: in a clean checkout, refetch data
+   (`python -m src.data`), regenerate all 22 summaries and all figures
+   from committed raw results, and diff against the committed files.
+   Expect bit-identity for everything generated in this environment
+   (the known exception: the day-12 note about the Tier 2-rendered hero
+   PNG — re-verify visually, document in NOTES if it still differs).
+   Fix anything that drifts or document why it can't.
+2. **Release polish**: read the README top-to-bottom once as a stranger
+   (fresh-eyes pass for typos, tense, and any remaining "so far"
+   phrasing), confirm the Reproducing section's commands match the
+   actual entry points, and decide whether the project is DONE by the
+   demanding-reviewer bar. If yes, close it out in ROADMAP.md and pick
+   the next flagship from the backlog next session.
+
+### Open questions (carried)
+
+- None. All former carries are either executed, folded into
+  limitations with reasons, or listed in README §21's open residue.

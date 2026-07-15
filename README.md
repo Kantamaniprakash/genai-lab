@@ -11,13 +11,17 @@ Hands-on experiments with current Gen AI techniques — RAG, agents, evals, fine
 
 <!-- auto-generated from research/NOTES.md by scripts/sync_latest.py; do not hand-edit -->
 
-**2026-07-14 — Day 13: per-question error analysis — findings 24–26: composition explains the corpora, the loss tail splits by mechanism, overlap decomposes exactly**
+**2026-07-15 — Day 14: phase 4 opens — the coherence pass: navigation, reconciliation, limitations**
+
+Writeup day, no new runs: the README got its findings-at-a-glance navigation table (26 one-line claims, each anchor-linked to its section), the early findings were reconciled with their later refinements by explicit cross-references instead of leaving the reader to collate them, and the limitations section absorbed the deliberately-unrun ablations with the reasons they stay unrun. Every headline number cited in the README was re-checked against the committed summary tables before editing, and the full test suite passes both without the dense stack (339 + 3 skipped) and with it (355 + 2 = 357, matching the README's claim).
+
+[Full entry →](rag-chunking-bench/research/NOTES.md#2026-07-15--day-14-phase-4-opens--the-coherence-pass-navigation-reconciliation-limitations)
+
+**Most recent findings** ([2026-07-14 — Day 13: per-question error analysis — findings 24–26: composition explains the corpora, the loss tail splits by mechanism, overlap decomposes exactly](rag-chunking-bench/research/NOTES.md#2026-07-14--day-13-per-question-error-analysis--findings-2426-composition-explains-the-corpora-the-loss-tail-splits-by-mechanism-overlap-decomposes-exactly)):
 
 - Finding 24 — corpus identity adds nothing beyond gold-length mix.
 - Finding 25 — the loss tail is two mechanisms, the small one a ranking failure on SHORT golds.
 - Finding 26 — overlap = placement + extension − redundancy tax; stitching is budget-limited.
-
-[Full entry →](rag-chunking-bench/research/NOTES.md#2026-07-14--day-13-per-question-error-analysis--findings-2426-composition-explains-the-corpora-the-loss-tail-splits-by-mechanism-overlap-decomposes-exactly)
 <!-- latest-end -->
 
 ![Budget-matched SpanRecall@400 by chunking strategy and chunk size, with 95% bootstrap CIs](rag-chunking-bench/assets/hero_spanrecall_dev-v1.1_bm25.png)
