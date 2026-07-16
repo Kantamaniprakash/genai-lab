@@ -219,15 +219,14 @@ python -m experiments.run_grid --chunkers fixed --sizes 64 --overlaps 8 16 32   
 python -m experiments.run_grid --seed 1       # independent question sample (multi-seed check)
 python -m experiments.run_grid --dataset chroma --per-doc-cap 150 --retrievers bm25 tfidf lsa dense
                                               # long-reference corpora, all four retrievers (~7 min)
-python -m experiments.summarize               # baseline tables incl. paired CIs -> results/summary_*.md
-python -m experiments.summarize_ablations     # overlap + budget-rule tables -> results/summary_*_ablations.md
-python -m experiments.summarize_retrievers    # retriever x chunker tables -> results/summary_*_retrievers.md
-python -m experiments.summarize_seeds         # per-seed robustness tables -> results/summary_*_seeds.md
-python -m experiments.summarize_chroma        # per-corpus + gold-length moderation -> results/summary_chroma_*_moderation.md
-python -m experiments.summarize_errors        # composition test, loss taxonomy, overlap decomposition -> results/summary_chroma_*_errors.md
-python -m experiments.make_figures            # figures -> results/figures/
-python -m experiments.make_hero_figure        # headline figure -> assets/
+python -m experiments.reproduce --write       # regenerate every summary table and figure from results/raw/
+python -m experiments.reproduce               # ...or audit: regenerate to a scratch dir, byte-compare vs. committed
 ```
+
+The manifest in `experiments/reproduce.py` is the authoritative map from each
+committed table and figure to the exact summarizer invocation that produces
+it (nine summarizers plus the two figure scripts; `tests/test_reproduce.py`
+pins the manifest to the committed artifact set).
 
 ### Baseline grid (phase 2, first slice)
 
@@ -259,7 +258,7 @@ questions (10,000 resamples). Full tables: [`results/summary_dev-v1.1_bm25.md`](
 *Budget curves per chunker family. Under budget matching, smaller chunks
 dominate at every budget: 64-token chunks are never worse than larger ones,
 and configs whose chunks exceed the budget collapse to ~0 (stop-before-exceed
-retrieves nothing — see finding 4). CI bands are barely visible at n=2,400.*
+retrieves nothing — see finding 5). CI bands are barely visible at n=2,400.*
 
 ### Baseline findings: the size effect and the fixed-k confound
 
@@ -1022,11 +1021,20 @@ generous ones is evidence that fits *inside* the chunk.
 - [x] Phase 4: writeup coherence pass — findings-at-a-glance navigation
       table, cross-finding reconciliation (1↔13, 6/16–17↔26, 14↔24,
       20–21↔22–23), limitations sweep incl. deliberately-unrun ablations
-- [ ] Phase 4: final reproduction audit — regenerate every summary table and
-      figure from the committed raw results in a clean environment and
-      verify them against the committed files — then release polish
+- [x] Phase 4: final reproduction audit + release — `experiments/reproduce.py`
+      maps all 41 committed artifacts (22 tables, 19 figures) to their
+      generating invocations and byte-compares regenerated output against
+      the committed files; run in a fresh clone with a fresh interpreter
+      and refetched data, it caught two stale ablation tables (the day-13
+      semantic truncate runs had leaked into the structural budget-rule
+      section — summarizer scoped to structural chunkers, regression
+      test added) and the one figure rendered outside this environment
+      (hero PNG re-rendered here, visually identical); all 41 artifacts
+      now verified byte-identical in the clean environment (365 tests)
 
-Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).
+The experimental program and writeup are complete; the open residue is
+recorded under Limitations. Day-by-day research log:
+[`research/NOTES.md`](research/NOTES.md).
 
 ## Limitations
 
@@ -1148,21 +1156,14 @@ Day-by-day research log: [`research/NOTES.md`](research/NOTES.md).
 
 ```bash
 pip install -r requirements.txt
-python -m pytest tests/ -q          # 357 tests (dense tests skip without the dense stack)
+python -m pytest tests/ -q          # 365 tests (dense tests skip without the dense stack)
 python -m src.data                  # fetch SQuAD + Chroma corpora (pinned URLs + SHA256)
-python -m experiments.run_grid      # rerun the grid (results are resumable)
+python -m experiments.reproduce     # regenerate all 22 tables + 19 figures from the
+                                    # committed raw results and byte-compare vs. committed
+python -m experiments.run_grid      # rerun the grid itself (results are resumable)
 python -m experiments.run_grid --tokenizer cl100k   # the BPE-unit grid (finding 19)
 python -m experiments.run_grid --chunkers semantic --sizes 64 128 256 512  # finding 20 (needs the dense stack)
-python -m experiments.summarize
-python -m experiments.summarize_ablations
-python -m experiments.summarize_retrievers
-python -m experiments.summarize_seeds
-python -m experiments.summarize_chroma
-python -m experiments.summarize_tokenizers
-python -m experiments.summarize_semantic
-python -m experiments.summarize_errors
-python -m experiments.make_figures
-python -m experiments.make_hero_figure
+python -m experiments.calibrate_matched             # calibrated sentence sizes for findings 22-23
 ```
 
 Or with [uv](https://docs.astral.sh/uv/) (lockfile committed):
@@ -1184,3 +1185,15 @@ are deterministic on a fixed environment; across torch/BLAS builds,
 floating-point differences can perturb near-tied rankings, which is why
 every dense result file records the torch and sentence-transformers
 versions that produced it.
+
+The whole pipeline passed a clean-environment audit before release: in a
+fresh clone with a fresh interpreter and refetched data,
+`python -m experiments.reproduce` regenerated all 41 committed artifacts
+byte-identically from `results/raw/`. Two caveats calibrate expectations
+elsewhere: summary *tables* should be byte-identical on any machine, while
+figure PNG bytes also depend on the font stack beneath the pinned
+matplotlib — on a different OS, figure "drift" means re-render and compare
+visually (`--tables-only` restricts the audit to the tables). And the audit
+verifies summaries/figures given the committed raw results; regenerating
+the *dense and semantic raw results themselves* is environment-exact only
+(the torch/BLAS note above).
