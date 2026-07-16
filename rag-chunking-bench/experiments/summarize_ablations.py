@@ -27,7 +27,14 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from experiments.aggregate import BASELINE_SIZES, RunResult, diff_ci, load_raw, mean
+from experiments.aggregate import (
+    BASELINE_SIZES,
+    STRUCTURAL_CHUNKERS,
+    RunResult,
+    diff_ci,
+    load_raw,
+    mean,
+)
 from experiments.summarize import _table, fmt_diff
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -240,6 +247,10 @@ def render_ablations(
     seed: int = 0,
     sizes: tuple[int, ...] | None = None,
 ) -> str:
+    # This summary ablates the structural baseline grid; the semantic
+    # chunker's stop and truncate runs (canonical sizes, from the semantic
+    # and matched-realized-size grids) share this raw directory and must
+    # stay in their own summaries.
     stop_all = load_raw(
         raw_dir,
         dataset=dataset,
@@ -247,6 +258,7 @@ def render_ablations(
         budget_rule="stop",
         seed=seed,
         sizes=sizes,
+        chunkers=STRUCTURAL_CHUNKERS,
     )
     overlap_runs = [rr for rr in stop_all if rr.config["overlap"] > 0]
     baselines = {
@@ -262,6 +274,7 @@ def render_ablations(
         overlap=0,
         seed=seed,
         sizes=sizes,
+        chunkers=STRUCTURAL_CHUNKERS,
     )
     stop_runs = {_key(rr): rr for rr in stop_all if rr.config["overlap"] == 0}
     if not overlap_runs and not trunc_runs:

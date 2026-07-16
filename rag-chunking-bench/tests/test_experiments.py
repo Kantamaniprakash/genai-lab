@@ -678,6 +678,27 @@ class TestSummarizeAblations:
         assert "## Cross-family control" in text
         assert "sentence-32 − fixed-32/o8" in text
 
+    def test_render_ablations_excludes_semantic_runs(self, tiny_dataset, tmp_path):
+        # The matched-realized-size grids drop semantic stop and truncate
+        # runs at canonical sizes into the same raw directory; the
+        # structural ablation tables must not pick them up (they belong to
+        # the semantic and matched summaries). Regression: the day-15
+        # reproduction audit caught exactly this leak in the truncate
+        # section.
+        dataset, questions = tiny_dataset
+        run_and_save(_config(), dataset, questions, tmp_path)
+        run_and_save(_config(overlap=8), dataset, questions, tmp_path)
+        run_and_save(_config(budget_rule="truncate"), dataset, questions, tmp_path)
+        path, _ = run_and_save(
+            _config(chunker="sentence", budget_rule="truncate"),
+            dataset,
+            questions,
+            tmp_path,
+        )
+        _rewrite_config_field(path, "chunker", "semantic")
+        text = render_ablations("tiny", "bm25", tmp_path)
+        assert "semantic" not in text
+
     def test_render_ablations_requires_ablation_runs(self, tiny_dataset, tmp_path):
         dataset, questions = tiny_dataset
         run_and_save(_config(), dataset, questions, tmp_path)
