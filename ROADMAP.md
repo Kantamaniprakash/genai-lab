@@ -4,7 +4,18 @@ This lab runs one flagship research project at a time, worked daily until it wou
 survive review by a demanding referee. Everything here is real: every number in a
 writeup comes from an experiment actually run in this repo.
 
-## Current flagship: `rag-chunking-bench`
+## Current flagship: none — selection due
+
+`rag-chunking-bench` closed on 2026-07-16 (see Completed flagships below).
+The next session picks the successor from the backlog: start with a fresh
+scan of what the research community and market care about right now (arXiv,
+Papers with Code, model release notes, engineering blogs), pick the backlog
+item that best survives that scan — or a better idea the scan surfaces —
+and record the rationale here before writing any code.
+
+## Completed flagships
+
+### `rag-chunking-bench` — 2026-07-03 to 2026-07-16, COMPLETE
 
 **Question.** How much does the chunking strategy actually matter for RAG retrieval
 quality — once you control for the retrieved-token budget?
@@ -22,12 +33,22 @@ chunkers, chunk sizes, and retrievers — with paired bootstrap confidence inter
 on span-level metrics — is a genuine gap at a scale one person can execute
 rigorously. It also feeds directly back into my `financial-rag-chatbot`.
 
-**Phase.** 4 of 4 in progress — the writeup coherence pass landed 2026-07-15
-(findings-at-a-glance navigation table, cross-finding reconciliation,
-limitations sweep recording the deliberately-unrun ablations with reasons);
-what remains is the clean-environment reproduction audit and release polish,
-then the flagship closes and the next one comes off the backlog. Phases 1–3
-complete — baselines (first grid 2026-07-04:
+**Outcome.** 26 findings across baselines, five robustness axes (retriever
+family, sampling seed, budget rule, tokenizer unit, corpus jackknife), the
+semantic-chunker verdict under a matched-realized-size protocol, and a
+closing per-question error analysis. Headlines: fixed-k and budget-matched
+evaluation rank chunk sizes in opposite orders; under budget matching the
+winning chunk size is set by gold-evidence length; the percentile semantic
+chunker shows no boundary-quality gain at matched realized size and a real
+long-gold penalty; and matched *mean* size is not a controlled comparison —
+realized-size dispersion × the stop rule manufactures ±0.5 recall deltas.
+365 tests; every committed table and figure (22 + 19) regenerates
+byte-identically from the committed raw results in a clean environment
+(`experiments/reproduce.py`, audited 2026-07-16). Full report:
+`rag-chunking-bench/README.md`; day-by-day log:
+`rag-chunking-bench/research/NOTES.md`.
+
+**Phase history.** Baselines (first grid 2026-07-04:
 fixed-k vs budget-matched ranking reversal; overlap ablation + truncate-rule
 robustness check 2026-07-05: overlap = boundary repair, size ordering
 survives the rule change — findings 6–7; cross-retriever grid 2026-07-06:
@@ -79,8 +100,9 @@ stitching real only at tight budgets — findings 24–26).
    20–21)*, matched-realized-size protocol *(done — findings 22–23)*,
    per-corpus error analysis *(done — findings 24–26; phase complete)*.
 4. **Writeup** — README as a full research report with real tables and
-   limitations. *(in progress: coherence pass done 2026-07-15; reproduction
-   audit + release polish remain)*
+   limitations. *(done: coherence pass 2026-07-15; clean-environment
+   reproduction audit, `experiments/reproduce.py` manifest + audit tooling,
+   and release polish 2026-07-16 — flagship closed)*
 
 **Environment constraints (recorded so results are honest).** CPU-only (4 cores,
 16 GB RAM). Network access widened on 2026-07-03: HuggingFace and the tiktoken

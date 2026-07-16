@@ -11,11 +11,11 @@ Hands-on experiments with current Gen AI techniques — RAG, agents, evals, fine
 
 <!-- auto-generated from research/NOTES.md by scripts/sync_latest.py; do not hand-edit -->
 
-**2026-07-15 — Day 14: phase 4 opens — the coherence pass: navigation, reconciliation, limitations**
+**2026-07-16 — Day 15: the reproduction audit catches two stale tables; the flagship closes**
 
-Writeup day, no new runs: the README got its findings-at-a-glance navigation table (26 one-line claims, each anchor-linked to its section), the early findings were reconciled with their later refinements by explicit cross-references instead of leaving the reader to collate them, and the limitations section absorbed the deliberately-unrun ablations with the reasons they stay unrun. Every headline number cited in the README was re-checked against the committed summary tables before editing, and the full test suite passes both without the dense stack (339 + 3 skipped) and with it (355 + 2 = 357, matching the README's claim).
+The plan was a verification formality; the audit earned its keep instead. In a fresh clone with a fresh interpreter and refetched data, the new `experiments/reproduce.py` manifest audit regenerated all 41 committed tables and figures from the committed raw results: 38 reproduced byte-identically, two ablation tables turned out to be stale (day 13's semantic truncate runs had leaked into the structural budget-rule section — summarizer scoped, regression-tested, re-verified bit-identical), and the hero PNG was re-rendered so every committed artifact now originates from this reproducible environment. With that and the release polish below, `rag-chunking-bench` closes complete: 26 findings, 365 tests, and a replayable byte-level reproduction audit.
 
-[Full entry →](rag-chunking-bench/research/NOTES.md#2026-07-15--day-14-phase-4-opens--the-coherence-pass-navigation-reconciliation-limitations)
+[Full entry →](rag-chunking-bench/research/NOTES.md#2026-07-16--day-15-the-reproduction-audit-catches-two-stale-tables-the-flagship-closes)
 
 **Most recent findings** ([2026-07-14 — Day 13: per-question error analysis — findings 24–26: composition explains the corpora, the loss tail splits by mechanism, overlap decomposes exactly](rag-chunking-bench/research/NOTES.md#2026-07-14--day-13-per-question-error-analysis--findings-2426-composition-explains-the-corpora-the-loss-tail-splits-by-mechanism-overlap-decomposes-exactly)):
 

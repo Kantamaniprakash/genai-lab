@@ -1382,3 +1382,117 @@ today touched only prose.
 
 - None. All former carries are either executed, folded into
   limitations with reasons, or listed in README §21's open residue.
+
+---
+
+## 2026-07-16 — Day 15: the reproduction audit catches two stale tables; the flagship closes
+
+The plan was a verification formality; the audit earned its keep instead.
+In a fresh clone with a fresh interpreter and refetched data, the new
+`experiments/reproduce.py` manifest audit regenerated all 41 committed
+tables and figures from the committed raw results: 38 reproduced
+byte-identically, two ablation tables turned out to be stale (day 13's
+semantic truncate runs had leaked into the structural budget-rule
+section — summarizer scoped, regression-tested, re-verified
+bit-identical), and the hero PNG was re-rendered so every committed
+artifact now originates from this reproducible environment. With that
+and the release polish below, `rag-chunking-bench` closes complete:
+26 findings, 365 tests, and a replayable byte-level reproduction audit.
+
+### The audit harness (new, committed)
+
+`experiments/reproduce.py`: a manifest mapping **every** committed
+artifact — 22 summary tables, 18 figures, the hero PNG — to the exact
+generator invocation that produces it (25 steps across the nine
+summarizers and two figure scripts). Default mode replays all 25 steps
+with `--out-dir` redirected to a scratch directory *inside* the repo
+(the generators print `relative_to(ROOT)` paths, so an outside temp dir
+crashes them — learned by hitting it) and byte-compares against the
+committed files, reporting OK/DRIFT/MISSING/UNEXPECTED and exiting
+nonzero on any failure. `--write` regenerates in place; `--tables-only`
+skips figures for cross-OS use, where PNG bytes legitimately depend on
+the font stack. 7 manifest tests pin the output set to the committed
+files on disk (globbed, so a new committed artifact without a manifest
+entry fails the suite), plus uniqueness and runnability invariants.
+
+### The clean-environment run
+
+Fresh clone, fresh venv from pinned requirements (no dense stack —
+regeneration only reads raw), `python -m src.data` refetched both
+datasets (SHA256s passed), suite green, then the full audit (~50 min,
+bootstrap-heavy summarizers dominate). Verdict: **38/41 byte-identical,
+3 DRIFT** —
+
+1. `summary_dev-v1.1_bm25_ablations.md` and the chroma twin: the
+   regenerated tables had four extra `semantic-*/truncate` rows. Root
+   cause: day 13's matched-realized-size grids dropped semantic truncate
+   runs at canonical sizes into `results/raw/`, and `render_ablations`
+   loaded truncate runs **without** the `chunkers=STRUCTURAL_CHUNKERS`
+   filter the day-12 refactor gave the other cross-grid summarizers. The
+   committed tables predate day 13 and nobody re-ran the summarizer
+   after it. No committed number was wrong (the diff was purely added
+   rows) — the failure mode was scope leak plus staleness, exactly what
+   the audit exists to catch. Fix: both loads in `render_ablations` now
+   pass the structural filter (the ablation summary's scope is the
+   structural grid; semantic truncate analysis lives in the matched
+   summaries); regression test added
+   (`test_render_ablations_excludes_semantic_runs`, via the
+   `_rewrite_config_field` fixture). Fixed summarizer re-verified
+   bit-identical against the committed tables in BOTH environments.
+2. The known day-12 hero exception: `assets/hero_spanrecall_*.png` was
+   rendered in the Tier 2 PR's environment and never byte-reproduced
+   here. Re-rendered locally (deterministic: two uv-env renders and one
+   clean-clone pip-env render all hash `24dc9dc4…`, and the clean-clone
+   render matches the newly committed file), compared visually against
+   the old file (identical modulo font rasterization), committed the
+   local render. Every committed artifact now originates from this
+   reproducible environment.
+
+Composite result recorded in the README: all 41 artifacts verified
+byte-identical in the clean environment. Tests 357 → **365** (7 manifest
++ 1 regression); 347+3skip without the dense stack.
+
+### Release polish (same commit set)
+
+- Fresh-eyes pass over the full README: one real catch — the baseline
+  budget-curves caption said "see finding 4" where the stop-rule
+  retrieve-nothing artifact is finding **5**. No broken relative links,
+  no stale "so far" framing (the two remaining are positional, fine).
+- Both command blocks (Experiments intro, Reproducing) had drifted from
+  the entry points: neither listed `summarize_matched`,
+  `summarize_tokenizers`, `summarize_semantic`, or `calibrate_matched`.
+  Replaced the hand-maintained summarizer lists with
+  `experiments.reproduce` (+ `--write`) and pointed at the manifest as
+  the authoritative map; added `calibrate_matched` to Reproducing.
+  Updated the determinism paragraph with the audit result and the
+  tables-vs-figures byte-identity expectations.
+- Status section: phase 4 checked off with the audit story; added the
+  "program complete, open residue in Limitations" closing line.
+- Lab-level: ROADMAP restructured (flagship moved to a Completed
+  section with the outcome paragraph; "Current flagship: none —
+  selection due"); CHANGELOG 0.2.0 entry summarizing days 5–15 at
+  release altitude.
+
+### DONE decision
+
+Called it complete against the demanding-reviewer bar: 26 findings, each
+with paired CIs and at least one robustness axis; five-axis robustness
+program; a mechanism-level error analysis; limitations that name every
+deliberate gap with reasons; literature grounding with verified
+citations; and now a replayable byte-level reproduction audit. The open
+residue (cluster semantic variant, percentile sweep, larger encoders,
+multi-hop gold, cross-document retrieval) is recorded in README §
+Limitations — it is future work, not unfinished work.
+
+### Next steps (Day 16)
+
+1. **Pick the next flagship.** Fresh scan (arXiv, Papers with Code,
+   model release notes, engineering blogs) against the ROADMAP backlog;
+   the two strongest inheritances from this project are the
+   hallucination/faithfulness bench (reuses the span-metric machinery)
+   and the LLM-as-judge reliability audit (needs hosted-API access —
+   verify HF Inference API reachability with HF_TOKEN before
+   committing to it). Record the rationale in ROADMAP.md, scaffold the
+   project directory, and write day 1 of its NOTES.md.
+2. If the scan stalls, the side-repo rotation is overdue a
+   `data-analysis-agent` day (check its `git log -15` first).
