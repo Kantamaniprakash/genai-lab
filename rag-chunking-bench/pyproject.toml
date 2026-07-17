@@ -25,7 +25,7 @@ dev = [
 # lexical-only runs never download it. Install with: uv sync --group dense
 dense = [
     "sentence-transformers>=5.0.0",
-    "torch>=2.8.0",
+    "torch>=2.13.0",
 ]
 
 [tool.uv]
