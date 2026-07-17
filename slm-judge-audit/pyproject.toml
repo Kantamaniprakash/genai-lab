@@ -1,0 +1,33 @@
+[project]
+name = "slm-judge-audit"
+version = "0.1.0"
+description = "White-box reliability audit of small open-weight LLMs as pairwise judges: position bias in log-odds, calibration, and value over trivial baselines, with paired bootstrap confidence intervals"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Prakash Kantamani" }]
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=2.3.1",
+    "pyarrow>=20.0",
+]
+
+[project.urls]
+Repository = "https://github.com/Kantamaniprakash/genai-lab"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.12.0",
+]
+# The judge runner needs llama.cpp; kept out of the default group so the data
+# layer, prompt builder, and analysis code never require it.
+# Install with: uv sync --group judge
+judge = [
+    "llama-cpp-python>=0.3.9",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

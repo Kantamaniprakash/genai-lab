@@ -1,0 +1,7 @@
+# Python 3.11. Dependencies are added the day they are first used.
+numpy==2.4.6
+pyarrow==25.0.0
+pytest==9.1.1
+# Judge runner (dependency group "judge" in pyproject.toml); compiles from
+# source on CPU-only hosts (~5 min on 4 cores). Not needed for data/analysis.
+llama-cpp-python==0.3.34
