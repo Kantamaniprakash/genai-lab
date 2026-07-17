@@ -4,14 +4,53 @@ This lab runs one flagship research project at a time, worked daily until it wou
 survive review by a demanding referee. Everything here is real: every number in a
 writeup comes from an experiment actually run in this repo.
 
-## Current flagship: none — selection due
+## Current flagship: `slm-judge-audit` — started 2026-07-17, phase 1 (harness)
 
-`rag-chunking-bench` closed on 2026-07-16 (see Completed flagships below).
-The next session picks the successor from the backlog: start with a fresh
-scan of what the research community and market care about right now (arXiv,
-Papers with Code, model release notes, engineering blogs), pick the backlog
-item that best survives that scan — or a better idea the scan surfaces —
-and record the rationale here before writing any code.
+**Question.** How reliable are small open-weight LLMs (0.5B–8B, the sizes people
+actually deploy for cheap large-scale evaluation) as zero-shot pairwise judges —
+when you measure them white-box, at the level of verdict token probabilities
+rather than sampled outputs?
+
+**Why this, why now.** LLM-as-judge reliability is one of the most active eval
+topics right now (a 2026 wave of position-bias, self-preference, and
+bias-mitigation papers). The selection scan (2026-07-17) found the closest
+neighbors: "Reliability without Validity" (Norman et al., arXiv:2606.19544)
+audits 21 judges across agreement/consistency/bias but treats every judge as an
+API black box; JudgeBoard (arXiv:2511.15958), SLMJury (arXiv:2606.07810), and
+"Thinking Small" (arXiv:2509.13332) study small judges but accuracy-first. The
+gap this lab can own: local open-weight judges expose the **full next-token
+distribution**, so verdict preference can be measured as log-odds, position bias
+as a per-item shift in log-odds under order swap (a structural model one can
+*test*, not assume), debiasing-by-symmetrization can be quantified exactly,
+calibration (ECE, reliability diagrams) becomes measurable, and "does the judge
+add signal beyond a length heuristic?" becomes a regression question — all with
+the paired-bootstrap machinery this lab built in `rag-chunking-bench`. White-box
++ small-scale + statistically careful is a genuine unclaimed corner, and it is
+the only corner honestly executable on this hardware (CPU-only; single-token
+verdict readout makes every judgment a prefill-only forward pass). Free-tier
+hosted API limits were verified prohibitive for the alternative (judge audits
+need thousands of calls), which also ruled out the backlog's API-dependent
+framing of this project.
+
+**Data.** RewardBench filtered set (Lambert et al., arXiv:2403.13787): 2,985
+human-verified chosen/rejected pairs across 23 subsets in 4 categories — which
+embeds the complete LLMBar meta-evaluation set (Zeng et al., ICLR 2024,
+arXiv:2310.07641) as its llmbar-* subsets, giving an adversarial
+instruction-following axis for free. Pinned revision + SHA256, verified at load.
+
+**Phases.**
+1. **Harness** — pinned data layer with category mapping and stratified
+   sampling; judge prompt builder with order swap and single-token verdict
+   readout; llama.cpp-based judge runner with logit extraction; result store.
+   *(started 2026-07-17: data + prompts + CPU feasibility pilot done)*
+2. **Baselines & main grid** — judge scaling curve (Qwen2.5 0.5B/1.5B/3B/7B,
+   Llama-3.2 1B/3B, + peers) on a stratified sample, both orderings; trivial
+   baselines (always-A, longer-response, random) as floors.
+3. **Analysis axes** — position bias as additive log-odds shift (test the
+   structural model); symmetrization debiasing gains; calibration; value over
+   length baseline; rubric-prompt sensitivity; category/subset heterogeneity.
+4. **Writeup** — README as a research report with real tables, figures, and
+   limitations; reproduction audit in the `rag-chunking-bench` style.
 
 ## Completed flagships
 
@@ -114,8 +153,6 @@ rerankers remain out of scope on this hardware and are listed as limitations.
 
 ## Backlog (next flagships, roughly prioritized)
 
-- **LLM-as-judge reliability audit** — measure agreement, position bias, and
-  self-preference of judge prompts across seeds; needs API access.
 - **Hallucination measurement in RAG answers** — span-attribution based
   faithfulness scoring; natural sequel to the chunking bench.
 - **Agent tool-call reliability harness** — inject tool failures/latency and
