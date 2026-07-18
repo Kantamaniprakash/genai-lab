@@ -123,3 +123,84 @@ decide when the small-model results fix the effect sizes needed.
    first cross-family point.
 4. Defer: baselines module (always-A / longer / random floors) — trivial,
    slot it wherever a run is in flight.
+
+## 2026-07-18 — Day 2: runner + analysis core built; first grid lands findings 1–4
+
+### Built (47 tests green, ruff clean; all committed before results)
+
+- `src/judge.py` — explicit chat-template registry (ChatML for Qwen2.5,
+  Llama-3 header format), model registry with pinned HF revision + SHA256
+  per GGUF (verified before every run), low-level logit readout
+  (`llama_get_logits`; the pure arithmetic lives in `logits_to_record` so
+  it is unit-testable without llama.cpp), per-judgment records with
+  compliance/mass diagnostics, append-only JSONL `ResultStore` with
+  idempotent-resume keys and a provenance sidecar (`.meta.json`).
+- `src/analysis.py` — swap-pair assembly (rejects mixed model/rubric sets,
+  counts incomplete items instead of dropping them silently), the s/b
+  decomposition as properties, percentile bootstrap for means and paired
+  deltas (10k resamples, seeded — same machinery as rag-chunking-bench).
+- `src/baselines.py` — always-A, longer-response (chars + words),
+  random floors, per item/order so they enter the same bootstrap.
+- `experiments/run_grid.py` (context sized from the actual sample; refuses
+  to truncate), `experiments/summarize.py` (per-store JSON + markdown
+  quick-look, per-category blocks), `experiments/make_figures.py`
+  (decomposition scatter + accuracy-vs-floors chart, lab figure style).
+- Engineering note: `vocab_only=True` cannot be used for the tokenizer
+  sizing pass — llama-cpp-python 0.3.34 fails to create a context without
+  weights. Sizing uses a throwaway small-ctx full load instead (mmap makes
+  the second load cheap).
+
+### Experiment: qwen2.5-0.5b, minimal rubric, n=600 (seed 0), both orders
+
+1,196 new judgments in 56.5 min (4 threads, 0.35 judg/s; 4 from the smoke
+run). Summary: `results/summary/qwen2.5-0.5b__minimal.json`; figures:
+`results/figures/qwen2.5-0.5b__minimal_{decomposition,accuracy}.png`.
+
+**Finding 1 — the readout is valid at 0.5B.** Unconstrained-argmax
+compliance 1.000 across all 1,200 judgments; median min-mass on {A, B}
+≈ 1.00. The single-token verdict contract holds for Qwen2.5-0.5B, so z is
+measuring the verdict, not an artifact. (Validity is per-family: the
+Llama-3.2-1B run in flight is showing partial compliance — see next steps.)
+
+**Finding 2 — the 0.5B judge is functionally an always-A machine.**
+b_i > 0 on 99.8% of items; mean b = +3.68 log-odds (sd 1.08, IQR
+[2.96, 4.31]). Per-order accuracy: 1.000 chosen-first, 0.002
+rejected-first. A deployment that assigns presentation order at random
+gets 0.501 [0.500, 0.502] — indistinguishable from a coin flip.
+
+**Finding 3 — black-box flip counting cannot see this failure mode.**
+Positional flip rate under order swap: 0.002 (1 item in 600). A flip-rate
+audit would score this judge as near-perfectly *consistent* — precisely
+because the bias is strong enough to saturate both orders. White-box, the
+"consistency" decomposes into bias ~15x the content signal: median |b| =
+3.65 vs median |s| = 0.24; |b| > |s| on 99.8% of items. This is the
+sharpest version of the project's thesis so far: reliability-looking
+behavior that is pure position bias, measurable only at the logit level.
+
+**Finding 4 — symmetrization rescues a real but weak signal; length floor
+is below chance here.** Swap-averaged accuracy 0.568 [0.528, 0.608];
+paired gain over randomized-order raw +0.068 [+0.027, +0.107]. The
+longer-response floor on this sample is 0.425 (below chance — RewardBench's
+adversarial subsets punish verbosity-picking), so the debiased 0.5B judge
+clears random, always-A, and length floors. Per category: Safety 0.608 >
+Chat Hard 0.565 ≈ Reasoning 0.566 > Chat 0.500 — on easy chat pairs the
+debiased 0.5B has *no* signal at all (median |s| there 0.24 vs 0.55 on
+Safety). Category CIs are a phase-3 job (per-category n is small).
+
+### Next steps (Day 3)
+
+1. The Llama-3.2-1B grid is running (started this session; ~2 h). First:
+   summarize it, render figures, and write up the cross-family contrast —
+   early records show partial compliance (argmax sometimes "Response"/"I",
+   median mass ≈ 0.85 on the first items) and a possible bias toward B
+   rather than A. If compliance lands well below 1.0, add a
+   compliance-conditioned view (readout validity is itself a per-model
+   result, and mass_ab-weighted sensitivity checks become necessary).
+2. Extend the grid: qwen2.5-1.5b (~3 h) — download pinned GGUF, register,
+   run. Then 3B the day after (~6 h; consider starting it early in the
+   session), and decide the 7B sample size (n=300 composition-preserving
+   vs. two-day n=600) once the 1.5B effect sizes are in.
+3. Start the scaling-curve figure (sym acc + mean |b| vs. params) once
+   ≥3 models exist.
+4. Backlog for phase 3 (not yet): additive-shift test on b_i dispersion,
+   calibration/ECE, value-over-length regression, detailed-rubric axis.

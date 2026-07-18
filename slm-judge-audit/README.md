@@ -4,10 +4,10 @@
 position bias measured in log-odds, calibration, and value over trivial
 baselines, with paired bootstrap confidence intervals.**
 
-*Status: phase 1 (harness) — data layer, prompt builder, and CPU feasibility
-pilot complete. No headline results yet; every number below labeled "pilot" is
-a real measurement from this repo but at anecdote scale, reported only to
-document feasibility.*
+*Status: phase 2 (baselines & main grid) — harness complete (runner, analysis
+core, floors; 47 tests), first full grid done: Qwen2.5-0.5B on 600 stratified
+items × both orders. First findings below; the model-scaling grid is in
+progress.*
 
 ## Abstract
 
@@ -79,11 +79,62 @@ deliberately *not* loaded separately, which would double-count it. Stratified
 subsampling (largest-remainder by subset, seeded) preserves composition for
 budget-limited grids.
 
+## First results — Qwen2.5-0.5B, minimal rubric, n=600, both orders
+
+600 stratified RewardBench items (seed 0, composition-preserving), both
+presentation orders = 1,200 judgments; 56.5 min on 4 CPU threads. All
+intervals are 95% percentile bootstrap over items (10,000 resamples, paired
+where the comparison is paired). Regenerate with the commands below; nothing
+is hand-entered.
+
+| metric | value |
+|---|---|
+| argmax compliance / median mass on {A, B} | 1.000 / ≈1.00 |
+| raw accuracy, chosen shown first | 1.000 |
+| raw accuracy, rejected shown first | 0.002 |
+| raw accuracy, random order assignment | 0.501 [0.500, 0.502] |
+| symmetrized (swap-averaged) accuracy | 0.568 [0.528, 0.608] |
+| paired gain, symmetrized − raw | +0.068 [+0.027, +0.107] |
+| positional flip rate under swap | 0.002 |
+| position bias b: mean (sd), share > 0 | +3.68 (1.08), 99.8% |
+| preference signal: median \|s\| | 0.24 |
+| items where \|b\| > \|s\| | 99.8% |
+| floors: random / always-A / longer-response | 0.500 / 0.500 / 0.425 |
+
+**The 0.5B judge is functionally an always-A machine** (finding 2): position
+bias exceeds the content signal on 99.8% of items (median ratio ~15x), so
+raw accuracy is pure position-assignment noise. **A black-box flip-rate audit
+cannot see this** (finding 3): the flip rate is 0.002, which reads as
+near-perfect consistency — the bias saturates both orders. The white-box
+decomposition shows that "consistency" *is* the bias:
+
+![Swap-pair decomposition](results/figures/qwen2.5-0.5b__minimal_decomposition.png)
+
+*Every item's swap pair, decomposed: position bias b_i (x) vs order-invariant
+preference s_i (y). The cloud sits ~3.7 log-odds right of zero — bias toward
+position A on 99.8% of items — while content preference hugs zero (median
+|s| = 0.24). A judge with no position bias and real discrimination would
+concentrate around b = 0 with |s| large.*
+
+**Symmetrization rescues a real but weak signal** (finding 4): swap-averaged
+accuracy is 0.568 [0.528, 0.608], significantly above random, always-A, and
+the longer-response floor — which is itself *below chance* (0.425) on
+RewardBench, whose adversarial subsets punish verbosity-picking. Per
+category, the debiased judge is best on Safety (0.608) and has no signal at
+all on easy Chat (0.500).
+
+![Accuracy by presentation order](results/figures/qwen2.5-0.5b__minimal_accuracy.png)
+
+*Accuracy by presentation order against the floors. The 1.000 / 0.002 split
+between orders collapses to chance under random order assignment; only the
+swap-averaged verdict carries signal.*
+
 ## Planned experiments
 
 1. **Scaling grid** — Qwen2.5-Instruct 0.5B/1.5B/3B/7B, Llama-3.2-Instruct
    1B/3B, and peers (Q4_K_M GGUF), on a stratified sample in both orders;
    trivial floors (always-A, longer-response, random) alongside.
+   *(0.5B done above; Llama-3.2-1B running.)*
 2. **Bias anatomy** — dispersion and covariates of `b_i`; test of the
    additive-shift hypothesis; accuracy recovered by symmetrization.
 3. **Calibration** — reliability diagrams and ECE of `P(correct)` from
@@ -111,19 +162,30 @@ the phase-2 grid will measure it properly.
 ```
 src/data.py       pinned RewardBench download, validation, stratified sampling
 src/prompts.py    rubric templates, order swap, single-token verdict design
-tests/            25 tests (schema, mapping, sampling determinism, swap logic)
-experiments/      (phase 2) judge runner, grids, summarizers
-results/          (phase 2) raw runs, tables, figures
+src/judge.py      llama.cpp runner: chat templates, pinned GGUFs, logit
+                  readout, resumable JSONL result stores
+src/analysis.py   swap-pair assembly, s/b decomposition, paired bootstrap
+src/baselines.py  always-A / longer-response / random floors
+experiments/      run_grid, summarize, make_figures
+results/raw/      one JSONL store per (model, rubric) + provenance sidecar
+results/summary/  quick-look JSON per store
+results/figures/  committed PNGs, regenerable from raw stores
+tests/            47 tests (schema, templates, readout arithmetic, store
+                  resume, decomposition, bootstrap, floors, model smoke)
 research/NOTES.md living research log
 ```
 
 ## Reproducing (current state)
 
 ```bash
-uv sync                      # data + analysis deps (numpy, pyarrow)
+uv sync                      # analysis deps (numpy, pyarrow, matplotlib)
 uv run python -m src.data    # fetch pinned parquet, print composition
-uv run --group dev pytest    # 25 tests
+uv run --group dev pytest    # 47 tests
 uv sync --group judge        # llama-cpp-python (compiles ~5 min on 4 cores)
+# download the pinned GGUF named in src/judge.py MODELS into models/, then:
+uv run python -m experiments.run_grid --model qwen2.5-0.5b --rubric minimal --n 600 --seed 0
+uv run python -m experiments.summarize   # tables in results/summary/
+uv run python -m experiments.make_figures
 ```
 
 ## References

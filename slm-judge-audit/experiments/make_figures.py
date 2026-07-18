@@ -135,14 +135,17 @@ def accuracy_figure(store: str, pairs, items_by_id: dict, out: Path) -> None:
         ax.annotate(f"{mean:.3f}", xy=(bar.get_x() + bar.get_width() / 2, mean),
                     xytext=(0, 5), textcoords="offset points", ha="center",
                     fontsize=8, color=INK)
-    ax.axhline(0.5, color=INK_MUTED, linewidth=1.0, linestyle=":", zorder=1)
-    ax.annotate("random / always-A floor (0.5)", xy=(len(stats) - 0.5, 0.5),
-                xytext=(0, 3), textcoords="offset points", ha="right",
-                fontsize=8, color=INK_MUTED)
-    ax.axhline(longer[0], color="#c2483f", linewidth=1.0, linestyle="--", zorder=1)
+    # Floor annotations live in the empty column above the rejected-first bar
+    # (always near zero for a biased judge), where nothing occludes them.
+    ax.axhline(0.5, color=INK_MUTED, linewidth=1.0, linestyle=":", zorder=4)
+    ax.annotate("random / always-A floor (0.5)", xy=(1.0, 0.5),
+                xytext=(0, 4), textcoords="offset points", ha="center",
+                fontsize=8, color=INK_MUTED, zorder=5)
+    ax.axhline(longer[0], color="#c2483f", linewidth=1.0, linestyle="--", zorder=4)
     ax.annotate(f"longer-response floor ({longer[0]:.3f})",
-                xy=(len(stats) - 0.5, longer[0]), xytext=(0, 3),
-                textcoords="offset points", ha="right", fontsize=8, color="#c2483f")
+                xy=(1.0, longer[0]), xytext=(0, -11),
+                textcoords="offset points", ha="center", fontsize=8,
+                color="#c2483f", zorder=5)
     ax.set_xticks(list(xs), labels)
     ax.set_ylim(0, 1.12)
     ax.set_yticks([0, 0.2, 0.4, 0.6, 0.8, 1.0])

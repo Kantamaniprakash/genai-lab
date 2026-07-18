@@ -1,0 +1,20 @@
+{
+  "chat_template": "chatml",
+  "llama_cpp_python": "0.3.34",
+  "max_prompt_tokens": 2768,
+  "model_file": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+  "model_key": "qwen2.5-0.5b",
+  "model_repo": "Qwen/Qwen2.5-0.5B-Instruct-GGUF",
+  "model_revision": "9217f5db79a29953eb74d5343926648285ec7e67",
+  "model_sha256": "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
+  "n_ctx": 2784,
+  "n_prompts": 1200,
+  "n_threads": 4,
+  "rubric": "minimal",
+  "sample_n": 600,
+  "sample_seed": 0,
+  "verdict_token_ids": [
+    32,
+    33
+  ]
+}

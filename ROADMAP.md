@@ -4,7 +4,7 @@ This lab runs one flagship research project at a time, worked daily until it wou
 survive review by a demanding referee. Everything here is real: every number in a
 writeup comes from an experiment actually run in this repo.
 
-## Current flagship: `slm-judge-audit` — started 2026-07-17, phase 1 (harness)
+## Current flagship: `slm-judge-audit` — started 2026-07-17, phase 2 (baselines & main grid)
 
 **Question.** How reliable are small open-weight LLMs (0.5B–8B, the sizes people
 actually deploy for cheap large-scale evaluation) as zero-shot pairwise judges —
@@ -42,10 +42,13 @@ instruction-following axis for free. Pinned revision + SHA256, verified at load.
 1. **Harness** — pinned data layer with category mapping and stratified
    sampling; judge prompt builder with order swap and single-token verdict
    readout; llama.cpp-based judge runner with logit extraction; result store.
-   *(started 2026-07-17: data + prompts + CPU feasibility pilot done)*
+   *(done 2026-07-18: runner + analysis core + floors, 47 tests)*
 2. **Baselines & main grid** — judge scaling curve (Qwen2.5 0.5B/1.5B/3B/7B,
    Llama-3.2 1B/3B, + peers) on a stratified sample, both orderings; trivial
    baselines (always-A, longer-response, random) as floors.
+   *(started 2026-07-18: 0.5B grid done — findings 1–4, the always-A
+   machine that flip-rate audits would call consistent; Llama-3.2-1B
+   running)*
 3. **Analysis axes** — position bias as additive log-odds shift (test the
    structural model); symmetrization debiasing gains; calibration; value over
    length baseline; rubric-prompt sensitivity; category/subset heterogeneity.
