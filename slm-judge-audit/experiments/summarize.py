@@ -22,10 +22,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.analysis import assemble_pairs, summarize_pairs  # noqa: E402
 from src.baselines import summarize_baselines  # noqa: E402
-from src.data import fetch, load_rewardbench  # noqa: E402
+from src.data import SUBSET_TO_CATEGORY, fetch, load_rewardbench  # noqa: E402
 from src.judge import RESULTS_DIR, load_records  # noqa: E402
 
 SUMMARY_DIR = RESULTS_DIR.parent / "summary"
+
+
+def category_of(item_id: str) -> str:
+    return SUBSET_TO_CATEGORY[item_id.split("/", 1)[0]]
 
 
 def summarize_store(path: Path, items_by_id: dict) -> dict:
@@ -36,6 +40,22 @@ def summarize_store(path: Path, items_by_id: dict) -> dict:
     summary["n_incomplete_items"] = incomplete
     pair_items = tuple(items_by_id[p.item_id] for p in pairs)
     summary["baselines"] = summarize_baselines(pair_items)
+    # Compact per-category block. Small per-category n makes CIs wide; the
+    # full bootstrap block per category is a phase-3 analysis — these point
+    # estimates are for spotting gross heterogeneity early.
+    by_cat: dict[str, list] = {}
+    for pair in pairs:
+        by_cat.setdefault(category_of(pair.item_id), []).append(pair)
+    summary["by_category"] = {
+        cat: {
+            "n_items": len(group),
+            "raw_acc": sum(p.raw_correct_mean for p in group) / len(group),
+            "sym_acc": sum(p.sym_correct for p in group) / len(group),
+            "mean_b": sum(p.b for p in group) / len(group),
+            "median_abs_s": sorted(abs(p.s) for p in group)[len(group) // 2],
+        }
+        for cat, group in sorted(by_cat.items())
+    }
     return summary
 
 
