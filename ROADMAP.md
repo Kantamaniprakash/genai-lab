@@ -46,9 +46,10 @@ instruction-following axis for free. Pinned revision + SHA256, verified at load.
 2. **Baselines & main grid** — judge scaling curve (Qwen2.5 0.5B/1.5B/3B/7B,
    Llama-3.2 1B/3B, + peers) on a stratified sample, both orderings; trivial
    baselines (always-A, longer-response, random) as floors.
-   *(started 2026-07-18: 0.5B grid done — findings 1–4, the always-A
-   machine that flip-rate audits would call consistent; Llama-3.2-1B
-   running)*
+   *(started 2026-07-18: Qwen2.5-0.5B and Llama-3.2-1B grids done on the
+   same 600-item sample — findings 1–7: the always-A machine that
+   flip-rate audits would call consistent, and the cross-family inversion
+   of the flip-rate vs. true-bias ranking)*
 3. **Analysis axes** — position bias as additive log-odds shift (test the
    structural model); symmetrization debiasing gains; calibration; value over
    length baseline; rubric-prompt sensitivity; category/subset heterogeneity.

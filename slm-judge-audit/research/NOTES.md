@@ -187,20 +187,62 @@ Chat Hard 0.565 ≈ Reasoning 0.566 > Chat 0.500 — on easy chat pairs the
 debiased 0.5B has *no* signal at all (median |s| there 0.24 vs 0.55 on
 Safety). Category CIs are a phase-3 job (per-category n is small).
 
+### Experiment: llama-3.2-1b, minimal rubric, same 600 items, both orders
+
+Second grid of the day (2h 22m at 0.14–0.27 judg/s under partial CPU
+contention with the analysis work). Cross-family contrast on identical
+items, orders, and rubric.
+
+**Finding 5 — verdict-format compliance is a per-family property, and the
+readout diagnostics are load-bearing.** Qwen2.5-0.5B: argmax compliance
+1.000, mass on {A, B} ≈ 1.0. Llama-3.2-1B: only 51.2% of items are
+argmax-compliant in both orders; the unconstrained argmax is a verdict
+letter in 56% of judgments ("Response" 387x, "The" 53x, "I" 16x
+otherwise), and per-judgment mass on {A, B} has quartiles
+[0.10, 0.67, 0.94]. At 1B the single-token z measures a renormalized
+sub-distribution preference for half the items, so every Llama-1B number
+below carries that qualification. A compliance-conditioned sensitivity
+view is now a required phase-3 deliverable, not an optional one.
+
+**Finding 6 — bias direction, magnitude, and the flip-rate ranking all
+invert across families.** Llama-3.2-1B leans toward position B: median
+b = −0.34 (mean −0.09, sd 1.05), b > 0 on only 27.5% of items; per-order
+accuracy 0.312 chosen-first / 0.728 rejected-first. Its bias magnitude is
+~10x smaller than Qwen-0.5B's, yet |b| > |s| still holds on 81.7% of items
+(the content signal is smaller too: median |s| 0.14 vs Qwen's 0.24). The
+black-box view inverts the true ordering: Llama's flip rate is 0.183 vs
+Qwen's 0.002, so a flip-count audit ranks Llama as far *less* consistent —
+while white-box it is ~10x *less* positionally biased (median |b| 0.34 vs
+3.65). Flip rate measures bias saturation, not bias. Also category-
+dependent in direction: Reasoning items pull b positive (+0.25 mean, with
+a long right tail visible in the decomposition scatter) while Chat/Chat
+Hard/Safety sit negative (−0.28/−0.39/−0.45) — the additive-shift
+hypothesis is already looking dead at 1B before the formal phase-3 test.
+
+**Finding 7 — after debiasing, the two judges are statistically
+indistinguishable overall but differ sharply by category.** Symmetrized
+accuracy 0.555 [0.517, 0.595] vs Qwen's 0.568 [0.528, 0.608] (overlapping
+CIs); Llama's symmetrization gain is +0.035 [−0.001, +0.072] — not
+significant, consistent with its small bias (less to rescue). By category:
+Llama-1B is *much* better on easy Chat (0.653 vs 0.500 — Qwen had zero
+signal there) but *below chance* on adversarial Chat Hard (0.435 vs
+0.565). Chat is the one category where the length floor is high (0.792) —
+whether Llama's Chat advantage is just length-following is exactly the
+phase-3 value-over-length regression's question.
+
 ### Next steps (Day 3)
 
-1. The Llama-3.2-1B grid is running (started this session; ~2 h). First:
-   summarize it, render figures, and write up the cross-family contrast —
-   early records show partial compliance (argmax sometimes "Response"/"I",
-   median mass ≈ 0.85 on the first items) and a possible bias toward B
-   rather than A. If compliance lands well below 1.0, add a
-   compliance-conditioned view (readout validity is itself a per-model
-   result, and mass_ab-weighted sensitivity checks become necessary).
-2. Extend the grid: qwen2.5-1.5b (~3 h) — download pinned GGUF, register,
-   run. Then 3B the day after (~6 h; consider starting it early in the
-   session), and decide the 7B sample size (n=300 composition-preserving
-   vs. two-day n=600) once the 1.5B effect sizes are in.
-3. Start the scaling-curve figure (sym acc + mean |b| vs. params) once
-   ≥3 models exist.
-4. Backlog for phase 3 (not yet): additive-shift test on b_i dispersion,
-   calibration/ECE, value-over-length regression, detailed-rubric axis.
+1. Extend the grid: qwen2.5-1.5b (~3 h) — download pinned GGUF, register,
+   run early in the session. Then 3B the day after (~6 h), and decide the
+   7B sample size (n=300 composition-preserving vs. two-day n=600) once
+   the 1.5B effect sizes are in.
+2. While the 1.5B grid runs: build the compliance-conditioned view of the
+   Llama-1B results (finding 5) — sym acc and bias stats on the compliant
+   subset vs. all items, plus a mass_ab-stratified breakdown. Decide
+   whether constrained-readout validity needs its own figure.
+3. Start the scaling-curve figure (sym acc + median |b| vs. params, one
+   line per family) once ≥3 models exist.
+4. Phase-3 backlog (not yet): formal additive-shift test (finding 6 already
+   suggests rejection at 1B — category-dependent bias direction),
+   calibration/ECE, value-over-length regression (finding 7 makes Chat the
+   key category), detailed-rubric axis.

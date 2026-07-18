@@ -5,9 +5,9 @@ position bias measured in log-odds, calibration, and value over trivial
 baselines, with paired bootstrap confidence intervals.**
 
 *Status: phase 2 (baselines & main grid) — harness complete (runner, analysis
-core, floors; 47 tests), first full grid done: Qwen2.5-0.5B on 600 stratified
-items × both orders. First findings below; the model-scaling grid is in
-progress.*
+core, floors; 47 tests). Two full grids done on the same 600-item stratified
+sample × both orders: Qwen2.5-0.5B and Llama-3.2-1B, findings 1–7 below. The
+scaling grid continues with Qwen2.5-1.5B/3B next.*
 
 ## Abstract
 
@@ -129,12 +129,53 @@ all on easy Chat (0.500).
 between orders collapses to chance under random order assignment; only the
 swap-averaged verdict carries signal.*
 
+## Cross-family contrast — Llama-3.2-1B on the identical sample
+
+Same 600 items, same orders, same rubric:
+
+| metric | Qwen2.5-0.5B | Llama-3.2-1B |
+|---|---|---|
+| argmax compliance (both orders) | 1.000 | 0.512 |
+| per-judgment mass on {A, B}, quartiles | ≈1.0 | 0.10 / 0.67 / 0.94 |
+| position bias b: median (share > 0) | +3.65 (99.8%) | −0.34 (27.5%) |
+| raw accuracy cf / rf | 1.000 / 0.002 | 0.312 / 0.728 |
+| raw accuracy, random order | 0.501 [0.500, 0.502] | 0.520 [0.502, 0.537] |
+| positional flip rate | 0.002 | 0.183 |
+| items with \|b\| > \|s\| | 99.8% | 81.7% |
+| symmetrized accuracy | 0.568 [0.528, 0.608] | 0.555 [0.517, 0.595] |
+| paired gain from symmetrization | +0.068 [+0.027, +0.107] | +0.035 [−0.001, +0.072] |
+
+Three results (findings 5–7, `research/NOTES.md`):
+
+- **Verdict-format compliance is a family property.** Llama-3.2-1B's
+  unconstrained argmax is a verdict letter in only 56% of judgments (it
+  prefers to open with "Response…"), so its single-token readout measures a
+  renormalized sub-distribution — every Llama number here carries that
+  qualification, and the audit records exactly how much (mass quartiles
+  above).
+- **The flip-rate ranking inverts the true bias ranking.** Llama-1B flips
+  under swap 90x more often than Qwen-0.5B (0.183 vs 0.002) — a black-box
+  consistency audit would call it far less reliable — while its positional
+  bias is ~10x *smaller* (median |b| 0.34 vs 3.65). Flip rate measures bias
+  saturation, not bias.
+- **Bias direction is family- and category-dependent.** Llama leans toward
+  B overall, but its Reasoning items pull toward A (+0.25 mean b) while
+  Chat/Safety sit at −0.3 to −0.5 — early evidence against the
+  additive-shift assumption implicit in swap-debiasing, ahead of the formal
+  phase-3 test.
+
+![Llama swap-pair decomposition](results/figures/llama-3.2-1b__minimal_decomposition.png)
+
+*Llama-3.2-1B's decomposition on the same axes: the cloud centers near
+b ≈ −0.3 (mild B-lean) instead of +3.7, with a category-structured right
+tail — Reasoning items are biased in the opposite direction from the rest.*
+
 ## Planned experiments
 
 1. **Scaling grid** — Qwen2.5-Instruct 0.5B/1.5B/3B/7B, Llama-3.2-Instruct
    1B/3B, and peers (Q4_K_M GGUF), on a stratified sample in both orders;
    trivial floors (always-A, longer-response, random) alongside.
-   *(0.5B done above; Llama-3.2-1B running.)*
+   *(Qwen2.5-0.5B and Llama-3.2-1B done above.)*
 2. **Bias anatomy** — dispersion and covariates of `b_i`; test of the
    additive-shift hypothesis; accuracy recovered by symmetrization.
 3. **Calibration** — reliability diagrams and ECE of `P(correct)` from
