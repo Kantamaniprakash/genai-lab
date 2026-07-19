@@ -1,0 +1,110 @@
+{
+  "bootstrap_seed": 0,
+  "by_category": {
+    "Chat": {
+      "compliance_rate": 1.0,
+      "n_items": 72,
+      "sym_acc_compliant": 0.5,
+      "sym_acc_non_compliant": null
+    },
+    "Chat Hard": {
+      "compliance_rate": 1.0,
+      "n_items": 92,
+      "sym_acc_compliant": 0.5652173913043478,
+      "sym_acc_non_compliant": null
+    },
+    "Reasoning": {
+      "compliance_rate": 1.0,
+      "n_items": 288,
+      "sym_acc_compliant": 0.5659722222222222,
+      "sym_acc_non_compliant": null
+    },
+    "Safety": {
+      "compliance_rate": 1.0,
+      "n_items": 148,
+      "sym_acc_compliant": 0.6081081081081081,
+      "sym_acc_non_compliant": null
+    }
+  },
+  "compliance_rate": 1.0,
+  "mass_bins": [
+    {
+      "hi": 0.25,
+      "lo": 0.0,
+      "n_items": 0
+    },
+    {
+      "hi": 0.5,
+      "lo": 0.25,
+      "n_items": 0
+    },
+    {
+      "hi": 0.75,
+      "lo": 0.5,
+      "n_items": 0
+    },
+    {
+      "hi": 0.9,
+      "lo": 0.75,
+      "n_items": 0
+    },
+    {
+      "frac_bias_dominates": 0.9983333333333333,
+      "hi": 1.0,
+      "lo": 0.9,
+      "mass_ab_min_p50": 0.9999966361566761,
+      "median_abs_b": 3.6496567726135254,
+      "median_abs_s": 0.2353668212890625,
+      "median_b": 3.6496567726135254,
+      "n_items": 600,
+      "positional_flip_rate": 0.0016666666666666668,
+      "raw_acc": 0.5008333333333334,
+      "sym_acc": {
+        "ci95": [
+          0.5283333333333333,
+          0.6083333333333333
+        ],
+        "mean": 0.5683333333333334
+      }
+    }
+  ],
+  "n_boot": 10000,
+  "n_items": 600,
+  "strata": {
+    "all": {
+      "frac_bias_dominates": 0.9983333333333333,
+      "mass_ab_min_p50": 0.9999966361566761,
+      "median_abs_b": 3.6496567726135254,
+      "median_abs_s": 0.2353668212890625,
+      "median_b": 3.6496567726135254,
+      "n_items": 600,
+      "positional_flip_rate": 0.0016666666666666668,
+      "raw_acc": 0.5008333333333334,
+      "sym_acc": {
+        "ci95": [
+          0.5283333333333333,
+          0.6083333333333333
+        ],
+        "mean": 0.5683333333333334
+      }
+    },
+    "compliant_both": {
+      "frac_bias_dominates": 0.9983333333333333,
+      "mass_ab_min_p50": 0.9999966361566761,
+      "median_abs_b": 3.6496567726135254,
+      "median_abs_s": 0.2353668212890625,
+      "median_b": 3.6496567726135254,
+      "n_items": 600,
+      "positional_flip_rate": 0.0016666666666666668,
+      "raw_acc": 0.5008333333333334,
+      "sym_acc": {
+        "ci95": [
+          0.5283333333333333,
+          0.6083333333333333
+        ],
+        "mean": 0.5683333333333334
+      }
+    }
+  },
+  "sym_acc_compliant_minus_non": null
+}
