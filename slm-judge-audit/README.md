@@ -170,6 +170,45 @@ Three results (findings 5–7, `research/NOTES.md`):
 b ≈ −0.3 (mild B-lean) instead of +3.7, with a category-structured right
 tail — Reasoning items are biased in the opposite direction from the rest.*
 
+## Does the audit survive its own validity check?
+
+Finding 5 left a hanging threat: at 1B, only 51.2% of items have a
+verdict-letter argmax in both orders, and the probability mass on {A, B}
+spans the whole unit interval — so for half the items, `z` is the preference
+of a *renormalized sub-distribution*, not of the model's top choice. If that
+sub-distribution preference were noise, every Llama-1B number above would
+only be valid on the compliant half. The compliance-conditioned view
+(`experiments/compliance_view.py`) tests this directly:
+
+| Llama-3.2-1B stratum | n | sym acc (95% CI) | med b | med \|s\| | flip rate |
+|---|---|---|---|---|---|
+| all items | 600 | 0.555 [0.517, 0.595] | −0.34 | 0.14 | 0.183 |
+| argmax-compliant, both orders | 307 | 0.534 [0.479, 0.590] | −0.42 | 0.13 | 0.173 |
+| non-compliant in ≥1 order | 293 | 0.577 [0.519, 0.635] | −0.19 | 0.18 | 0.195 |
+
+- **The readout survives** (finding 8). The symmetrized-accuracy gap between
+  compliant and non-compliant strata is −0.043 [−0.122, +0.038] (unpaired
+  bootstrap over disjoint strata): no measurable validity loss where the
+  format contract breaks. The validity curve over mass bins is flat — items
+  where {A, B} holds *less than a quarter* of the next-token mass (n=212)
+  judge at 0.561 [0.495, 0.627], statistically indistinguishable from the
+  ≥0.9-mass bin's 0.547 [0.467, 0.627]. The verdict-letter logits carry the
+  judgment even when the model would rather say something else first.
+- **But compliance is heavily category-structured.** Compliant fraction:
+  Reasoning 22.6%, Chat 62.5%, Chat Hard 79.3%, Safety 83.8%. The standard
+  black-box fallback — drop judgments that fail to parse — would silently
+  discard ~3/4 of Reasoning while keeping most of Safety, *reweighting* the
+  benchmark instead of sampling it. The white-box readout keeps every item
+  at no measurable validity cost; this, not just extra precision, is its
+  practical case.
+
+![Llama compliance conditioning](results/figures/llama-3.2-1b__minimal_compliance.png)
+
+*Left: symmetrized accuracy is flat across compliance strata (per-stratum n
+inside bars; gap CI in the title). Right: accuracy vs. the minimum probability
+mass on {A, B} across orders — flat down to the <0.25 bin. Qwen2.5-0.5B's
+companion view is trivial (compliance 1.000) and committed alongside.*
+
 ## Planned experiments
 
 1. **Scaling grid** — Qwen2.5-Instruct 0.5B/1.5B/3B/7B, Llama-3.2-Instruct
@@ -207,12 +246,14 @@ src/judge.py      llama.cpp runner: chat templates, pinned GGUFs, logit
                   readout, resumable JSONL result stores
 src/analysis.py   swap-pair assembly, s/b decomposition, paired bootstrap
 src/baselines.py  always-A / longer-response / random floors
-experiments/      run_grid, summarize, make_figures
+experiments/      run_grid, summarize, make_figures, compliance_view,
+                  scaling_curve
 results/raw/      one JSONL store per (model, rubric) + provenance sidecar
-results/summary/  quick-look JSON per store
+results/summary/  quick-look JSON per store (+ __compliance views)
 results/figures/  committed PNGs, regenerable from raw stores
-tests/            47 tests (schema, templates, readout arithmetic, store
-                  resume, decomposition, bootstrap, floors, model smoke)
+tests/            51 tests (schema, templates, readout arithmetic, store
+                  resume, decomposition, bootstrap, floors, compliance
+                  view, model smoke)
 research/NOTES.md living research log
 ```
 
@@ -221,12 +262,14 @@ research/NOTES.md living research log
 ```bash
 uv sync                      # analysis deps (numpy, pyarrow, matplotlib)
 uv run python -m src.data    # fetch pinned parquet, print composition
-uv run --group dev pytest    # 47 tests
+uv run --group dev pytest    # 51 tests
 uv sync --group judge        # llama-cpp-python (compiles ~5 min on 4 cores)
 # download the pinned GGUF named in src/judge.py MODELS into models/, then:
 uv run python -m experiments.run_grid --model qwen2.5-0.5b --rubric minimal --n 600 --seed 0
 uv run python -m experiments.summarize   # tables in results/summary/
 uv run python -m experiments.make_figures
+uv run python -m experiments.compliance_view   # readout-validity conditioning
+uv run python -m experiments.scaling_curve     # cross-model figure (>=2 stores)
 ```
 
 ## References

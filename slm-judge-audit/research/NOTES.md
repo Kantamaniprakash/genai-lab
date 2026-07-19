@@ -246,3 +246,53 @@ phase-3 value-over-length regression's question.
    suggests rejection at 1B — category-dependent bias direction),
    calibration/ECE, value-over-length regression (finding 7 makes Chat the
    key category), detailed-rubric axis.
+
+## 2026-07-19 — Day 3: readout validity survives its own audit (finding 8); 1.5B grid
+
+### Built (51 tests green, ruff clean)
+
+- `src/analysis.py`: `two_sample_bootstrap_delta_ci` (unpaired, for disjoint
+  strata), `compliance_view` — accuracy/decomposition stats stratified by
+  argmax compliance, a validity curve over `mass_min` bins (edges placed at
+  the Llama-1B quartiles observed on day 2), and per-category compliance
+  composition so stratum differences can be read against category mix.
+- `experiments/compliance_view.py` — per-store JSON + two-panel figure.
+- `experiments/scaling_curve.py` — cross-model figure (sym + raw accuracy vs.
+  params with CIs and floors; median |b| vs median |s|), recomputed from raw
+  stores, with a hard guard that refuses to plot stores covering different
+  item sets (it correctly caught the in-flight 1.5B store today;
+  `--models` selects completed stores explicitly).
+- Registered `qwen2.5-1.5b` (pinned revision + SHA256, verified after
+  download and before the run, ChatML template as for 0.5B).
+
+### Finding 8 — the logit readout survives its own validity check at 1B.
+
+Finding 5's threat was that half the Llama-1B judgments measure a
+renormalized sub-distribution (argmax not a verdict letter; mass on {A, B}
+quartiles [0.10, 0.67, 0.94]). Conditioning everything on compliance shows
+the threat does not materialize in accuracy terms:
+
+- Sym acc: all 0.555 [0.517, 0.595]; compliant-both (n=307) 0.534
+  [0.479, 0.590]; non-compliant (n=293) 0.577 [0.519, 0.635]. Stratum gap
+  −0.043 [−0.122, +0.038] (unpaired bootstrap) — null, point estimate even
+  favors the non-compliant half.
+- Validity curve over mass_min bins is flat: <0.25 mass (n=212) 0.561
+  [0.495, 0.627] vs ≥0.9 (n=150) 0.547 [0.467, 0.627]; all five bins'
+  CIs overlap heavily.
+- Compliance is category-structured, hard: Reasoning 22.6%, Chat 62.5%,
+  Chat Hard 79.3%, Safety 83.8%. So the naive stratum comparison is
+  composition-confounded (which is exactly why the per-category block is in
+  the view), and — the practical point — a black-box harness that drops
+  unparseable verdicts would discard ~3/4 of Reasoning while keeping most
+  of Safety: it reweights the benchmark rather than sampling it. The
+  white-box readout keeps all items at no measurable validity cost.
+- Within-category compliant-vs-not point estimates (small n, descriptive):
+  Chat Hard compliant 0.397 vs non-compliant 0.579 — the below-chance
+  Chat-Hard result from finding 7 is *concentrated in the compliant
+  stratum*; whatever makes Llama-1B confidently format-follow on Chat Hard
+  co-occurs with being adversarially fooled. Logged as a thread to pull in
+  the phase-3 error analysis, not claimed as a finding at this n.
+
+README gained the "Does the audit survive its own validity check?" section
+with the stratum table and the compliance figure.
+
