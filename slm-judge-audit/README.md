@@ -5,9 +5,11 @@ position bias measured in log-odds, calibration, and value over trivial
 baselines, with paired bootstrap confidence intervals.**
 
 *Status: phase 2 (baselines & main grid) — harness complete (runner, analysis
-core, floors; 47 tests). Two full grids done on the same 600-item stratified
-sample × both orders: Qwen2.5-0.5B and Llama-3.2-1B, findings 1–7 below. The
-scaling grid continues with Qwen2.5-1.5B/3B next.*
+core, floors; 51 tests). Three full grids done on the same 600-item stratified
+sample × both orders: Qwen2.5-0.5B, Llama-3.2-1B, and Qwen2.5-1.5B —
+findings 1–11 below, including an inverse-scaling result: the debiased 1.5B
+judge is significantly worse than its 0.5B sibling. The grid continues with
+Qwen2.5-3B next.*
 
 ## Abstract
 
@@ -156,7 +158,7 @@ Three results (findings 5–7, `research/NOTES.md`):
 - **The flip-rate ranking inverts the true bias ranking.** Llama-1B flips
   under swap 90x more often than Qwen-0.5B (0.183 vs 0.002) — a black-box
   consistency audit would call it far less reliable — while its positional
-  bias is ~10x *smaller* (median |b| 0.34 vs 3.65). Flip rate measures bias
+  bias is ~7x *smaller* (median |b| 0.49 vs 3.65). Flip rate measures bias
   saturation, not bias.
 - **Bias direction is family- and category-dependent.** Llama leans toward
   B overall, but its Reasoning items pull toward A (+0.25 mean b) while
@@ -169,6 +171,69 @@ Three results (findings 5–7, `research/NOTES.md`):
 *Llama-3.2-1B's decomposition on the same axes: the cloud centers near
 b ≈ −0.3 (mild B-lean) instead of +3.7, with a category-structured right
 tail — Reasoning items are biased in the opposite direction from the rest.*
+
+## Scaling within a family — Qwen2.5-1.5B, identical sample
+
+Same 600 items, same orders, same rubric as both grids above. The readout is
+fully valid at 1.5B (argmax compliance 1.000, median mass on {A, B} ≈ 1.00),
+so everything below is judge behavior, not readout artifact.
+
+| metric | Qwen2.5-0.5B | Qwen2.5-1.5B |
+|---|---|---|
+| raw accuracy cf / rf | 1.000 / 0.002 | 0.805 / 0.293 |
+| raw accuracy, random order | 0.501 [0.500, 0.502] | 0.549 [0.527, 0.571] |
+| positional flip rate | 0.002 | 0.298 |
+| position bias b: median (share > 0) | +3.65 (99.8%) | +0.83 (74.5%) |
+| preference signal: median \|s\| | 0.24 | 0.50 |
+| symmetrized accuracy | 0.568 [0.528, 0.608] | 0.502 [0.462, 0.542] |
+| paired Δ, symmetrized − raw | +0.068 [+0.027, +0.107] | **−0.048 [−0.081, −0.013]** |
+
+- **Debiased judge quality scales *backwards* here** (finding 9). Everything
+  a black-box audit tracks improves from 0.5B to 1.5B — bias magnitude falls
+  (median |b| 3.65 → 1.09), the content signal doubles (median |s| 0.24 →
+  0.50), raw random-order accuracy rises (0.501 → 0.549) — yet symmetrized
+  accuracy *drops* to chance: 0.502 [0.462, 0.542], significantly below the
+  0.5B judge on the same items (paired Δ +0.067 [+0.013, +0.118]). And
+  symmetrization — the standard debiasing recipe — now *hurts* (−0.048
+  [−0.081, −0.013]): on the 421 items where the verdict does not flip under
+  swap, the debiased sign is wrong more often than chance (0.432
+  [0.387, 0.480]), while on flipped items it is informative (0.665
+  [0.598, 0.732]). The residual preference on bias-saturated items is
+  anticorrelated with gold.
+- **The anticorrelation is a Reasoning phenomenon that tracks length**
+  (finding 10). Reasoning sym accuracy is 0.368 [0.312, 0.424] — almost
+  exactly the Reasoning longer-response floor (0.370). The epicenter is
+  math-prm (sym 0.167, n=90): there the *rejected* solution is the longer
+  one on ~92% of pairs (longer floor 0.078), and the judge's preference
+  sign matches the length sign on 75.6% of items. Across scale, overall
+  sign(s)-vs-length agreement rises 0.491 → 0.571 — the 0.5B judge's weak
+  signal was length-free, the 1.5B judge's stronger signal is substantially
+  a verbosity preference, and on RewardBench Reasoning the longer answer is
+  usually the wrong one. (Length is a strong correlate, not yet a proven
+  mechanism — the phase-3 value-over-length regression separates length
+  from style covariates.) The other three categories behave normally:
+  symmetrization helps (+0.02 to +0.08) and sym accuracy sits at 0.52–0.67.
+- **Bias direction is category-dependent *within* one family** (finding 11).
+  Qwen2.5-1.5B leans toward A on Chat (+1.09 mean b) and Reasoning (+1.29)
+  but toward B on Safety (−0.61) — so "this model is A-biased" is not even
+  well-defined per model, let alone per family, and the additive-shift
+  hypothesis fails again before its formal test. The three-model flip-rate
+  ranking (0.002 / 0.183 / 0.298) tracks neither bias magnitude (median |b|
+  3.65 / 0.49 / 1.09) nor debiased quality (0.568 / 0.555 / 0.502).
+
+![Judge scaling curve](results/figures/scaling__minimal.png)
+
+*Left: symmetrized (solid) vs raw random-order (dashed) accuracy across
+scale. The Qwen line crosses: raw rises while debiased accuracy falls to
+chance at 1.5B. Right: median bias magnitude |b| collapses with scale while
+the content signal |s| grows — and none of it predicts the left panel.*
+
+![Qwen2.5-1.5B decomposition](results/figures/qwen2.5-1.5b__minimal_decomposition.png)
+
+*Qwen2.5-1.5B's swap-pair decomposition: bias has shrunk to a moderate
+A-lean (Safety, gold, leans B), but the Reasoning cloud (purple, n=288) sits
+visibly below s = 0 at positive b — an order-invariant preference for the
+wrong response, invisible to any flip-count audit.*
 
 ## Does the audit survive its own validity check?
 
@@ -214,13 +279,15 @@ companion view is trivial (compliance 1.000) and committed alongside.*
 1. **Scaling grid** — Qwen2.5-Instruct 0.5B/1.5B/3B/7B, Llama-3.2-Instruct
    1B/3B, and peers (Q4_K_M GGUF), on a stratified sample in both orders;
    trivial floors (always-A, longer-response, random) alongside.
-   *(Qwen2.5-0.5B and Llama-3.2-1B done above.)*
+   *(Qwen2.5-0.5B, Llama-3.2-1B, and Qwen2.5-1.5B done above; 3B next.)*
 2. **Bias anatomy** — dispersion and covariates of `b_i`; test of the
    additive-shift hypothesis; accuracy recovered by symmetrization.
 3. **Calibration** — reliability diagrams and ECE of `P(correct)` from
    verdict probabilities, raw vs. symmetrized.
 4. **Value over length** — logistic regression of gold on judge log-odds vs.
    length delta; does a small judge beat "pick the longer answer"?
+   *(Elevated by finding 10: at 1.5B the emergent preference signal appears
+   to be substantially a length preference.)*
 5. **Prompt sensitivity** — minimal vs. detailed rubric as a paired
    comparison in log-odds space.
 

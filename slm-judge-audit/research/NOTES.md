@@ -296,3 +296,86 @@ the threat does not materialize in accuracy terms:
 README gained the "Does the audit survive its own validity check?" section
 with the stratum table and the compliance figure.
 
+### Experiment: qwen2.5-1.5b, minimal rubric, same 600 items, both orders
+
+1,200 judgments in 116.5 min (0.17 judg/s, 4 threads; pinned GGUF revision
+91cad511, SHA256 verified after download and at load). Readout fully valid:
+argmax compliance 1.000, median mass on {A, B} ≈ 1.00 — Qwen family format
+discipline confirmed at a second size, so everything below is behavior.
+
+**Finding 9 — debiased judge quality scales BACKWARDS within the Qwen
+family.** Every scalar a black-box audit tracks improves 0.5B → 1.5B:
+median |b| 3.65 → 1.09, median |s| 0.24 → 0.50, raw random-order acc
+0.501 → 0.549 [0.527, 0.571]. Yet symmetrized accuracy falls to chance:
+0.502 [0.462, 0.542], significantly below 0.5B on the same items (paired
+cross-model Δ +0.067 [+0.013, +0.118]). Sharper: symmetrization now HURTS —
+Δ sym−raw = −0.048 [−0.081, −0.013], the first negative debiasing gain in
+the audit. Mechanism located: on the 421 no-flip items the debiased sign is
+below chance (0.432 [0.387, 0.480]) while on the 179 flipped items it is
+informative (0.665 [0.598, 0.732]). Flipped items contribute identically to
+raw-mean and sym accuracy (both orders correct or both wrong), so the whole
+raw-vs-sym inversion lives in the no-flip stratum: where bias saturates the
+verdict, the residual order-invariant preference points the wrong way.
+
+**Finding 10 — the wrong-way preference is a Reasoning phenomenon that
+tracks length.** Reasoning (n=288): sym 0.368 [0.312, 0.424] vs raw 0.510;
+per-category paired Δ sym−raw = −0.142 [−0.194, −0.090] — all of the
+overall backfire and then some (other categories: Chat +0.076, Chat Hard
++0.022, Safety +0.034, all CIs spanning 0, sym 0.52–0.67). Reasoning sym
+0.368 ≈ the Reasoning longer-response floor 0.370. Epicenter math-prm
+(n=90): sym 0.167, longer floor 0.078 (the rejected solution is longer on
+~92% of pairs), judge preference sign matches length sign on 75.6%.
+Subset spread inside Reasoning: math-prm 0.167, hep-java 0.273, hep-go
+0.364 ... hep-cpp 0.606. Cross-model: overall sign(s)==sign(len_chosen −
+len_rejected) agreement is 0.491 (0.5B), 0.571 (1.5B), 0.622 (Llama-1B) —
+the 0.5B judge's weak signal was length-free; the signal that EMERGES with
+scale is substantially a verbosity preference, and RewardBench Reasoning
+punishes it (chosen answers are the concise correct ones). Hedge recorded:
+length is a strong correlate, not a proven mechanism — model-generated
+wrong solutions differ from concise references in style too; the phase-3
+value-over-length regression (now elevated) separates length from style
+covariates. Note Llama-1B follows length MORE overall (0.622) yet holds
+Reasoning sym at 0.556 — the length-following/accuracy interaction is
+category- and family-specific, another regression covariate.
+
+**Finding 11 — bias direction is category-dependent WITHIN one family.**
+Qwen2.5-1.5B mean b: Chat +1.09, Reasoning +1.29, Chat Hard +0.19, Safety
+−0.61. "This model is A-biased" is not well-defined even per model. With
+three models the flip-rate ranking (0.002 / 0.183 / 0.298) tracks neither
+median |b| (3.65 / 0.49 / 1.09) nor sym accuracy (0.568 / 0.555 / 0.502) —
+flip rate is uninterpretable as a reliability metric without the
+decomposition.
+
+**Correction (README fixed today):** day 2 quoted "median |b| 0.34 vs 3.65"
+for Llama-1B vs Qwen-0.5B; 0.34 is |median b|. Median |b| is 0.49 — the
+bias-magnitude ratio is ~7x, not ~10x. Day-2 log entry left as written;
+README now carries the correct number.
+
+### Artifacts
+
+- `results/raw/qwen2.5-1.5b__minimal.jsonl` (+ meta), summary JSON,
+  decomposition/accuracy/compliance figures, and the three-model
+  `scaling__minimal.png` (sym vs raw accuracy crossing on the Qwen line;
+  |b| collapse vs |s| growth on the right panel).
+- README: new "Scaling within a family" section (findings 9–11 with the
+  scaling curve and 1.5B decomposition embedded), compliance section from
+  the morning, status/counts refreshed.
+
+### Next steps (Day 4)
+
+1. Qwen2.5-3B grid (~6 h at 0.17→~0.08 judg/s; start FIRST thing, it is
+   the whole session's compute). Download pinned GGUF, register (ChatML),
+   verify SHA256, run n=600 seed 0 both orders. Expect ~5-7 h; checkpoint
+   the store mid-run as today.
+2. While it runs: the value-over-length regression is now the most
+   important analysis in the project (finding 10). Build
+   src/length_probe.py or extend analysis.py: per-item logistic regression
+   of gold on standardized judge s vs standardized length delta (chars and
+   tokens), overall + per category, per model; report coefficient CIs via
+   bootstrap. Key questions: does s add signal beyond length anywhere at
+   1.5B? Does Llama-1B's Chat advantage (finding 7) survive length control?
+3. If time remains: begin the additive-shift formal test (variance
+   decomposition of b_i; category and length-delta covariates) — findings
+   6/11 predict rejection.
+4. Decide the 7B sample budget after the 3B numbers land (n=300
+   composition-preserving vs two-day n=600).

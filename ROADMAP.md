@@ -49,7 +49,13 @@ instruction-following axis for free. Pinned revision + SHA256, verified at load.
    *(started 2026-07-18: Qwen2.5-0.5B and Llama-3.2-1B grids done on the
    same 600-item sample — findings 1–7: the always-A machine that
    flip-rate audits would call consistent, and the cross-family inversion
-   of the flip-rate vs. true-bias ranking)*
+   of the flip-rate vs. true-bias ranking. 2026-07-19: readout-validity
+   conditioning — the logit readout survives non-compliance, finding 8 —
+   and the Qwen2.5-1.5B grid: inverse scaling of debiased accuracy,
+   symmetrization backfires on bias-saturated Reasoning items where the
+   emergent preference tracks length, findings 9–11. Next: 3B grid +
+   value-over-length regression, which finding 10 elevates to the
+   project's key analysis.)*
 3. **Analysis axes** — position bias as additive log-odds shift (test the
    structural model); symmetrization debiasing gains; calibration; value over
    length baseline; rubric-prompt sensitivity; category/subset heterogeneity.
