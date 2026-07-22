@@ -53,9 +53,15 @@ instruction-following axis for free. Pinned revision + SHA256, verified at load.
    conditioning — the logit readout survives non-compliance, finding 8 —
    and the Qwen2.5-1.5B grid: inverse scaling of debiased accuracy,
    symmetrization backfires on bias-saturated Reasoning items where the
-   emergent preference tracks length, findings 9–11. Next: 3B grid +
-   value-over-length regression, which finding 10 elevates to the
-   project's key analysis.)*
+   emergent preference tracks length, findings 9–11. 2026-07-22: the
+   value-over-length probe — every judge has signal beyond length but
+   below 3B none beats a fitted one-parameter length baseline, and both
+   standing mysteries are length-mediated, findings 12–14; calibration —
+   symmetrization repairs it at 0.5B/1B only, finding 15; and the
+   Qwen2.5-3B grid: the valley closes, sym 0.742, bias flips to B at the
+   largest magnitude yet, verbosity un-learns, first judge to beat the
+   length floor, findings 16–18. Next: Llama-3.2-3B for the cross-family
+   reversal point, then the 7B tier.)*
 3. **Analysis axes** — position bias as additive log-odds shift (test the
    structural model); symmetrization debiasing gains; calibration; value over
    length baseline; rubric-prompt sensitivity; category/subset heterogeneity.

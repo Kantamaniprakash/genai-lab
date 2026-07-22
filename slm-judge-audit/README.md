@@ -5,15 +5,16 @@ position bias measured in log-odds, calibration, and value over trivial
 baselines, with paired bootstrap confidence intervals.**
 
 *Status: phase 2 (baselines & main grid) — harness complete (runner, analysis
-core, floors, value-over-length probe, calibration; 70 tests). Three full
-grids done on the same 600-item stratified sample × both orders: Qwen2.5-0.5B,
-Llama-3.2-1B, and Qwen2.5-1.5B — findings 1–15 below, including an
-inverse-scaling result (the debiased 1.5B judge is significantly worse than
-its 0.5B sibling), the value-over-length verdict (every judge carries signal a
-length heuristic cannot explain, but on three of four categories none beats a
-one-parameter length baseline), and calibration (symmetrization nearly
-repairs it at 0.5B/1B; the 1.5B stays overconfident after debiasing). The
-Qwen2.5-3B grid is next.*
+core, floors, value-over-length probe, calibration; 70 tests). Four full
+grids done on the same 600-item stratified sample × both orders: Qwen2.5
+0.5B/1.5B/3B and Llama-3.2-1B — findings 1–18 below. Headlines: debiased
+judge quality is non-monotone in scale (0.568 → 0.502 → 0.742 within the
+Qwen family — a 1.5B valley where the emergent preference is a verbosity
+preference that RewardBench punishes, closing again at 3B); flip-rate
+"consistency" is uninterpretable at every scale; every judge carries signal a
+length heuristic cannot explain, but only the 3B judge beats a one-parameter
+length baseline; and symmetrized verdict probabilities are calibrated exactly
+where the judges are weakest. Llama-3.2-3B and the 7B tier are next.*
 
 ## Abstract
 
@@ -228,8 +229,10 @@ so everything below is judge behavior, not readout artifact.
 ![Judge scaling curve](results/figures/scaling__minimal.png)
 
 *Left: symmetrized (solid) vs raw random-order (dashed) accuracy across
-scale. The Qwen line crosses: raw rises while debiased accuracy falls to
-chance at 1.5B. Right: median bias magnitude |b| collapses with scale while
+scale (figure includes the later 3B point). The Qwen line crosses at 1.5B —
+raw rises while debiased accuracy falls to chance — then rebounds sharply at
+3B (the "3B reversal" section below). Right: median bias magnitude |b|
+collapses toward 1.5B then explodes at 3B in the opposite direction, while
 the content signal |s| grows — and none of it predicts the left panel.*
 
 ![Qwen2.5-1.5B decomposition](results/figures/qwen2.5-1.5b__minimal_decomposition.png)
@@ -297,14 +300,14 @@ bootstrap over items with the full rescale+refit pipeline inside each
 replicate. Accuracies are in-sample; with ≤2 parameters on n ≥ 72 strata the
 optimism is negligible, and the paired spec deltas share it.
 
-| joint spec, overall (n=600) | Qwen2.5-0.5B | Qwen2.5-1.5B | Llama-3.2-1B |
-|---|---|---|---|
-| β_s (per SD, 95% CI) | **+0.545 [+0.369, +0.739]** | **+0.380 [+0.201, +0.572]** | **+0.319 [+0.138, +0.546]** |
-| β_len (per SD) | −0.275 [−0.449, −0.111] | −0.311 [−0.506, −0.138] | −0.260 [−0.440, −0.095] |
-| β_sign(s) (joint-sign spec) | +0.290 [+0.128, +0.446] | +0.040 [−0.124, +0.204] | +0.282 [+0.122, +0.451] |
-| judge sym accuracy | 0.568 | 0.502 | 0.555 |
-| length-only accuracy (1 fitted param) | 0.575 | 0.575 | 0.575 |
-| Δ acc, joint − length-only | −0.007 [−0.047, +0.048] | −0.020 [−0.055, +0.031] | −0.007 [−0.042, +0.047] |
+| joint spec, overall (n=600) | Qwen2.5-0.5B | Qwen2.5-1.5B | Llama-3.2-1B | Qwen2.5-3B |
+|---|---|---|---|---|
+| β_s (per SD, 95% CI) | **+0.545 [+0.369, +0.739]** | **+0.380 [+0.201, +0.572]** | **+0.319 [+0.138, +0.546]** | **+1.399 [+1.147, +1.714]** |
+| β_len (per SD) | −0.275 [−0.449, −0.111] | −0.311 [−0.506, −0.138] | −0.260 [−0.440, −0.095] | −0.764 [−1.027, −0.548] |
+| β_sign(s) (joint-sign spec) | +0.290 [+0.128, +0.446] | +0.040 [−0.124, +0.204] | +0.282 [+0.122, +0.451] | +1.021 [+0.892, +1.146] |
+| judge sym accuracy | 0.568 | 0.502 | 0.555 | 0.742 |
+| length-only accuracy (1 fitted param) | 0.575 | 0.575 | 0.575 | 0.575 |
+| Δ acc, joint − length-only | −0.007 [−0.047, +0.048] | −0.020 [−0.055, +0.031] | −0.007 [−0.042, +0.047] | **+0.205 [+0.156, +0.261]** |
 
 - **Finding 12 — every judge carries real signal beyond length, including
   the one that judges at chance; at 1.5B it is the *binary verdict* that
@@ -344,9 +347,10 @@ optimism is negligible, and the paired spec deltas share it.
   beats length-only by +0.284 [+0.020, +0.338] at 1.5B, with same-signed
   point estimates at 0.5B/1B. The fitted direction is benchmark-specific
   (RewardBench's composition punishes verbosity), so the honest reading is
-  not "use length heuristics" but: **on three of four categories, these
-  small judges are not yet distinguishable from a one-parameter baseline
-  that peeked at the answer key once.**
+  not "use length heuristics" but: **below 3B, on three of four categories,
+  these judges are not yet distinguishable from a one-parameter baseline
+  that peeked at the answer key once.** (The 3B judge is the first to clear
+  that bar — finding 18 below.)
 
 ![Value over length forest plot](results/figures/length_probe__minimal.png)
 
@@ -355,7 +359,9 @@ joint spec), by category and model. Every model has real overall signal, but
 Reasoning at 1.5B is null (the verbosity preference explains that collapse),
 and Chat at 0.5B/1B is null (Llama's apparent Chat skill was length). Right:
 what adding the judge to a fitted length heuristic is worth in accuracy
-points — indistinguishable from zero everywhere except Safety.*
+points — indistinguishable from zero everywhere except Safety for the three
+judges below 3B; the 3B judge (dark blue) is the first to clear the length
+baseline overall, on Reasoning, and on Safety.*
 
 ## Are the verdict probabilities calibrated?
 
@@ -369,12 +375,12 @@ split tied confidences (a saturated judge piles float-identical mass at 1.0,
 and splitting one tied run across bins with different accuracies would
 manufacture ECE from the split), with item-level bootstrap CIs.
 
-| view | Qwen2.5-0.5B | Llama-3.2-1B | Qwen2.5-1.5B |
-|---|---|---|---|
-| raw: mean conf / acc | 0.956 / 0.501 | 0.652 / 0.520 | 0.770 / 0.549 |
-| raw ECE | 0.455 [0.450, 0.459] | 0.141 [0.124, 0.162] | 0.221 [0.203, 0.246] |
-| sym: mean conf / acc | 0.592 / 0.568 | 0.560 / 0.555 | 0.664 / 0.502 |
-| sym ECE | **0.035 [0.036, 0.094]** | **0.052 [0.041, 0.104]** | **0.166 [0.134, 0.209]** |
+| view | Qwen2.5-0.5B | Llama-3.2-1B | Qwen2.5-1.5B | Qwen2.5-3B |
+|---|---|---|---|---|
+| raw: mean conf / acc | 0.956 / 0.501 | 0.652 / 0.520 | 0.770 / 0.549 | 0.971 / 0.617 |
+| raw ECE | 0.455 [0.450, 0.459] | 0.141 [0.124, 0.162] | 0.221 [0.203, 0.246] | 0.355 [0.332, 0.378] |
+| sym: mean conf / acc | 0.592 / 0.568 | 0.560 / 0.555 | 0.664 / 0.502 | 0.894 / 0.742 |
+| sym ECE | **0.035 [0.036, 0.094]** | **0.052 [0.041, 0.104]** | **0.166 [0.134, 0.209]** | **0.153 [0.126, 0.190]** |
 
 - **Finding 15 — symmetrization is also a calibration repair, except where
   the preference itself is broken.** Raw verdict probabilities are severely
@@ -403,15 +409,80 @@ manufacture ECE from the split), with item-level bootstrap CIs.
 *Raw single-order verdicts (red) are overconfident for every judge — the
 0.5B's cluster at confidence ≈ 1, accuracy ≈ 0.5 is position bias read as
 certainty. Symmetrized verdicts (blue) are close to calibrated at 0.5B and
-1B, but not at 1.5B, where the curve is flat below the diagonal until the
-top-confidence bin.*
+1B but not above: the 1.5B curve is flat below the diagonal until the
+top-confidence bin, and the 3B curve rises with confidence but sits below
+the diagonal throughout (overconfident while accurate — finding 18).*
+
+## The 3B reversal — the scaling valley closes and the bias flips
+
+Qwen2.5-3B, same 600 items, both orders, same rubric. Readout fully valid at
+a third Qwen size (argmax compliance 1.000, median mass on {A, B} ≈ 1.00).
+
+| metric | 0.5B | 1.5B | 3B |
+|---|---|---|---|
+| raw accuracy cf / rf | 1.000 / 0.002 | 0.805 / 0.293 | 0.368 / 0.865 |
+| raw accuracy, random order | 0.501 | 0.549 | 0.617 [0.594, 0.639] |
+| symmetrized accuracy | 0.568 | 0.502 | **0.742 [0.707, 0.777]** |
+| paired Δ, symmetrized − raw | +0.068 | −0.048 | +0.125 [+0.095, +0.154] |
+| position bias b: median (share > 0) | +3.65 (99.8%) | +0.83 (74.5%) | **−5.55 (19.2%)** |
+| median \|b\| / median \|s\| | 3.65 / 0.24 | 1.09 / 0.50 | 6.21 / 3.64 |
+| positional flip rate | 0.002 | 0.298 | 0.380 |
+
+- **Finding 16 — the inverse scaling is a valley, not a trend.** Symmetrized
+  accuracy leaps to 0.742 [0.707, 0.777]: paired deltas on identical items
+  are +0.173 [+0.123, +0.223] over 0.5B, +0.240 [+0.192, +0.290] over 1.5B,
+  +0.187 [+0.138, +0.235] over Llama-1B. Within one model family and one
+  protocol, debiased judge quality is *non-monotone* in scale
+  (0.568 → 0.502 → 0.742) — a scaling curve fit through any two of these
+  points would confidently predict the wrong third. Per category: Chat
+  0.861, Reasoning 0.771, Safety 0.730, Chat Hard 0.576 — the adversarial
+  LLMBar-dominated category is now clearly the hardest, as its construction
+  intends.
+- **Finding 17 — the verbosity preference was a mid-scale transient, and
+  the position bias that replaces it is the largest measured yet — in the
+  opposite direction.** The 1.5B's length-following un-learns at 3B:
+  sign(s)-vs-length agreement (tie-excluded, the finding-10 convention)
+  falls back 0.571 → 0.547 overall, 0.628 → 0.538 on Reasoning, and
+  0.756 → **0.433** on math-prm — the 3B judge now leans *anti*-length
+  exactly where verbosity was fatal, and math-prm accuracy recovers
+  0.167 → 0.600. Meanwhile position bias flips family direction: median b
+  −5.55 toward position *B* (b > 0 on only 19.2% of items), magnitude
+  larger than the 0.5B's always-A bias (median |b| 6.21 vs 3.65), and
+  still category-heterogeneous *in direction* within the model (mean b:
+  Chat +0.90 toward A, Reasoning −6.59 toward B). Four models in: the
+  flip-rate ranking (0.002 / 0.183 / 0.298 / 0.380) is monotone in neither
+  bias magnitude nor accuracy — the black-box consistency metric remains
+  uninterpretable at every scale tried.
+- **Finding 18 — the 3B judge is the first to earn its inference cost
+  against the length floor, but its confidence still cannot be trusted.**
+  Value-over-length (probe rerun over all four models, figure above):
+  overall β_s = +1.399 [+1.147, +1.714], and joint − length-only accuracy
+  is +0.205 [+0.156, +0.261] — significant for the first time, driven by
+  Reasoning (+0.231 [+0.168, +0.295], β_s +2.184 where the 1.5B had
+  nothing) and Safety (+0.324 [+0.068, +0.392]). The binary verdict now
+  carries the signal too (joint-sign β +1.021 [+0.892, +1.146]) —
+  majority-vote deployment is fine at 3B where it was fatal at 1.5B. But
+  calibration does not come with accuracy: symmetrized mean confidence
+  0.894 against accuracy 0.742 (ECE 0.153 [0.126, 0.190]) — better than
+  the 1.5B's *flat* miscalibration (the 3B curve at least rises with
+  confidence), yet finding 15's repair story stays limited to the sub-1B
+  models. Across four judges, symmetrized verdicts are calibrated exactly
+  where they are weakest.
+
+![Qwen2.5-3B decomposition](results/figures/qwen2.5-3b__minimal_decomposition.png)
+
+*Qwen2.5-3B's swap-pair decomposition: the mass sits left of b = 0 (a strong
+B-lean, opposite to its 0.5B sibling) with the Reasoning cloud now clearly
+above s = 0 — the order-invariant preference points at the gold answer where
+at 1.5B it pointed at the longer one.*
 
 ## Planned experiments
 
 1. **Scaling grid** — Qwen2.5-Instruct 0.5B/1.5B/3B/7B, Llama-3.2-Instruct
    1B/3B, and peers (Q4_K_M GGUF), on a stratified sample in both orders;
    trivial floors (always-A, longer-response, random) alongside.
-   *(Qwen2.5-0.5B, Llama-3.2-1B, and Qwen2.5-1.5B done above; 3B next.)*
+   *(Qwen2.5-0.5B/1.5B/3B and Llama-3.2-1B done above; Llama-3.2-3B — the
+   cross-family point at the reversal scale — and 7B next.)*
 2. **Bias anatomy** — dispersion and covariates of `b_i`; test of the
    additive-shift hypothesis; accuracy recovered by symmetrization.
 3. **Calibration** — reliability diagrams and ECE of `P(correct)` from

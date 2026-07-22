@@ -473,3 +473,65 @@ Methodological caveat recorded: ECE is a nonnegative deviation statistic, so
 its bootstrap CI sits above the point estimate for near-calibrated judges
 (0.5B sym CI [0.036, 0.094] vs point 0.035); the signed gap is the companion
 number free of that bias.
+
+### Experiment: qwen2.5-3b, minimal rubric, same 600 items, both orders
+
+1,200 judgments in 83 min (0.24 judg/s once the analysis work stopped
+competing for cores — faster than the 6 h estimate; the day-1 arithmetic
+over-extrapolated from the contended 1.5B rate). GGUF pinned at revision
+7dabda4d, SHA256 verified against HF's LFS oid at download and at load.
+Readout fully valid at a third Qwen size: compliance 1.000, mass ≈ 1.0.
+All cross-model analyses (scaling curve, probe, calibration) rerun over
+four stores; probe forest + calibration figures regenerated.
+
+**Finding 16 — the inverse scaling is a valley, not a trend.** Sym acc
+0.742 [0.707, 0.777]; paired deltas +0.173 [+0.123, +0.223] over 0.5B,
++0.240 [+0.192, +0.290] over 1.5B, +0.187 [+0.138, +0.235] over Llama-1B.
+Non-monotone within one family and protocol: 0.568 → 0.502 → 0.742. Any
+two-point scaling extrapolation here predicts the wrong third point. Per
+category: Chat 0.861, Reasoning 0.771, Safety 0.730, Chat Hard 0.576 (the
+LLMBar-adversarial category is finally the hardest, as designed).
+
+**Finding 17 — the verbosity preference was a mid-scale transient; the
+position bias that replaces it is the largest yet, in the opposite
+direction.** Sign(s)-vs-length agreement (tie-excluded, finding-10
+convention — note: the probe JSON's sign_agree_* fields count ties as
+disagreement, hence lower values; both conventions verified today) falls
+0.571 → 0.547 overall, 0.628 → 0.538 Reasoning, 0.756 → 0.433 math-prm —
+anti-length exactly where verbosity was fatal — and math-prm sym recovers
+0.167 → 0.600. Position bias flips direction within the family: median b
+−5.55 toward B (b > 0 on 19.2%), |b| median 6.21 > the 0.5B's 3.65; still
+direction-heterogeneous across categories inside the model (Chat +0.90,
+Reasoning −6.59). Flip-rate ranking across four models
+(0.002/0.183/0.298/0.380) tracks neither bias nor accuracy.
+
+**Finding 18 — first judge to beat the length floor; confidence still not
+trustworthy.** Probe: overall β_s +1.399 [+1.147, +1.714], joint −
+length-only acc +0.205 [+0.156, +0.261] (Reasoning +0.231, Safety +0.324,
+both CIs excluding 0); joint-sign β +1.021 — majority voting is fine at 3B
+where it was fatal at 1.5B. Calibration: sym conf 0.894 vs acc 0.742, ECE
+0.153 [0.126, 0.190] — rises with confidence (unlike 1.5B's flat curve)
+but overconfident throughout. Pattern across four judges: symmetrized
+verdicts are calibrated exactly where the judges are weakest.
+
+### Next steps (Day 5)
+
+1. **Llama-3.2-3B grid** — the cross-family point at the reversal scale:
+   does the valley-then-reversal shape replicate outside Qwen, and does
+   Llama's B-lean grow the way Qwen's flipped? Download pinned GGUF
+   (bartowski, Q4_K_M), register, run n=600 seed 0 both orders (~1.5–2 h
+   at the uncontended 3B rate). Start it FIRST.
+2. While it runs: the **additive-shift formal test** (phase-3 item 2) is
+   now the most interesting pending analysis, and the 3B data sharpens it:
+   with |b| ~6 log-odds and category-dependent direction, how much of
+   Var(b) do category/subset/length covariates explain, and — the
+   deployment question — can a fitted per-category bias correction recover
+   symmetrization's accuracy from a SINGLE order (half the compute)?
+   Cross-fitted (k-fold over items) so the correction is honest.
+3. Then the 7B decision: at the uncontended rate, Qwen2.5-7B n=600 both
+   orders ≈ 2.5–3.5 h — likely feasible in one session; keep n=600 unless
+   the run-rate says otherwise. Llama-3.1-8B as the family counterpart.
+4. Writeup debt: the abstract still describes the audit as 3-model; the
+   day the grid completes at 7B, restructure the README results narrative
+   around the scaling arc (valley → reversal) rather than grid-arrival
+   order.
