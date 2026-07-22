@@ -5,11 +5,13 @@ position bias measured in log-odds, calibration, and value over trivial
 baselines, with paired bootstrap confidence intervals.**
 
 *Status: phase 2 (baselines & main grid) — harness complete (runner, analysis
-core, floors; 51 tests). Three full grids done on the same 600-item stratified
-sample × both orders: Qwen2.5-0.5B, Llama-3.2-1B, and Qwen2.5-1.5B —
-findings 1–11 below, including an inverse-scaling result: the debiased 1.5B
-judge is significantly worse than its 0.5B sibling. The grid continues with
-Qwen2.5-3B next.*
+core, floors, value-over-length probe; 61 tests). Three full grids done on the
+same 600-item stratified sample × both orders: Qwen2.5-0.5B, Llama-3.2-1B, and
+Qwen2.5-1.5B — findings 1–14 below, including an inverse-scaling result (the
+debiased 1.5B judge is significantly worse than its 0.5B sibling) and the
+value-over-length verdict: every judge carries signal a length heuristic
+cannot explain, but on three of four categories none of them beats a
+one-parameter length baseline. The Qwen2.5-3B grid is next.*
 
 ## Abstract
 
@@ -274,6 +276,85 @@ inside bars; gap CI in the title). Right: accuracy vs. the minimum probability
 mass on {A, B} across orders — flat down to the <0.25 bin. Qwen2.5-0.5B's
 companion view is trivial (compliance 1.000) and committed alongside.*
 
+## Value over length: is there a judge inside the verbosity preference?
+
+Finding 10 left the project's sharpest open question: the preference signal
+that emerges with scale *tracks length*, and RewardBench Reasoning punishes
+exactly that — so how much genuine judgment is left once length is controlled?
+The probe (`src/length_probe.py`) is a Bradley–Terry / conditional-logit fit
+on oriented pair differences: for each item, features are oriented
+chosen − rejected — the judge's order-invariant preference `s` and the log
+length ratio `log(len_chosen/len_rejected)` — and the gold-chosen response
+"wins" with probability `sigmoid(β·x)`. There is deliberately no intercept
+(relabeling chosen/rejected flips every feature's sign, so a constant is not
+identified), features are SD-scaled but *not* centered (the origin "equal
+lengths, indifferent judge" must map to P = 1/2), and nested specs turn the
+question into coefficients: **β_s ≠ 0 in the joint spec means the judge
+carries signal a length heuristic cannot explain.** CIs are a 10k-replicate
+bootstrap over items with the full rescale+refit pipeline inside each
+replicate. Accuracies are in-sample; with ≤2 parameters on n ≥ 72 strata the
+optimism is negligible, and the paired spec deltas share it.
+
+| joint spec, overall (n=600) | Qwen2.5-0.5B | Qwen2.5-1.5B | Llama-3.2-1B |
+|---|---|---|---|
+| β_s (per SD, 95% CI) | **+0.545 [+0.369, +0.739]** | **+0.380 [+0.201, +0.572]** | **+0.319 [+0.138, +0.546]** |
+| β_len (per SD) | −0.275 [−0.449, −0.111] | −0.311 [−0.506, −0.138] | −0.260 [−0.440, −0.095] |
+| β_sign(s) (joint-sign spec) | +0.290 [+0.128, +0.446] | +0.040 [−0.124, +0.204] | +0.282 [+0.122, +0.451] |
+| judge sym accuracy | 0.568 | 0.502 | 0.555 |
+| length-only accuracy (1 fitted param) | 0.575 | 0.575 | 0.575 |
+| Δ acc, joint − length-only | −0.007 [−0.047, +0.048] | −0.020 [−0.055, +0.031] | −0.007 [−0.042, +0.047] |
+
+- **Finding 12 — every judge carries real signal beyond length, including
+  the one that judges at chance; at 1.5B it is the *binary verdict* that
+  destroys it.** β_s is significantly positive overall for all three
+  models — most strikingly for Qwen2.5-1.5B, whose symmetrized accuracy is
+  indistinguishable from a coin flip (0.502). The resolution of that
+  apparent contradiction: thresholding. The continuous log-odds `s` has
+  significant length-controlled signal (+0.380), while its *sign* — exactly
+  what symmetrized majority voting uses — has none (+0.040 [−0.124, +0.204]).
+  At 0.5B and 1B the sign retains most of the signal; at 1.5B the judge is
+  right where it is confident and wrong-but-weak on a mass of items the sign
+  treats as full votes. A deployment that averages verdict *probabilities*
+  and one that majority-votes *verdicts* are measurably different judges
+  here — a distinction only visible white-box.
+- **Finding 13 — length mediates both of the audit's standing mysteries.**
+  (a) The 1.5B Reasoning collapse (sym 0.368, below the length floor) is
+  *entirely* length-mediated: judge-only, its Reasoning preference
+  anti-predicts gold (β_s −0.329 [−0.629, −0.079]); controlling for length,
+  nothing remains (−0.084 [−0.406, +0.183]) — the emergent verbosity
+  preference explains all of the below-chance behavior, and there is no
+  residual anti-signal. (b) Llama-1B's Chat advantage (finding 7: 0.653
+  where Qwen-0.5B had zero signal) does *not* survive length control:
+  Chat β_s = −0.046 [−0.812, +1.518], while Chat is the one category where
+  longer actually is better (length-only accuracy 0.792 > the judge's
+  0.653). Its "advantage" is a noisy proxy of the length heuristic.
+  Meanwhile Qwen2.5-1.5B's Chat signal is genuine content signal
+  (β_s +0.805 [+0.181, +1.811]) — scale bought real judgment on Chat and a
+  toxic length preference on Reasoning, at the same time.
+- **Finding 14 — against a deployable floor, these judges only pay for
+  themselves on Safety.** A one-parameter length model *fitted to this
+  sample* learns shorter-is-better (β_len < 0) and reaches 0.575 overall —
+  above every judge's symmetrized accuracy. Adding the judge to it moves
+  accuracy by ≈0 overall (table); at 1.5B the judge alone is significantly
+  *worse* than length alone (−0.073 [−0.131, −0.009]). The exception is
+  Safety, where length carries nothing (β_len ≈ 0, length-only 0.412) and
+  every judge has strong signal (β_s +0.6 to +0.9): there the joint model
+  beats length-only by +0.284 [+0.020, +0.338] at 1.5B, with same-signed
+  point estimates at 0.5B/1B. The fitted direction is benchmark-specific
+  (RewardBench's composition punishes verbosity), so the honest reading is
+  not "use length heuristics" but: **on three of four categories, these
+  small judges are not yet distinguishable from a one-parameter baseline
+  that peeked at the answer key once.**
+
+![Value over length forest plot](results/figures/length_probe__minimal.png)
+
+*Left: the judge's length-controlled signal about gold labels (β_s in the
+joint spec), by category and model. Every model has real overall signal, but
+Reasoning at 1.5B is null (the verbosity preference explains that collapse),
+and Chat at 0.5B/1B is null (Llama's apparent Chat skill was length). Right:
+what adding the judge to a fitted length heuristic is worth in accuracy
+points — indistinguishable from zero everywhere except Safety.*
+
 ## Planned experiments
 
 1. **Scaling grid** — Qwen2.5-Instruct 0.5B/1.5B/3B/7B, Llama-3.2-Instruct
@@ -284,10 +365,9 @@ companion view is trivial (compliance 1.000) and committed alongside.*
    additive-shift hypothesis; accuracy recovered by symmetrization.
 3. **Calibration** — reliability diagrams and ECE of `P(correct)` from
    verdict probabilities, raw vs. symmetrized.
-4. **Value over length** — logistic regression of gold on judge log-odds vs.
-   length delta; does a small judge beat "pick the longer answer"?
-   *(Elevated by finding 10: at 1.5B the emergent preference signal appears
-   to be substantially a length preference.)*
+4. **Value over length** — conditional-logit probe of gold on judge log-odds
+   vs. log length ratio. *(Done above — findings 12–14; reruns automatically
+   as new grids complete.)*
 5. **Prompt sensitivity** — minimal vs. detailed rubric as a paired
    comparison in log-odds space.
 
@@ -313,14 +393,16 @@ src/judge.py      llama.cpp runner: chat templates, pinned GGUFs, logit
                   readout, resumable JSONL result stores
 src/analysis.py   swap-pair assembly, s/b decomposition, paired bootstrap
 src/baselines.py  always-A / longer-response / random floors
+src/length_probe.py  conditional-logit value-over-length probe (nested
+                  specs, batched bootstrap refits)
 experiments/      run_grid, summarize, make_figures, compliance_view,
-                  scaling_curve
+                  scaling_curve, length_probe
 results/raw/      one JSONL store per (model, rubric) + provenance sidecar
-results/summary/  quick-look JSON per store (+ __compliance views)
+results/summary/  quick-look JSON per store (+ __compliance, length_probe)
 results/figures/  committed PNGs, regenerable from raw stores
-tests/            51 tests (schema, templates, readout arithmetic, store
+tests/            61 tests (schema, templates, readout arithmetic, store
                   resume, decomposition, bootstrap, floors, compliance
-                  view, model smoke)
+                  view, length probe, model smoke)
 research/NOTES.md living research log
 ```
 
@@ -329,7 +411,7 @@ research/NOTES.md living research log
 ```bash
 uv sync                      # analysis deps (numpy, pyarrow, matplotlib)
 uv run python -m src.data    # fetch pinned parquet, print composition
-uv run --group dev pytest    # 51 tests
+uv run --group dev pytest    # 61 tests
 uv sync --group judge        # llama-cpp-python (compiles ~5 min on 4 cores)
 # download the pinned GGUF named in src/judge.py MODELS into models/, then:
 uv run python -m experiments.run_grid --model qwen2.5-0.5b --rubric minimal --n 600 --seed 0
@@ -337,6 +419,7 @@ uv run python -m experiments.summarize   # tables in results/summary/
 uv run python -m experiments.make_figures
 uv run python -m experiments.compliance_view   # readout-validity conditioning
 uv run python -m experiments.scaling_curve     # cross-model figure (>=2 stores)
+uv run python -m experiments.length_probe      # value-over-length probe + forest plot
 ```
 
 ## References

@@ -379,3 +379,72 @@ README now carries the correct number.
    6/11 predict rejection.
 4. Decide the 7B sample budget after the 3B numbers land (n=300
    composition-preserving vs two-day n=600).
+
+## 2026-07-22 — Day 4: value-over-length probe (findings 12–14); 3B grid
+
+(Gap 07-20/07-21: no sessions ran.)
+
+### Built (61 tests green, ruff clean)
+
+- `src/length_probe.py` — the analysis finding 10 elevated: a Bradley–Terry /
+  conditional-logit probe on oriented chosen−rejected differences.
+  P(gold-chosen wins) = sigmoid(β·x) with x = (judge preference s, log length
+  ratio); **no intercept** — under orientation symmetry (relabeling
+  chosen/rejected flips every feature sign) a constant is not identified; with
+  the outcome constant by construction its MLE diverges, and in the
+  antisymmetric doubled-data view it is exactly zero. Features SD-scaled but
+  NOT centered (origin "equal lengths, indifferent judge" must map to
+  P = 1/2). Nested specs: length-only / judge-only / joint / joint-sign
+  (sign(s) = the symmetrized binary verdict). Weak ridge (1e-3) keeps
+  bootstrap replicates with complete separation finite (one-signed small
+  strata); damped Newton, and a batched-across-replicates Newton so the
+  10k-resample bootstrap (full rescale+refit pipeline inside every replicate,
+  shared resamples across specs so spec deltas are paired) runs in seconds.
+- `experiments/length_probe.py` — runner over completed stores (identical
+  item-set guard as scaling_curve), JSON + two-panel forest figure (β_s in
+  joint spec; Δacc joint − length-only).
+- Registered `qwen2.5-3b` (revision 7dabda4d, SHA256 verified against HF's
+  LFS oid after download and at load).
+
+### Findings (probe over the three completed grids, same 600 items)
+
+**Finding 12 — every judge carries real signal beyond length, including the
+one that judges at chance; at 1.5B the binary verdict is what destroys it.**
+Joint-spec β_s overall: 0.5B +0.545 [+0.369, +0.739], 1.5B +0.380
+[+0.201, +0.572], Llama-1B +0.319 [+0.138, +0.546] — all significantly
+positive, including Qwen2.5-1.5B whose sym accuracy is 0.502. Resolution:
+thresholding. At 1.5B the continuous s has length-controlled signal but its
+*sign* has none (joint-sign β +0.040 [−0.124, +0.204]), while at 0.5B/1B the
+sign retains it (+0.290 / +0.282, both significant). Probability-averaging
+and majority-voting are measurably different judges at 1.5B — a white-box-only
+distinction.
+
+**Finding 13 — length mediates both standing mysteries.** (a) The 1.5B
+Reasoning collapse is entirely length-mediated: judge-only β_s −0.329
+[−0.629, −0.079] (the preference anti-predicts gold), joint β_s −0.084
+[−0.406, +0.183] (nothing left after length control — and no residual
+anti-signal either). (b) Llama-1B's Chat advantage (finding 7) is
+length-following: Chat joint β_s −0.046 [−0.812, +1.518]; Chat is the one
+category where longer is actually better and the length-only model scores
+0.792 > Llama's 0.653. Counterpoint: Qwen-1.5B's emergent Chat signal is
+genuine content (β_s +0.805 [+0.181, +1.811]). Scale bought real Chat
+judgment and a toxic Reasoning verbosity preference simultaneously.
+
+**Finding 14 — against a deployable floor, these judges only pay on
+Safety.** The one-parameter fitted length model learns shorter-is-better on
+this sample and reaches 0.575 overall — above all three judges' sym
+accuracy. Δacc(joint − length) ≈ 0 overall for all models; 1.5B judge-only is
+significantly worse than length-only (−0.073 [−0.131, −0.009]). Safety is
+the exception: length carries nothing there (length-only 0.412, β_len ≈ 0),
+every judge has β_s +0.6–0.9, and at 1.5B joint beats length by +0.284
+[+0.020, +0.338] (same-signed point estimates at 0.5B/1B). Caveats recorded
+in README: in-sample accuracies (≤2 params, negligible optimism, deltas
+share it); the length model's direction is fitted to this benchmark —
+the claim is "not distinguishable from a peeked one-parameter baseline",
+not "use length heuristics".
+
+Methodological note for the writeup: the probe formalizes "does the judge
+add value" as a coefficient question instead of an accuracy-comparison
+question — accuracy deltas at n=600 are too coarse (CIs ±0.05) while the
+coefficient CIs cleanly separate zero from non-zero signal. This is the
+paired-power argument from rag-chunking-bench again, in regression form.
