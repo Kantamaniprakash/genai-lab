@@ -448,3 +448,28 @@ add value" as a coefficient question instead of an accuracy-comparison
 question — accuracy deltas at n=600 are too coarse (CIs ±0.05) while the
 coefficient CIs cleanly separate zero from non-zero signal. This is the
 paired-power argument from rag-chunking-bench again, in regression form.
+
+### Calibration axis (phase-3 item 3, pulled forward — finding 15)
+
+Built `src/calibration.py` + `experiments/calibration.py` while the 3B grid
+ran: folded (confidence, correctness) views — raw `sigmoid(|z|)` per
+judgment, sym `sigmoid(|s|)` per item — with **tie-safe equal-mass bins**
+(saturated judges pile float-identical confidence at 1.0; splitting a tied
+run across bins with different accuracies manufactures ECE, caught by a test
+before it shipped) and item-level bootstrap CIs. 70 tests green.
+
+**Finding 15 — symmetrization is also a calibration repair, except where the
+preference itself is broken.** Raw is overconfident everywhere; at 0.5B the
+miscalibration IS the position bias read as certainty (mean conf 0.956, acc
+0.501, ECE 0.455). Symmetrized: 0.5B ECE 0.035 (gap +0.024), Llama-1B 0.052
+(gap +0.005) — near-diagonal reliability curves; sigmoid(|s|) is readable as
+a probability at these scales. Qwen-1.5B is the exception: still
+overconfident after debiasing (ECE 0.166, gap +0.162), reliability curve
+flat at ~0.45 acc across conf 0.5–0.85, rising only in the top-confidence
+bin (0.94 → 0.75) — finding 12's magnitude-vs-sign mechanism drawn as a
+curve. Deployment reading: a confidence-thresholded 1.5B judge would be
+usable; a confidence-trusting one is worse than its 0.5B sibling.
+Methodological caveat recorded: ECE is a nonnegative deviation statistic, so
+its bootstrap CI sits above the point estimate for near-calibrated judges
+(0.5B sym CI [0.036, 0.094] vs point 0.035); the signed gap is the companion
+number free of that bias.

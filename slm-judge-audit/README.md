@@ -5,13 +5,15 @@ position bias measured in log-odds, calibration, and value over trivial
 baselines, with paired bootstrap confidence intervals.**
 
 *Status: phase 2 (baselines & main grid) — harness complete (runner, analysis
-core, floors, value-over-length probe; 61 tests). Three full grids done on the
-same 600-item stratified sample × both orders: Qwen2.5-0.5B, Llama-3.2-1B, and
-Qwen2.5-1.5B — findings 1–14 below, including an inverse-scaling result (the
-debiased 1.5B judge is significantly worse than its 0.5B sibling) and the
-value-over-length verdict: every judge carries signal a length heuristic
-cannot explain, but on three of four categories none of them beats a
-one-parameter length baseline. The Qwen2.5-3B grid is next.*
+core, floors, value-over-length probe, calibration; 70 tests). Three full
+grids done on the same 600-item stratified sample × both orders: Qwen2.5-0.5B,
+Llama-3.2-1B, and Qwen2.5-1.5B — findings 1–15 below, including an
+inverse-scaling result (the debiased 1.5B judge is significantly worse than
+its 0.5B sibling), the value-over-length verdict (every judge carries signal a
+length heuristic cannot explain, but on three of four categories none beats a
+one-parameter length baseline), and calibration (symmetrization nearly
+repairs it at 0.5B/1B; the 1.5B stays overconfident after debiasing). The
+Qwen2.5-3B grid is next.*
 
 ## Abstract
 
@@ -355,6 +357,55 @@ and Chat at 0.5B/1B is null (Llama's apparent Chat skill was length). Right:
 what adding the judge to a fitted length heuristic is worth in accuracy
 points — indistinguishable from zero everywhere except Safety.*
 
+## Are the verdict probabilities calibrated?
+
+The probe showed the 1.5B judge is right where it is confident; calibration
+is the formal version of that claim. Each judgment folds into a
+(confidence, correctness) point — **raw**: `sigmoid(|z|)`, the renormalized
+probability on the winning verdict token, per judgment, which is what a
+single-order deployment experiences; **sym**: `sigmoid(|s|)` per item, the
+confidence of the swap-averaged verdict. ECE uses equal-mass bins that never
+split tied confidences (a saturated judge piles float-identical mass at 1.0,
+and splitting one tied run across bins with different accuracies would
+manufacture ECE from the split), with item-level bootstrap CIs.
+
+| view | Qwen2.5-0.5B | Llama-3.2-1B | Qwen2.5-1.5B |
+|---|---|---|---|
+| raw: mean conf / acc | 0.956 / 0.501 | 0.652 / 0.520 | 0.770 / 0.549 |
+| raw ECE | 0.455 [0.450, 0.459] | 0.141 [0.124, 0.162] | 0.221 [0.203, 0.246] |
+| sym: mean conf / acc | 0.592 / 0.568 | 0.560 / 0.555 | 0.664 / 0.502 |
+| sym ECE | **0.035 [0.036, 0.094]** | **0.052 [0.041, 0.104]** | **0.166 [0.134, 0.209]** |
+
+- **Finding 15 — symmetrization is also a calibration repair, except where
+  the preference itself is broken.** Raw verdict probabilities are severely
+  overconfident everywhere, and at 0.5B the miscalibration *is* the position
+  bias wearing a confidence costume: |z| ≈ |b| ≈ huge, so the judge asserts
+  0.956 mean confidence while performing at chance (ECE 0.455). Averaging
+  the two orders repairs it almost completely at 0.5B and 1B — sym
+  confidence–accuracy gaps of +0.024 and +0.005, ECE 0.035/0.052, reliability
+  curves hugging the diagonal. So the *shape* of the debiased log-odds is
+  approximately honest at these scales: `sigmoid(|s|)` can be read as a
+  probability. At 1.5B it cannot — the judge stays overconfident after
+  debiasing (gap +0.162, ECE 0.166), and its reliability curve is flat at
+  ≈0.45 accuracy across the whole 0.5–0.85 confidence range, only rising in
+  the top-confidence mass (0.94 → 0.75). That flat-then-jump shape is
+  finding 12 drawn as a curve: the middle-confidence mass — where the
+  length-following preference lives — carries no validity, while the
+  high-|s| tail is real. A confidence-thresholded 1.5B judge would be
+  usable; a confidence-trusting one is worse than its 0.5B sibling.
+  (Methodological note: ECE is a nonnegative deviation statistic, so its
+  bootstrap distribution sits slightly above the point estimate for
+  near-calibrated judges — the 0.5B sym CI brackets resampling noise, not a
+  smaller true ECE. The signed gap is the bias-free companion number.)
+
+![Reliability diagrams](results/figures/calibration__minimal.png)
+
+*Raw single-order verdicts (red) are overconfident for every judge — the
+0.5B's cluster at confidence ≈ 1, accuracy ≈ 0.5 is position bias read as
+certainty. Symmetrized verdicts (blue) are close to calibrated at 0.5B and
+1B, but not at 1.5B, where the curve is flat below the diagonal until the
+top-confidence bin.*
+
 ## Planned experiments
 
 1. **Scaling grid** — Qwen2.5-Instruct 0.5B/1.5B/3B/7B, Llama-3.2-Instruct
@@ -364,7 +415,8 @@ points — indistinguishable from zero everywhere except Safety.*
 2. **Bias anatomy** — dispersion and covariates of `b_i`; test of the
    additive-shift hypothesis; accuracy recovered by symmetrization.
 3. **Calibration** — reliability diagrams and ECE of `P(correct)` from
-   verdict probabilities, raw vs. symmetrized.
+   verdict probabilities, raw vs. symmetrized. *(Done above — finding 15;
+   reruns automatically as new grids complete.)*
 4. **Value over length** — conditional-logit probe of gold on judge log-odds
    vs. log length ratio. *(Done above — findings 12–14; reruns automatically
    as new grids complete.)*
@@ -395,14 +447,16 @@ src/analysis.py   swap-pair assembly, s/b decomposition, paired bootstrap
 src/baselines.py  always-A / longer-response / random floors
 src/length_probe.py  conditional-logit value-over-length probe (nested
                   specs, batched bootstrap refits)
+src/calibration.py   folded confidence views, tie-safe equal-mass bins, ECE
 experiments/      run_grid, summarize, make_figures, compliance_view,
-                  scaling_curve, length_probe
+                  scaling_curve, length_probe, calibration
 results/raw/      one JSONL store per (model, rubric) + provenance sidecar
-results/summary/  quick-look JSON per store (+ __compliance, length_probe)
+results/summary/  quick-look JSON per store (+ __compliance, length_probe,
+                  calibration)
 results/figures/  committed PNGs, regenerable from raw stores
-tests/            61 tests (schema, templates, readout arithmetic, store
+tests/            70 tests (schema, templates, readout arithmetic, store
                   resume, decomposition, bootstrap, floors, compliance
-                  view, length probe, model smoke)
+                  view, length probe, calibration, model smoke)
 research/NOTES.md living research log
 ```
 
@@ -411,7 +465,7 @@ research/NOTES.md living research log
 ```bash
 uv sync                      # analysis deps (numpy, pyarrow, matplotlib)
 uv run python -m src.data    # fetch pinned parquet, print composition
-uv run --group dev pytest    # 61 tests
+uv run --group dev pytest    # 70 tests
 uv sync --group judge        # llama-cpp-python (compiles ~5 min on 4 cores)
 # download the pinned GGUF named in src/judge.py MODELS into models/, then:
 uv run python -m experiments.run_grid --model qwen2.5-0.5b --rubric minimal --n 600 --seed 0
@@ -420,6 +474,7 @@ uv run python -m experiments.make_figures
 uv run python -m experiments.compliance_view   # readout-validity conditioning
 uv run python -m experiments.scaling_curve     # cross-model figure (>=2 stores)
 uv run python -m experiments.length_probe      # value-over-length probe + forest plot
+uv run python -m experiments.calibration       # reliability diagrams + ECE
 ```
 
 ## References
