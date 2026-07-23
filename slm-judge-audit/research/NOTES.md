@@ -535,3 +535,79 @@ verdicts are calibrated exactly where the judges are weakest.
    day the grid completes at 7B, restructure the README results narrative
    around the scaling arc (valley → reversal) rather than grid-arrival
    order.
+
+## 2026-07-23 — Day 5: additive-shift test + correction ladder (findings 19–20); Llama-3.2-3B grid
+
+### Built (83 tests green, ruff clean; committed before the grid finished)
+
+- Registered `llama-3.2-3b` (bartowski Q4_K_M, revision 5ab33fa9, SHA256
+  verified against HF's LFS oid after download and at load); grid launched
+  first thing and ran in the background all session.
+- `src/bias_model.py` — phase-3 item 2 made concrete. Two connected pieces:
+  - **Variance decomposition of b.** Key methodological observation: the
+    readout is deterministic at temp 0, so b_i carries *no sampling noise* —
+    all of Var(b) is real item-level bias structure, and R² of nested
+    predictors (category means / subset means / subset + symmetric length
+    covariates) cleanly partitions it into the exploitable share and an
+    irreducible residual. Bootstrap refits inside every replicate (batched
+    group-mean scatter-adds and batched ridge-OLS normal equations).
+    Covariates must be *symmetric* in the pair (log total chars, |dlog
+    chars|, log prompt chars): b is order-invariant, so any sign-flipping
+    covariate is structurally excluded from linearly predicting it.
+  - **Single-order correction ladder.** The oracle correction
+    sign(z − b_i) IS the symmetrized verdict (z_cf − b_i = s_i,
+    z_rf − b_i = −s_i), so fitted corrections — none / global / category /
+    subset / regression / oracle — interpolate raw → symmetrized at half
+    the inference cost. All corrections are exact leave-one-out (closed-form
+    LOO group means with singleton fallback to the LOO grand mean; the
+    ridge hat-matrix identity for the regression), so no item is corrected
+    with its own bias. Ladder accuracies bootstrap the fixed per-item LOO
+    scores; correction-refit variance is not resampled (negligible at
+    group-mean scale on n=600 — caveat recorded in the module docstring).
+- `experiments/bias_model.py` — runner over completed stores (identical
+  item-set guard), JSON + two-panel figure (R² forest; accuracy ladder).
+- Engineering note: numpy stacked `linalg.solve` needs an explicit RHS
+  matrix dimension — `solve(A, c[:, :, None])[:, :, 0]` — or it
+  misinterprets a (B, p) RHS stack.
+
+### Findings (over the four completed grids, same 600 items)
+
+**Finding 19 — the additive-shift hypothesis is rejected at every scale,
+and bias predictability is anti-correlated with bias magnitude.** Subset
+structure alone explains a significant share of Var(b) everywhere (R²
+0.141 [0.121, 0.228] at 0.5B, 0.329 Llama-1B, 0.448 at 1.5B, 0.260 at 3B).
+But the *character* changes with scale: the 0.5B always-A machine is the
+closest thing to a true additive shift (category R² 0.020; category means
+all +3.40..+3.91); 1.5B has the most predictable bias in the audit
+(subset+length R² 0.556 — over half of Var(b), matching finding 11's
+category-signed biases); 3B has the largest bias (SD 5.47, category means
++0.90 Chat vs −6.59 Reasoning) yet the least explainable — residual SD
+4.61 log-odds after all covariates, *larger than its own median |s| 3.64*.
+Length covariates add +0.20 R² at 0.5B and +0.11 at 1.5B but ~nothing at
+Llama-1B (+0.001) and 3B (+0.028) — what makes an item bias-prone is
+family- and scale-specific, not a benchmark property.
+
+**Finding 20 — a fitted one-call correction fully substitutes for
+symmetrization at 0.5B, caps at half the gain at 3B, and actively hurts at
+1.5B.** 0.5B: LOO subset correction 0.547 [0.526, 0.567] — 68% of the
+symmetrization gain, statistically indistinguishable from the two-call
+oracle (Δ −0.022 [−0.056, +0.013]). 3B: best fitted rung is *category*
+(0.675 [0.647, 0.703]; subset/regression overfit finer strata at 0.662),
++0.058 over raw with Reasoning alone jumping 0.575 → 0.688 when its −6.59
+shift is subtracted — but it recovers only 47% and stays significantly
+below the oracle (Δ −0.067 [−0.091, −0.042]): finding 19's unexplained
+4.61-log-odds residual is exactly what the second call buys. 1.5B: the
+ladder runs backwards (none 0.549 > global 0.532 > category 0.517 >
+subset 0.510 > oracle 0.502) — corrections work as designed (subset
+recovers 82% of the oracle "gain") but the debiased preference they
+converge to is anti-informative on Reasoning (finding 9), so every step
+toward it hurts. Deployment reading: the models where one cheap call +
+a dev-set constant suffices are the weak ones; where the judge is worth
+deploying (3B), the bias is too idiosyncratic to subtract and the second
+call earns its cost. A bias correction inherits whatever the bias was
+masking.
+
+README: new "Is position bias a constant you can subtract?" section with
+the cross-model table, findings 19–20, and the two-panel figure; method
+section updated (the additive-shift hypothesis is now tested, not deferred);
+planned-experiments item 2 marked done.
