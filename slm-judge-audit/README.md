@@ -5,16 +5,20 @@ position bias measured in log-odds, calibration, and value over trivial
 baselines, with paired bootstrap confidence intervals.**
 
 *Status: phase 2 (baselines & main grid) — harness complete (runner, analysis
-core, floors, value-over-length probe, calibration; 70 tests). Four full
-grids done on the same 600-item stratified sample × both orders: Qwen2.5
-0.5B/1.5B/3B and Llama-3.2-1B — findings 1–18 below. Headlines: debiased
-judge quality is non-monotone in scale (0.568 → 0.502 → 0.742 within the
-Qwen family — a 1.5B valley where the emergent preference is a verbosity
-preference that RewardBench punishes, closing again at 3B); flip-rate
-"consistency" is uninterpretable at every scale; every judge carries signal a
-length heuristic cannot explain, but only the 3B judge beats a one-parameter
-length baseline; and symmetrized verdict probabilities are calibrated exactly
-where the judges are weakest. Llama-3.2-3B and the 7B tier are next.*
+core, floors, value-over-length probe, calibration, bias-structure test; 83
+tests). Four full grids done on the same 600-item stratified sample × both
+orders: Qwen2.5 0.5B/1.5B/3B and Llama-3.2-1B — findings 1–20 below.
+Headlines: debiased judge quality is non-monotone in scale (0.568 → 0.502 →
+0.742 within the Qwen family — a 1.5B valley where the emergent preference is
+a verbosity preference that RewardBench punishes, closing again at 3B);
+flip-rate "consistency" is uninterpretable at every scale; every judge
+carries signal a length heuristic cannot explain, but only the 3B judge beats
+a one-parameter length baseline; symmetrized verdict probabilities are
+calibrated exactly where the judges are weakest; and the additive-shift
+hypothesis behind cheap debiasing is rejected at every scale — a fitted
+one-call bias correction fully substitutes for symmetrization at 0.5B but
+caps out at half the gain at 3B, where the bias is the largest and least
+predictable. Llama-3.2-3B (running) and the 7B tier are next.*
 
 ## Abstract
 
@@ -70,9 +74,10 @@ For item *i* with gold pair (chosen, rejected) and judge *j*:
     whatever occupies position A, regardless of content.
 
   The decomposition is an identity, not a model. The *additive-shift
-  hypothesis* — `b_i ≈ b` constant across items — is what swap-averaging
-  debiasing implicitly assumes, and phase 3 tests it (dispersion of `b_i`,
-  dependence on length gap, preference magnitude, category).
+  hypothesis* — `b_i ≈ b` constant across items — is what any single-order
+  debiasing scheme must assume, and the audit tests it directly (variance
+  decomposition of `b_i` over category/subset/length structure, and the
+  accuracy a cross-fitted one-call correction recovers — findings 19–20).
 
 ## Data
 
@@ -476,6 +481,79 @@ B-lean, opposite to its 0.5B sibling) with the Reasoning cloud now clearly
 above s = 0 — the order-invariant preference points at the gold answer where
 at 1.5B it pointed at the longer one.*
 
+## Is position bias a constant you can subtract?
+
+Swap-averaging is exact but doubles inference cost. Every cheaper debiasing
+scheme rests on the *additive-shift hypothesis*: that `b_i` is predictable
+from what a deployment could know — nothing (a global constant), the item's
+category or subset, or its length statistics. Because the verdict readout is
+deterministic at temperature 0, `b_i` carries **no sampling noise**: all of
+`Var(b)` is real item-level bias structure, so a variance decomposition
+(nested predictors, refit inside every bootstrap replicate) cleanly separates
+the share a correction could exploit from an irreducible residual.
+
+The decomposition has a deployment-facing mirror. The oracle single-order
+correction `sign(z − b_i)` *is* the symmetrized verdict (`z_cf − b_i = s_i`,
+`z_rf − b_i = −s_i`), so a ladder of fitted corrections — each evaluated with
+exact leave-one-out cross-fitting, no item corrected using its own bias —
+interpolates between the raw single-order judge and full symmetrization at
+half the inference cost:
+
+| | Qwen-0.5B | Llama-1B | Qwen-1.5B | Qwen-3B |
+|---|---|---|---|---|
+| SD of position bias b (log-odds) | 1.08 | 1.05 | 1.32 | **5.47** |
+| R² category means | 0.020 [0.006, 0.053] | 0.096 | 0.372 | 0.205 |
+| R² subset means | 0.141 | 0.329 | 0.448 | 0.260 |
+| R² subset + length | 0.340 | 0.330 | **0.556** | 0.288 |
+| residual SD after best spec | 0.88 | 0.86 | 0.88 | **4.61** |
+| raw single-order accuracy | 0.501 | 0.520 | 0.549 | 0.617 |
+| best one-call corrected | 0.547 (subset) | 0.532 (regression) | 0.549 (uncorrected) | 0.675 (category) |
+| symmetrized, two calls | 0.568 | 0.555 | 0.502 | 0.742 |
+| share of symmetrization gain recovered | 68% | n.s. | — (gain is negative) | 47% |
+
+- **Finding 19 — the additive-shift hypothesis is rejected at every scale,
+  and bias *predictability* is anti-correlated with bias *magnitude*.**
+  Subset structure alone explains a significant share of `Var(b)` for every
+  judge (R² 0.141–0.448, all CIs well off zero), so no model's bias is a
+  constant. But the structure changes character with scale. The 0.5B
+  always-A machine is the *closest* to a true additive shift: category means
+  are statistically distinct but practically identical (+3.40 to +3.91,
+  category R² 0.020). At 1.5B the bias is the most predictable in the audit
+  — category alone 0.372, subset + length 0.556, over half of `Var(b)` —
+  matching finding 11's category-dependent signs (+1.29 Reasoning vs −0.61
+  Safety). At 3B the bias is the *largest* (SD 5.47, category means spanning
+  +0.90 Chat to −6.59 Reasoning) yet the *least* explainable: every
+  covariate together leaves a residual SD of 4.61 log-odds — bigger than
+  the model's own median content signal (|s| 3.64). Length covariates,
+  which add +0.20 R² at 0.5B and +0.11 at 1.5B, add almost nothing at
+  Llama-1B (+0.001) or 3B (+0.028): what makes an item bias-prone is
+  family- and scale-specific, not a benchmark property.
+- **Finding 20 — one call plus a fitted correction is enough to fix the
+  0.5B judge, cannot be enough at 3B, and at 1.5B every correction makes
+  the judge worse.** At 0.5B the LOO per-subset correction reaches 0.547
+  [0.526, 0.567] — recovering 68% of the symmetrization gain and
+  statistically indistinguishable from the two-call oracle (Δ −0.022
+  [−0.056, +0.013]). At 3B the *category* correction is the best fitted
+  rung (0.675 [0.647, 0.703]; subset and regression overfit their finer
+  strata, 0.662) — a +0.058 gain over raw, with Reasoning alone jumping
+  0.575 → 0.688 when its −6.59 shift is subtracted — but it recovers only
+  47% of the oracle gain and stays significantly below it (Δ −0.067
+  [−0.091, −0.042]): finding 19's unexplained 4.61-log-odds residual is
+  exactly what the second call pays for. At 1.5B the ladder runs
+  *backwards* — none 0.549 > global 0.532 > category 0.517 > subset 0.510 >
+  oracle 0.502 — the corrections work as designed (subset recovers 82% of
+  the oracle "gain"), but the debiased preference they converge to is
+  anti-informative on Reasoning (finding 9), so every step toward it hurts.
+  A bias correction inherits whatever the bias was masking.
+
+![Position-bias structure and the correction ladder](results/figures/bias_model__minimal.png)
+
+*Left: R² of nested bias predictors per judge — a pure additive shift would
+put every marker at 0. Right: the single-order correction ladder from raw
+(grey) to oracle (star = two-call symmetrization). The 0.5B subset marker
+nearly reaches its star; the 3B markers stall less than halfway; the 1.5B
+ladder runs right-to-left.*
+
 ## Planned experiments
 
 1. **Scaling grid** — Qwen2.5-Instruct 0.5B/1.5B/3B/7B, Llama-3.2-Instruct
@@ -484,7 +562,8 @@ at 1.5B it pointed at the longer one.*
    *(Qwen2.5-0.5B/1.5B/3B and Llama-3.2-1B done above; Llama-3.2-3B — the
    cross-family point at the reversal scale — and 7B next.)*
 2. **Bias anatomy** — dispersion and covariates of `b_i`; test of the
-   additive-shift hypothesis; accuracy recovered by symmetrization.
+   additive-shift hypothesis; accuracy recovered by symmetrization. *(Done
+   above — findings 19–20; reruns automatically as new grids complete.)*
 3. **Calibration** — reliability diagrams and ECE of `P(correct)` from
    verdict probabilities, raw vs. symmetrized. *(Done above — finding 15;
    reruns automatically as new grids complete.)*
@@ -519,15 +598,17 @@ src/baselines.py  always-A / longer-response / random floors
 src/length_probe.py  conditional-logit value-over-length probe (nested
                   specs, batched bootstrap refits)
 src/calibration.py   folded confidence views, tie-safe equal-mass bins, ECE
+src/bias_model.py    variance decomposition of b_i + exact-LOO single-order
+                  correction ladder (additive-shift test)
 experiments/      run_grid, summarize, make_figures, compliance_view,
-                  scaling_curve, length_probe, calibration
+                  scaling_curve, length_probe, calibration, bias_model
 results/raw/      one JSONL store per (model, rubric) + provenance sidecar
 results/summary/  quick-look JSON per store (+ __compliance, length_probe,
-                  calibration)
+                  calibration, bias_model)
 results/figures/  committed PNGs, regenerable from raw stores
-tests/            70 tests (schema, templates, readout arithmetic, store
+tests/            83 tests (schema, templates, readout arithmetic, store
                   resume, decomposition, bootstrap, floors, compliance
-                  view, length probe, calibration, model smoke)
+                  view, length probe, calibration, bias model, model smoke)
 research/NOTES.md living research log
 ```
 
@@ -536,7 +617,7 @@ research/NOTES.md living research log
 ```bash
 uv sync                      # analysis deps (numpy, pyarrow, matplotlib)
 uv run python -m src.data    # fetch pinned parquet, print composition
-uv run --group dev pytest    # 70 tests
+uv run --group dev pytest    # 83 tests
 uv sync --group judge        # llama-cpp-python (compiles ~5 min on 4 cores)
 # download the pinned GGUF named in src/judge.py MODELS into models/, then:
 uv run python -m experiments.run_grid --model qwen2.5-0.5b --rubric minimal --n 600 --seed 0
@@ -546,6 +627,7 @@ uv run python -m experiments.compliance_view   # readout-validity conditioning
 uv run python -m experiments.scaling_curve     # cross-model figure (>=2 stores)
 uv run python -m experiments.length_probe      # value-over-length probe + forest plot
 uv run python -m experiments.calibration       # reliability diagrams + ECE
+uv run python -m experiments.bias_model        # additive-shift test + correction ladder
 ```
 
 ## References

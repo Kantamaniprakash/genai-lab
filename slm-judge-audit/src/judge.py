@@ -145,6 +145,15 @@ MODELS: dict[str, JudgeModel] = {
         template="llama3",
         params_b=1.0,
     ),
+    "llama-3.2-3b": JudgeModel(
+        key="llama-3.2-3b",
+        repo="bartowski/Llama-3.2-3B-Instruct-GGUF",
+        revision="5ab33fa94d1d04e903623ae72c95d1696f09f9e8",
+        filename="Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+        sha256="6c1a2b41161032677be168d354123594c0e6e67d2b9227c84f296ad037c728ff",
+        template="llama3",
+        params_b=3.0,
+    ),
 }
 
 
