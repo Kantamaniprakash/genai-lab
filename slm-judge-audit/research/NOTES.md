@@ -611,3 +611,82 @@ README: new "Is position bias a constant you can subtract?" section with
 the cross-model table, findings 19–20, and the two-panel figure; method
 section updated (the additive-shift hypothesis is now tested, not deferred);
 planned-experiments item 2 marked done.
+
+### Experiment: llama-3.2-3b, minimal rubric, same 600 items, both orders
+
+1,200 judgments in 227 min (0.09 judg/s — this session's container prefills
+~3x slower than yesterday's at the same thread count and quant; measured
+~40 tok/s vs ~120. Same Xeon class, 4 vCPUs — host variance is real and the
+day-1 throughput arithmetic should be treated as per-host). GGUF pinned at
+revision 5ab33fa9, SHA256 verified against HF's LFS oid at download and at
+load. Mid-run correction logged: the "compliance 1.000" in the first
+checkpoint message was a 23-record peek; store-level argmax compliance is
+0.863 pair-level / 0.974 per-judgment. All cross-model analyses rerun over
+five stores; scaling curve, probe forest, calibration, and bias-model
+figures regenerated (length_probe MODEL_STYLES gained the fifth entry —
+the two Llama sizes now carry light/dark reds mirroring the Qwen gradient).
+
+**Finding 21 — both families reverse bias direction with scale, in opposite
+senses; Llama-3.2-3B is a new always-A machine.** 1B → 3B flips Llama's mild
+B-lean (median b −0.34, 27.5% positive) to saturated A: b > 0 on 99.8%,
+median +2.34, per-order acc 0.990/0.023, flip rate 0.033 — second-"most
+consistent" in a black-box audit while being the audit's second-most
+saturated bias (finding 3's failure mode, 6x the scale). Uniquely among the
+five, bias direction is same-signed across all categories (+1.88..+2.81).
+Sym 0.652 [0.613, 0.690]: +0.097 [+0.047, +0.147] paired over 1B (no valley
+between the two measured Llama points; no ~2B Llama exists to test the
+counterpart of Qwen's 1.5B dip — recorded as a family-geometry limitation).
+Qwen-3B leads at matched scale: +0.090 [+0.048, +0.132]. Symmetrization
+rescue +0.145 [+0.108, +0.183] — largest in the audit. Correction ladder:
+global 0.576 (48%), regression 0.583 (52%), all rungs significantly below
+oracle (best Δ −0.069) — bias is compact (SD 1.01) but median |s| 0.44 is
+smaller, so ~half the items stay bias-dominated after any one-call fix.
+Finding 20's "one call buys about half at 3B" now holds in both families.
+
+**Finding 22 — Llama scale buys Chat, deepens the adversarial hole.** Chat
+0.653 → 0.889 (paired +0.236 [+0.111, +0.361]), joint β_s +4.72
+[+3.32, +9.75] — the audit's largest length-controlled content coefficient
+(1B's Chat edge was length-following; 3B's is real). Chat Hard 0.435 →
+0.348 [0.250, 0.446] — below chance, below its own smaller sibling (paired
+−0.087 [−0.207, +0.022]), and no length-controlled signal survives (β_s
++0.28 [−0.33, +0.91]). Qwen-3B holds 0.576 on the identical items: +0.228
+[+0.120, +0.337] family gap. Adversarial (LLMBar) robustness at deployable
+scale is a family property, not a scale property. Overall: second judge to
+beat the fitted length floor (β_s +1.043, joint − length +0.125
+[+0.075, +0.181]), anti-length lean β_len −0.669.
+
+**Finding 23 — post-debiasing calibration is a family property; the
+format-breaking category migrates with scale.** Llama-3B sym ECE 0.044,
+signed gap −0.012 (slightly underconfident) at 0.652 acc — kills the
+"calibrated exactly where weakest" reading from findings 15/18. Five judges:
+Llama 1B/3B and Qwen 0.5B calibrated after symmetrization; Qwen 1.5B/3B
+overconfident (0.166/0.153). Compliance relocates: pair-level 0.512 → 0.863,
+but Safety is 0.48 compliant at 3B (vs 0.986–1.0 elsewhere) where 1B's
+weak category was Reasoning (23%). Readout survives again, same direction
+as finding 8: non-compliant items judged BETTER (0.829 vs 0.624, gap
++0.206 [+0.113, +0.296], Safety-concentrated). A parse-and-drop harness
+at 3B silently discards half of Safety.
+
+### Next steps (Day 6)
+
+1. **The 7B tier: Qwen2.5-7B-Instruct** (Q4_K_M ≈ 4.7 GB — fits disk and
+   RAM). Rate risk: on a slow host like today's, n=600 × both orders could
+   take 8–10 h. Start the grid FIRST thing regardless — the store is
+   resumable, so a two-session run is safe; checkpoint-commit mid-run as
+   today. Measure the early rate: if ≥ 0.15 judg/s (fast host), it
+   completes in-session. Keep n=600 — comparability with the five existing
+   grids is worth more than a same-day finish. Llama-3.1-8B is the family
+   counterpart afterwards.
+2. While it runs (light CPU only — today's contention halved the grid
+   rate): writeup debt. The README results narrative is grid-arrival
+   order; restructure around the scaling arc (family × scale 2×2, the
+   valley, the direction chiasm, the correction-ceiling story), and add
+   the limitations section entries accumulated in these notes (per-host
+   throughput variance, no ~2B Llama, in-sample probe accuracies,
+   ladder refit variance not resampled).
+3. Analysis backlog, in priority order once 7B lands: rubric-sensitivity
+   axis (detailed vs minimal, paired in log-odds — the last untouched
+   phase-3 item; needs a second grid per model, so budget it after the
+   scaling grid closes), per-subset heterogeneity with CIs, and the
+   compliant-stratum Chat-Hard thread from day 3 (now echoed at 3B by
+   finding 23's Safety migration).

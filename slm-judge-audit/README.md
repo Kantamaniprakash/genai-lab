@@ -6,19 +6,21 @@ baselines, with paired bootstrap confidence intervals.**
 
 *Status: phase 2 (baselines & main grid) — harness complete (runner, analysis
 core, floors, value-over-length probe, calibration, bias-structure test; 83
-tests). Four full grids done on the same 600-item stratified sample × both
-orders: Qwen2.5 0.5B/1.5B/3B and Llama-3.2-1B — findings 1–20 below.
+tests). Five full grids done on the same 600-item stratified sample × both
+orders: Qwen2.5 0.5B/1.5B/3B and Llama-3.2 1B/3B — findings 1–23 below.
 Headlines: debiased judge quality is non-monotone in scale (0.568 → 0.502 →
 0.742 within the Qwen family — a 1.5B valley where the emergent preference is
 a verbosity preference that RewardBench punishes, closing again at 3B);
-flip-rate "consistency" is uninterpretable at every scale; every judge
-carries signal a length heuristic cannot explain, but only the 3B judge beats
-a one-parameter length baseline; symmetrized verdict probabilities are
-calibrated exactly where the judges are weakest; and the additive-shift
+flip-rate "consistency" is uninterpretable at every scale; both families
+reverse bias *direction* with scale, in opposite senses; only the two 3B
+judges beat a one-parameter length baseline, and whether a 3B judge survives
+adversarial (LLMBar) pairs is decided by family — Llama-3.2-3B falls below
+chance on Chat Hard while jumping to 0.889 on Chat; the additive-shift
 hypothesis behind cheap debiasing is rejected at every scale — a fitted
 one-call bias correction fully substitutes for symmetrization at 0.5B but
-caps out at half the gain at 3B, where the bias is the largest and least
-predictable. Llama-3.2-3B (running) and the 7B tier are next.*
+caps at about half the gain at 3B in both families; and post-debiasing
+calibration is a family property (Llama calibrated at both sizes, Qwen only
+at 0.5B). The 7B tier is next.*
 
 ## Abstract
 
@@ -499,17 +501,21 @@ exact leave-one-out cross-fitting, no item corrected using its own bias —
 interpolates between the raw single-order judge and full symmetrization at
 half the inference cost:
 
-| | Qwen-0.5B | Llama-1B | Qwen-1.5B | Qwen-3B |
-|---|---|---|---|---|
-| SD of position bias b (log-odds) | 1.08 | 1.05 | 1.32 | **5.47** |
-| R² category means | 0.020 [0.006, 0.053] | 0.096 | 0.372 | 0.205 |
-| R² subset means | 0.141 | 0.329 | 0.448 | 0.260 |
-| R² subset + length | 0.340 | 0.330 | **0.556** | 0.288 |
-| residual SD after best spec | 0.88 | 0.86 | 0.88 | **4.61** |
-| raw single-order accuracy | 0.501 | 0.520 | 0.549 | 0.617 |
-| best one-call corrected | 0.547 (subset) | 0.532 (regression) | 0.549 (uncorrected) | 0.675 (category) |
-| symmetrized, two calls | 0.568 | 0.555 | 0.502 | 0.742 |
-| share of symmetrization gain recovered | 68% | n.s. | — (gain is negative) | 47% |
+| | Qwen-0.5B | Llama-1B | Qwen-1.5B | Llama-3B | Qwen-3B |
+|---|---|---|---|---|---|
+| SD of position bias b (log-odds) | 1.08 | 1.05 | 1.32 | 1.01 | **5.47** |
+| R² category means | 0.020 [0.006, 0.053] | 0.096 | 0.372 | 0.099 | 0.205 |
+| R² subset means | 0.141 | 0.329 | 0.448 | 0.229 | 0.260 |
+| R² subset + length | 0.340 | 0.330 | **0.556** | 0.247 | 0.288 |
+| residual SD after best spec | 0.88 | 0.86 | 0.88 | 0.88 | **4.61** |
+| raw single-order accuracy | 0.501 | 0.520 | 0.549 | 0.507 | 0.617 |
+| best one-call corrected | 0.547 (subset) | 0.532 (regression) | 0.549 (uncorrected) | 0.583 (regression) | 0.675 (category) |
+| symmetrized, two calls | 0.568 | 0.555 | 0.502 | 0.652 | 0.742 |
+| share of symmetrization gain recovered | 68% | n.s. | — (gain is negative) | 52% | 47% |
+
+*(The Llama-3.2-3B column was added when its grid completed later the same
+day — finding 21 discusses it; findings 19–20 below were established on the
+first four judges and hold unchanged on the fifth.)*
 
 - **Finding 19 — the additive-shift hypothesis is rejected at every scale,
   and bias *predictability* is anti-correlated with bias *magnitude*.**
@@ -554,13 +560,90 @@ put every marker at 0. Right: the single-order correction ladder from raw
 nearly reaches its star; the 3B markers stall less than halfway; the 1.5B
 ladder runs right-to-left.*
 
+## The cross-family point at 3B — Llama-3.2-3B
+
+Same 600 items, both orders, same rubric — the fifth grid, closing the
+2×2 of family × (small, 3B-class) scale.
+
+| metric | Llama-1B | Llama-3B | Qwen-3B |
+|---|---|---|---|
+| raw accuracy cf / rf | 0.312 / 0.728 | 0.990 / 0.023 | 0.368 / 0.865 |
+| raw accuracy, random order | 0.520 | 0.507 | 0.617 |
+| symmetrized accuracy | 0.555 | **0.652 [0.613, 0.690]** | 0.742 |
+| paired Δ, symmetrized − raw | +0.035 | **+0.145 [+0.108, +0.183]** | +0.125 |
+| position bias b: median (share > 0) | −0.34 (27.5%) | **+2.34 (99.8%)** | −5.55 (19.2%) |
+| positional flip rate | 0.183 | 0.033 | 0.380 |
+| pair-level argmax compliance | 0.512 | 0.863 | 1.000 |
+
+- **Finding 21 — both families reverse bias direction with scale, in
+  opposite senses, and Llama-3.2-3B is a new always-A machine.** Scaling
+  1B → 3B turns Llama's mild B-lean (median b −0.34, b > 0 on 27.5%) into
+  a saturated A-lean: b > 0 on 99.8% of items, median +2.34, per-order
+  accuracy 0.990 / 0.023 — while the same size step turns Qwen's A-lean
+  into the audit's largest B-lean. Bias direction is not a family
+  property, not a scale property, and (finding 11) not even a per-model
+  property — except here: Llama-3B is the first judge since 0.5B whose
+  bias is same-signed across all four categories (means +1.88 to +2.81).
+  Its flip rate, 0.033, is the second-lowest in the audit — a black-box
+  consistency audit would rank this saturated-bias judge second-best,
+  finding 3's failure mode at a scale six times larger. Debiased, the
+  family improves with scale: sym 0.652 [0.613, 0.690], paired +0.097
+  [+0.047, +0.147] over Llama-1B — no valley between the two measured
+  Llama points (no ~2B Llama-3.2 exists to test the Qwen-1.5B dip's
+  counterpart, a family-geometry gap recorded in limitations). At matched
+  3B scale Qwen leads by +0.090 [+0.048, +0.132]. Symmetrization's rescue
+  here is the largest yet (+0.145), and the correction ladder repeats
+  finding 20's ceiling: the global constant recovers 48% (0.576), the
+  regression 52% (0.583), every rung significantly below the oracle
+  (best Δ −0.069 [−0.098, −0.040]) — the bias is compact (SD 1.01) but
+  the median content signal |s| = 0.44 is smaller still, so about half
+  the items stay bias-dominated after any one-call correction.
+- **Finding 22 — in the Llama family, scale buys Chat and deepens the
+  adversarial hole; adversarial robustness at 3B is decided by family.**
+  Chat: 0.653 → 0.889, paired +0.236 [+0.111, +0.361], with the largest
+  length-controlled content coefficient in the audit (joint β_s +4.72
+  [+3.32, +9.75]) — where the 1B's Chat advantage was pure
+  length-following (finding 13), the 3B's is genuine content. Chat Hard:
+  0.435 → 0.348 [0.250, 0.446], *below chance and below its own 1B
+  sibling* (paired −0.087 [−0.207, +0.022]), with no length-controlled
+  signal left (β_s +0.28 [−0.33, +0.91]): the LLMBar adversarial
+  constructions fool the bigger Llama *harder*. Qwen-3B, on identical
+  items, holds Chat Hard at 0.576 — a +0.228 [+0.120, +0.337] family gap
+  at matched scale. Overall the judge does clear the fitted length floor
+  (β_s +1.043 [+0.826, +1.300]; joint − length +0.125 [+0.075, +0.181]) —
+  the second judge to do so — with an anti-length lean (β_len −0.669).
+- **Finding 23 — post-debiasing calibration is a family property, and the
+  format-breaking category migrates with scale.** Llama-3B's symmetrized
+  confidence is essentially calibrated: ECE 0.044, signed gap −0.012 —
+  slightly *under*confident — at 0.652 accuracy. That breaks the pattern
+  finding 15/18 suggested ("calibrated exactly where weakest"): five
+  judges in, both Llama sizes and Qwen-0.5B are calibrated after
+  symmetrization while the two stronger Qwens are overconfident (ECE
+  0.166 / 0.153). Compliance tells a matching family story with a twist:
+  pair-level compliance rises 0.512 → 0.863, but the residual
+  non-compliance relocates — at 1B it was Reasoning (23% compliant), at
+  3B it is Safety (48%, vs 0.986–1.000 everywhere else; the argmax on
+  refusal-laden items is prose, not a verdict letter). The readout again
+  survives its own audit, in the same direction as finding 8:
+  non-compliant items are judged *better* (0.829 vs 0.624 sym, gap
+  +0.206 [+0.113, +0.296], Safety-concentrated) — but a parse-and-drop
+  harness at 3B would now silently discard half of *Safety*, a different
+  benchmark reweighting than at 1B. Which category a small Llama fails to
+  format-follow is itself scale-dependent.
+
+![Llama-3.2-3B decomposition](results/figures/llama-3.2-3b__minimal_decomposition.png)
+
+*Llama-3.2-3B's swap-pair decomposition: the entire cloud sits right of
+b = 0 — a saturated A-lean opposite in sign to Qwen-3B's, with the Chat
+cloud well above s = 0 and the Chat Hard cloud straddling it.*
+
 ## Planned experiments
 
 1. **Scaling grid** — Qwen2.5-Instruct 0.5B/1.5B/3B/7B, Llama-3.2-Instruct
    1B/3B, and peers (Q4_K_M GGUF), on a stratified sample in both orders;
    trivial floors (always-A, longer-response, random) alongside.
-   *(Qwen2.5-0.5B/1.5B/3B and Llama-3.2-1B done above; Llama-3.2-3B — the
-   cross-family point at the reversal scale — and 7B next.)*
+   *(Qwen2.5-0.5B/1.5B/3B and Llama-3.2-1B/3B done above; the 7B tier
+   next.)*
 2. **Bias anatomy** — dispersion and covariates of `b_i`; test of the
    additive-shift hypothesis; accuracy recovered by symmetrization. *(Done
    above — findings 19–20; reruns automatically as new grids complete.)*

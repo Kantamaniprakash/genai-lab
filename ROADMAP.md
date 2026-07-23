@@ -60,8 +60,16 @@ instruction-following axis for free. Pinned revision + SHA256, verified at load.
    symmetrization repairs it at 0.5B/1B only, finding 15; and the
    Qwen2.5-3B grid: the valley closes, sym 0.742, bias flips to B at the
    largest magnitude yet, verbosity un-learns, first judge to beat the
-   length floor, findings 16–18. Next: Llama-3.2-3B for the cross-family
-   reversal point, then the 7B tier.)*
+   length floor, findings 16–18. 2026-07-23: the additive-shift formal
+   test + exact-LOO single-order correction ladder — position bias is
+   never an additive constant and a fitted one-call correction substitutes
+   for symmetrization at 0.5B but caps at ~half the gain at 3B, findings
+   19–20; and the Llama-3.2-3B grid: both families reverse bias direction
+   with scale in opposite senses, Llama-3B is a new always-A machine that
+   falls below chance on adversarial Chat Hard while hitting 0.889 on
+   Chat, and post-debiasing calibration is a family property, findings
+   21–23. Next: Qwen2.5-7B — resumable two-session grid if the host is
+   slow — then Llama-3.1-8B.)*
 3. **Analysis axes** — position bias as additive log-odds shift (test the
    structural model); symmetrization debiasing gains; calibration; value over
    length baseline; rubric-prompt sensitivity; category/subset heterogeneity.
