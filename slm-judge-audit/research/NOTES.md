@@ -690,3 +690,63 @@ at 3B silently discards half of Safety.
    scaling grid closes), per-subset heterogeneity with CIs, and the
    compliant-stratum Chat-Hard thread from day 3 (now echoed at 3B by
    finding 23's Safety migration).
+
+## 2026-08-01 — Day 6: 7B grid launched; per-subset view (findings 24–25)
+
+(Gap 07-24..07-31: no sessions ran.)
+
+### Grid: qwen2.5-7b registered and running
+
+Registered `qwen2.5-7b` (bartowski Q4_K_M, revision 8911e8a4, SHA256 verified
+against HF's LFS oid after download — 65b8fcd9…1423, 4.68 GB) and launched
+n=600 seed 0 both orders first thing. This host prefills at ~54 tok/s at 7B
+(0.076 judg/s early rate, ETA ~4.5 h) — a mid-speed host by the day-5
+per-host-variance ledger. Early diagnostics over the first 34 judgments:
+argmax compliance 1.000, median mass on {A, B} ≈ 1.000 — Qwen format
+discipline holds at a fourth size; and an early-peek median |s| an order of
+magnitude above the 3B's (10.0 vs 3.64 on the first items) suggests a
+heavily saturated preference readout at 7B. n=34, no claims; the store is
+resumable and checkpoint-committed in case the session dies before the grid
+closes.
+
+### Built while the grid runs (85 tests green, ruff clean)
+
+- `src/analysis.py`: `subset_view` — per-subset `_stratum_stats` with
+  category tag and per-subset longer-response floor; and per-category
+  compliant-vs-non gap CIs in `compliance_view`, guarded to strata with
+  ≥5 items on both sides (a 1-item stratum bootstraps to a zero-variance,
+  purely artifactual interval — the Llama-3B Chat "significant" gap that
+  motivated the guard rested on exactly one non-compliant item).
+- `experiments/subset_view.py` — cross-model forest (23 subsets × 5 judges,
+  category-grouped, each subset's length floor as a tick), identical
+  item-set guard as the other cross-model scripts.
+- README: accumulated limitations section (single benchmark/sample, Q4_K_M
+  confound, family geometry, in-sample probe accuracies + ladder refit
+  variance, per-host throughput, one rubric); per-subset section.
+
+### Findings (over the five completed grids)
+
+**Finding 24 — subset accuracy ordering is the judge's local length-lean
+read through the subset's gold-length composition; the audit's weakest
+judge is its best formal-math judge.** math-prm (n=90, gold shorter on
+~92%): Qwen 0.5B/1.5B/3B finish 0.844/0.167/0.600, and the ranking exactly
+tracks the *local* sign(s)-vs-length agreement 0.233/0.756/0.433 — the
+0.5B's best-in-audit math-prm score (CI [0.77, 0.91] excludes every other
+judge's point estimate) is an anti-verbosity lean pointed where this subset
+rewards it, not math skill. Same judge is the only one above chance on
+llmbar-adver-GPTInst (0.684 vs ≤0.421 all larger judges); on
+llmbar-adver-neighbor everyone is at/below chance and Llama-3B hits 0.148,
+the audit's lowest subset accuracy. Category- and benchmark-level averages
+predict nearly nothing about a specific domain at these scales.
+
+**Finding 25 — the compliant-stratum penalty is real but category-localized
+and family × scale-dependent.** With honest unpaired CIs the day-3 Chat-Hard
+observation is null (−0.182 [−0.433, +0.070], n=73/19). The audit's one
+significant stratum gap: Llama-3B Safety, compliant − non = −0.223
+[−0.361, −0.085] (n=71/77) — the model judges worse exactly where it
+format-complies; parse-and-drop keeps the worse-judged half.
+
+### Next (same day, after the grid)
+
+7B analyses + README restructure around the scaling arc; full day-6 entry
+continues below.

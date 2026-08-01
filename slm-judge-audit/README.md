@@ -5,9 +5,10 @@ position bias measured in log-odds, calibration, and value over trivial
 baselines, with paired bootstrap confidence intervals.**
 
 *Status: phase 2 (baselines & main grid) — harness complete (runner, analysis
-core, floors, value-over-length probe, calibration, bias-structure test; 83
-tests). Five full grids done on the same 600-item stratified sample × both
-orders: Qwen2.5 0.5B/1.5B/3B and Llama-3.2 1B/3B — findings 1–23 below.
+core, floors, value-over-length probe, calibration, bias-structure test,
+per-subset view; 85 tests). Five full grids done on the same 600-item
+stratified sample × both orders: Qwen2.5 0.5B/1.5B/3B and Llama-3.2 1B/3B —
+findings 1–25 below; the Qwen2.5-7B grid is running.
 Headlines: debiased judge quality is non-monotone in scale (0.568 → 0.502 →
 0.742 within the Qwen family — a 1.5B valley where the emergent preference is
 a verbosity preference that RewardBench punishes, closing again at 3B);
@@ -637,6 +638,67 @@ Same 600 items, both orders, same rubric — the fifth grid, closing the
 b = 0 — a saturated A-lean opposite in sign to Qwen-3B's, with the Chat
 cloud well above s = 0 and the Chat Hard cloud straddling it.*
 
+## Where the category averages hide the story — the per-subset view
+
+Every category number above averages subsets that repeatedly behave in
+opposite ways (finding 10 first hit this: Reasoning 0.368 at 1.5B was
+math-prm 0.167 against hep-cpp 0.606). The subset view
+(`experiments/subset_view.py`) puts honest intervals at full resolution:
+per-subset symmetrized accuracy with 95% bootstrap CIs for every judge, next
+to each subset's own longer-response floor. Per-subset n is 6–90, so many
+intervals are wide — that width is the point: it separates subsets where a
+judge is *measurably* broken from subsets where this sample cannot say.
+
+| subset (n, longer floor) | Qwen-0.5B | Qwen-1.5B | Qwen-3B | Llama-1B | Llama-3B |
+|---|---|---|---|---|---|
+| math-prm (90, 0.10) | **0.844 [0.77, 0.91]** | 0.167 [0.10, 0.24] | 0.600 [0.50, 0.70] | 0.589 [0.49, 0.69] | 0.322 [0.23, 0.42] |
+| llmbar-adver-GPTInst (19, 0.16) | **0.684 [0.47, 0.89]** | 0.421 [0.21, 0.63] | 0.421 [0.21, 0.63] | 0.421 [0.21, 0.63] | 0.211 [0.05, 0.42] |
+| llmbar-adver-neighbor (27, 0.19) | 0.407 [0.22, 0.59] | 0.444 [0.26, 0.63] | 0.259 [0.11, 0.44] | 0.370 [0.19, 0.56] | 0.148 [0.04, 0.30] |
+| refusals-offensive (20, 0.35) | 0.800 [0.60, 0.95] | 1.000 [1.00, 1.00] | 1.000 [1.00, 1.00] | 0.750 [0.55, 0.90] | 0.900 [0.75, 1.00] |
+| hep-go (33, 0.56) | 0.424 [0.27, 0.61] | 0.364 [0.21, 0.52] | 0.939 [0.85, 1.00] | 0.545 [0.36, 0.70] | 0.697 [0.55, 0.85] |
+
+- **Finding 24 — subset-level accuracy ordering is the judge's local
+  length-lean read through the subset's gold-length composition; the
+  audit's weakest judge is its best formal-math judge.** On math-prm the
+  gold solution is the shorter one on ~92% of pairs, and the three Qwen
+  sizes finish 0.844 / 0.167 / 0.600 — a ranking that tracks nothing about
+  general capability but exactly tracks each judge's *local* length-lean:
+  sign(s) agrees with the longer response on 23.3% of math-prm items at
+  0.5B (anti-length), 75.6% at 1.5B (pro-length), 43.3% at 3B
+  (near-neutral). The 0.5B's best-in-audit 0.844 (its CI excludes every
+  other judge's point estimate) is therefore *not* evidence of math skill —
+  it is an anti-verbosity lean pointed in a direction this subset happens
+  to reward, the mirror image of the 1.5B collapse. The same judge is also
+  the only one above chance on llmbar-adver-GPTInst (0.684 vs ≤0.421 for
+  everything larger) — LLMBar's adversarial items are built to punish
+  superficial-quality preferences that only emerge with scale — while on
+  llmbar-adver-neighbor every judge is at or below chance and Llama-3B
+  reaches 0.148 [0.04, 0.30], the lowest subset accuracy in the audit.
+  Deployment reading: at these scales, per-subset judge accuracy is
+  dominated by where the judge's length/style lean points locally, so a
+  benchmark-level average — even a category-level one — predicts almost
+  nothing about a specific evaluation domain.
+- **Finding 25 — the "compliant-stratum penalty" (day-3 thread) resolves:
+  real, but category-localized and family × scale-dependent.** With proper
+  unpaired CIs (and a guard: gaps are only computed when both strata have
+  ≥5 items — a near-empty stratum bootstraps to an artifactually tight
+  interval), the 1B Chat-Hard observation that started the thread does
+  *not* reach significance (compliant − non-compliant = −0.182
+  [−0.433, +0.070], n = 73/19). The one significant stratum gap in the
+  audit is Llama-3B Safety: −0.223 [−0.361, −0.085] (n = 71/77) — on
+  refusal-laden items, the model judges *worse* exactly where it manages
+  to open with a verdict letter. Whatever induces format discipline on
+  Safety co-occurs with worse judgment there; a parse-and-drop harness
+  would keep precisely the worse-judged half.
+
+![Per-subset accuracy forest](results/figures/subset_view__minimal.png)
+
+*Symmetrized accuracy per subset (rows, grouped by category and sorted
+easiest-to-hardest within each) for all five judges, with each subset's
+longer-response floor as a grey tick. The math-prm row shows the audit's
+sharpest inversion: the 0.5B (lightest blue) sits far right of every larger
+judge. In the Chat Hard block, accuracy drifts left as models grow.*
+
 ## Planned experiments
 
 1. **Scaling grid** — Qwen2.5-Instruct 0.5B/1.5B/3B/7B, Llama-3.2-Instruct
@@ -669,6 +731,41 @@ position bias exceeded its content signal by an order of magnitude on every
 item tried. This is a pilot observation on n=3 with no confidence intervals;
 the phase-2 grid will measure it properly.
 
+## Limitations
+
+Recorded as they were hit, not reconstructed afterwards (dated entries in
+`research/NOTES.md`):
+
+- **One benchmark, one sample.** Everything rests on RewardBench's filtered
+  set and gold labels, sampled once (n=600 stratified, seed 0) — chosen for
+  comparability across grids, so sampling variability across *different*
+  600-item draws is not measured here (the predecessor project's multi-seed
+  check is the template if a claim ever hinges on it). The fitted length
+  floor's *direction* is likewise benchmark-specific: RewardBench's
+  composition punishes verbosity-picking; on a benchmark where longer answers
+  win, the same one-parameter baseline would be a different opponent.
+- **Q4_K_M quantization throughout.** Every judge is audited in the
+  quantization people actually deploy at this scale, which is the point —
+  but it means "Qwen2.5-3B" here is "Qwen2.5-3B at Q4_K_M", and
+  quantization-induced bias shifts are not separated from model-scale ones.
+- **Family geometry.** Qwen2.5 has a 1.5B model; Llama-3.2 jumps 1B → 3B.
+  The Qwen valley (finding 16) has no testable Llama counterpart at ~2B —
+  "no valley in Llama" is bounded by the family's own size gaps.
+- **In-sample probe accuracies.** The length-probe accuracies fit ≤2
+  parameters on the evaluation items (optimism negligible at n=600, and
+  paired spec deltas share it); the correction ladder is exact-LOO
+  cross-fitted, but its bootstrap resamples fixed per-item LOO scores —
+  correction-refit variance is not resampled (negligible at group-mean
+  scale, noted in the module docstring).
+- **Per-host throughput variance.** Identical container specs prefill up to
+  ~3x apart across sessions (measured 2026-07-23: ~40 vs ~120 tok/s at 3B,
+  same nominal 4-vCPU class). Timing numbers in this README are per-run
+  facts, not hardware benchmarks.
+- **Deterministic readout, one rubric so far.** Temperature-0 single-token
+  readout removes sampling noise by construction — reliability here means
+  bias/validity structure, not decode variance. The rubric-sensitivity axis
+  (planned experiment 5) is the remaining untested prompt degree of freedom.
+
 ## Repository layout
 
 ```
@@ -684,14 +781,16 @@ src/calibration.py   folded confidence views, tie-safe equal-mass bins, ECE
 src/bias_model.py    variance decomposition of b_i + exact-LOO single-order
                   correction ladder (additive-shift test)
 experiments/      run_grid, summarize, make_figures, compliance_view,
-                  scaling_curve, length_probe, calibration, bias_model
+                  scaling_curve, length_probe, calibration, bias_model,
+                  subset_view
 results/raw/      one JSONL store per (model, rubric) + provenance sidecar
 results/summary/  quick-look JSON per store (+ __compliance, length_probe,
-                  calibration, bias_model)
+                  calibration, bias_model, subset_view)
 results/figures/  committed PNGs, regenerable from raw stores
-tests/            83 tests (schema, templates, readout arithmetic, store
+tests/            85 tests (schema, templates, readout arithmetic, store
                   resume, decomposition, bootstrap, floors, compliance
-                  view, length probe, calibration, bias model, model smoke)
+                  view, length probe, calibration, bias model, subset
+                  view, model smoke)
 research/NOTES.md living research log
 ```
 
@@ -711,6 +810,7 @@ uv run python -m experiments.scaling_curve     # cross-model figure (>=2 stores)
 uv run python -m experiments.length_probe      # value-over-length probe + forest plot
 uv run python -m experiments.calibration       # reliability diagrams + ECE
 uv run python -m experiments.bias_model        # additive-shift test + correction ladder
+uv run python -m experiments.subset_view       # per-subset heterogeneity forest
 ```
 
 ## References

@@ -283,22 +283,87 @@ def compliance_view(
         by_cat: dict[str, list[SwapPair]] = {}
         for pair in pairs:
             by_cat.setdefault(category_of(pair.item_id), []).append(pair)
-        view["by_category"] = {
-            cat: {
+        view["by_category"] = {}
+        for cat, group in sorted(by_cat.items()):
+            cat_compliant = [p for p in group if p.compliant_both]
+            cat_rest = [p for p in group if not p.compliant_both]
+            block = {
                 "n_items": len(group),
                 "compliance_rate": float(np.mean([p.compliant_both for p in group])),
                 "sym_acc_compliant": (
-                    float(np.mean([p.sym_correct for p in group if p.compliant_both]))
-                    if any(p.compliant_both for p in group) else None
+                    float(np.mean([p.sym_correct for p in cat_compliant]))
+                    if cat_compliant else None
                 ),
                 "sym_acc_non_compliant": (
-                    float(np.mean([p.sym_correct for p in group if not p.compliant_both]))
-                    if any(not p.compliant_both for p in group) else None
+                    float(np.mean([p.sym_correct for p in cat_rest]))
+                    if cat_rest else None
                 ),
             }
-            for cat, group in sorted(by_cat.items())
-        }
+            block["n_compliant"] = len(cat_compliant)
+            block["n_non_compliant"] = len(cat_rest)
+            # Within-category stratum gap with an honest (wide) interval —
+            # the 2026-07-19 Chat-Hard thread asked exactly this question and
+            # the descriptive point estimates could not answer it. Guarded:
+            # a near-empty stratum has (almost) no resampling variance — a
+            # 1-item stratum bootstraps to a zero-width, purely artifactual
+            # interval — so the gap is only emitted when both strata carry
+            # enough items for the interval to mean something.
+            if len(cat_compliant) >= 5 and len(cat_rest) >= 5:
+                d, lo, hi = two_sample_bootstrap_delta_ci(
+                    [p.sym_correct for p in cat_compliant],
+                    [p.sym_correct for p in cat_rest],
+                    n_boot=n_boot,
+                    seed=seed,
+                )
+                block["sym_acc_compliant_minus_non"] = {"mean": d, "ci95": [lo, hi]}
+            view["by_category"][cat] = block
     return view
+
+
+def subset_view(
+    pairs: Sequence[SwapPair],
+    subset_of: Callable[[str], str],
+    category_of: Callable[[str], str] | None = None,
+    longer_correct_of: Callable[[str], float] | None = None,
+    n_boot: int = 10_000,
+    seed: int = 0,
+) -> dict:
+    """Per-subset heterogeneity: the category blocks at full resolution.
+
+    The category-level numbers repeatedly turned out to be averages over
+    subsets behaving in opposite ways (finding 10: Reasoning 0.368 hides
+    math-prm 0.167 vs hep-cpp 0.606), so per-subset accuracy with honest
+    intervals is its own deliverable. Small per-subset n makes the intervals
+    wide — that width is the point: it separates subsets where a judge is
+    *measurably* broken from subsets where the sample cannot say.
+
+    ``longer_correct_of`` maps item_id -> longer-response-floor correctness so
+    each subset's length floor lands next to its judge accuracy (finding 10
+    made that comparison the diagnostic one).
+    """
+    if not pairs:
+        raise ValueError("no complete swap pairs")
+    by_subset: dict[str, list[SwapPair]] = {}
+    for pair in pairs:
+        by_subset.setdefault(subset_of(pair.item_id), []).append(pair)
+
+    subsets = {}
+    for name, group in sorted(by_subset.items()):
+        block = _stratum_stats(group, n_boot, seed)
+        if category_of is not None:
+            block["category"] = category_of(group[0].item_id)
+        if longer_correct_of is not None:
+            block["longer_floor"] = float(
+                np.mean([longer_correct_of(p.item_id) for p in group])
+            )
+        subsets[name] = block
+    return {
+        "n_items": len(pairs),
+        "n_subsets": len(subsets),
+        "n_boot": n_boot,
+        "bootstrap_seed": seed,
+        "subsets": subsets,
+    }
 
 
 def summarize_pairs(pairs: Sequence[SwapPair], n_boot: int = 10_000, seed: int = 0) -> dict:

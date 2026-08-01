@@ -3,26 +3,41 @@
   "by_category": {
     "Chat": {
       "compliance_rate": 0.9861111111111112,
+      "n_compliant": 71,
       "n_items": 72,
+      "n_non_compliant": 1,
       "sym_acc_compliant": 0.8873239436619719,
       "sym_acc_non_compliant": 1.0
     },
     "Chat Hard": {
       "compliance_rate": 1.0,
+      "n_compliant": 92,
       "n_items": 92,
+      "n_non_compliant": 0,
       "sym_acc_compliant": 0.34782608695652173,
       "sym_acc_non_compliant": null
     },
     "Reasoning": {
       "compliance_rate": 0.9861111111111112,
+      "n_compliant": 284,
       "n_items": 288,
+      "n_non_compliant": 4,
       "sym_acc_compliant": 0.6443661971830986,
       "sym_acc_non_compliant": 0.25
     },
     "Safety": {
       "compliance_rate": 0.4797297297297297,
+      "n_compliant": 71,
       "n_items": 148,
+      "n_non_compliant": 77,
       "sym_acc_compliant": 0.6338028169014085,
+      "sym_acc_compliant_minus_non": {
+        "ci95": [
+          -0.3608926284982623,
+          -0.0846899579293946
+        ],
+        "mean": -0.2233400402414486
+      },
       "sym_acc_non_compliant": 0.8571428571428571
     }
   },

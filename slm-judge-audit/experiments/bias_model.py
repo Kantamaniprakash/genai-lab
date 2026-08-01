@@ -46,7 +46,7 @@ FIGURES_DIR = RESULTS_DIR.parent / "figures"
 
 # Row order: ascending parameter count, families interleaved.
 MODEL_ORDER = ("qwen2.5-0.5b", "llama-3.2-1b", "qwen2.5-1.5b", "qwen2.5-3b",
-               "llama-3.2-3b")
+               "llama-3.2-3b", "qwen2.5-7b")
 
 SPEC_STYLES = {
     "category": ("#2a78d6", "o", "category means"),

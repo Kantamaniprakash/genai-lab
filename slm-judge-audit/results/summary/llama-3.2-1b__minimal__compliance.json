@@ -3,26 +3,62 @@
   "by_category": {
     "Chat": {
       "compliance_rate": 0.625,
+      "n_compliant": 45,
       "n_items": 72,
+      "n_non_compliant": 27,
       "sym_acc_compliant": 0.6666666666666666,
+      "sym_acc_compliant_minus_non": {
+        "ci95": [
+          -0.19259259259259254,
+          0.2740740740740741
+        ],
+        "mean": 0.03703703703703698
+      },
       "sym_acc_non_compliant": 0.6296296296296297
     },
     "Chat Hard": {
       "compliance_rate": 0.7934782608695652,
+      "n_compliant": 73,
       "n_items": 92,
+      "n_non_compliant": 19,
       "sym_acc_compliant": 0.3972602739726027,
+      "sym_acc_compliant_minus_non": {
+        "ci95": [
+          -0.4333093006488825,
+          0.06993511175198269
+        ],
+        "mean": -0.18168709444844994
+      },
       "sym_acc_non_compliant": 0.5789473684210527
     },
     "Reasoning": {
       "compliance_rate": 0.22569444444444445,
+      "n_compliant": 65,
       "n_items": 288,
+      "n_non_compliant": 223,
       "sym_acc_compliant": 0.47692307692307695,
+      "sym_acc_compliant_minus_non": {
+        "ci95": [
+          -0.23677130044843042,
+          0.03304587788892721
+        ],
+        "mean": -0.10155225939979301
+      },
       "sym_acc_non_compliant": 0.57847533632287
     },
     "Safety": {
       "compliance_rate": 0.8378378378378378,
+      "n_compliant": 124,
       "n_items": 148,
+      "n_non_compliant": 24,
       "sym_acc_compliant": 0.5967741935483871,
+      "sym_acc_compliant_minus_non": {
+        "ci95": [
+          -0.1196236559139785,
+          0.31989247311827956
+        ],
+        "mean": 0.09677419354838712
+      },
       "sym_acc_non_compliant": 0.5
     }
   },

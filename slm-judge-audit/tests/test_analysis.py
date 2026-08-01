@@ -218,3 +218,54 @@ def test_compliance_view_category_composition():
     assert chat["sym_acc_non_compliant"] == pytest.approx(0.0)
     reasoning = view["by_category"]["Reasoning"]
     assert reasoning["sym_acc_non_compliant"] is None
+
+
+def test_compliance_view_category_gap_ci():
+    from src.analysis import compliance_view
+
+    # Chat: compliant items all correct, non-compliant all wrong -> gap +1
+    # with a degenerate (point-mass) bootstrap distribution.
+    pairs = (
+        [make_pair(f"chat/c{i}", s=1.0, compliant=True) for i in range(6)]
+        + [make_pair(f"chat/n{i}", s=-1.0, compliant=False) for i in range(6)]
+        + [make_pair("math/1", s=1.0, compliant=True)]
+    )
+    cats = {"chat": "Chat", "math": "Reasoning"}
+    view = compliance_view(
+        pairs, category_of=lambda item_id: cats[item_id.split("/", 1)[0]], n_boot=200
+    )
+    gap = view["by_category"]["Chat"]["sym_acc_compliant_minus_non"]
+    assert gap["mean"] == pytest.approx(1.0)
+    assert gap["ci95"][0] == pytest.approx(1.0)
+    # Single-stratum category carries no gap block.
+    assert "sym_acc_compliant_minus_non" not in view["by_category"]["Reasoning"]
+
+
+def test_subset_view_groups_and_floor():
+    from src.analysis import subset_view
+
+    pairs = (
+        [make_pair(f"alpha/{i}", s=1.0, b=2.0) for i in range(4)]      # all correct
+        + [make_pair(f"beta/{i}", s=-1.0, b=0.5) for i in range(3)]    # all wrong
+        + [make_pair("gamma/0", s=0.0)]                                # tie -> 0.5
+    )
+    cats = {"alpha": "Chat", "beta": "Reasoning", "gamma": "Safety"}
+    floors = {"alpha": 1.0, "beta": 0.0, "gamma": 0.5}
+    view = subset_view(
+        pairs,
+        subset_of=lambda i: i.split("/", 1)[0],
+        category_of=lambda i: cats[i.split("/", 1)[0]],
+        longer_correct_of=lambda i: floors[i.split("/", 1)[0]],
+        n_boot=100,
+    )
+    assert view["n_subsets"] == 3
+    assert sum(b["n_items"] for b in view["subsets"].values()) == view["n_items"] == 8
+    alpha = view["subsets"]["alpha"]
+    assert (alpha["category"], alpha["longer_floor"]) == ("Chat", 1.0)
+    assert alpha["sym_acc"]["mean"] == pytest.approx(1.0)
+    assert alpha["median_b"] == pytest.approx(2.0)
+    beta = view["subsets"]["beta"]
+    assert beta["sym_acc"]["mean"] == pytest.approx(0.0)
+    assert view["subsets"]["gamma"]["sym_acc"]["mean"] == pytest.approx(0.5)
+    with pytest.raises(ValueError):
+        subset_view([], subset_of=lambda i: i)
