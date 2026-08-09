@@ -6,5 +6,5 @@ scikit-learn==1.9.0
 tiktoken==0.13.0
 # Optional dense-retriever stack (dependency group "dense" in pyproject.toml;
 # torch resolves from the CPU-only index there). Not needed for lexical runs.
-sentence-transformers==5.6.0
+sentence-transformers==5.7.0
 torch==2.12.1
