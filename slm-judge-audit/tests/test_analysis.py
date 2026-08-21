@@ -269,3 +269,60 @@ def test_subset_view_groups_and_floor():
     assert view["subsets"]["gamma"]["sym_acc"]["mean"] == pytest.approx(0.5)
     with pytest.raises(ValueError):
         subset_view([], subset_of=lambda i: i)
+
+
+def test_judge_row_per_order_accuracy_and_length_delta():
+    from src.analysis import judge_row
+
+    # A saturated always-A judge: b swamps s on every item, so the positional
+    # verdict is "A" in both orders (right when chosen is first, wrong when
+    # it is second) while the symmetrized verdict still reads the content.
+    pairs = [make_pair(f"x/{i}", s=0.2, b=5.0) for i in range(9)]
+    pairs.append(make_pair("x/9", s=-0.2, b=5.0))
+    # The length heuristic is right on the first two items only.
+    floors = {f"x/{i}": (1.0 if i < 2 else 0.0) for i in range(10)}
+    row = judge_row(pairs, lambda i: floors[i], n_boot=200)
+
+    assert row["n_items"] == 10
+    assert row["raw_acc_chosen_first"] == pytest.approx(1.0)
+    assert row["raw_acc_rejected_first"] == pytest.approx(0.0)
+    assert row["raw_acc"]["mean"] == pytest.approx(0.5)
+    assert row["positional_flip_rate"] == pytest.approx(0.0)  # never flips
+    assert row["frac_b_positive"] == pytest.approx(1.0)
+    assert row["frac_bias_dominates"] == pytest.approx(1.0)
+    assert row["sym_acc"]["mean"] == pytest.approx(0.9)
+    assert row["sym_minus_raw"]["mean"] == pytest.approx(0.4)
+    assert row["longer_floor"] == pytest.approx(0.2)
+    assert row["sym_minus_longer"]["mean"] == pytest.approx(0.7)
+    with pytest.raises(ValueError):
+        judge_row([], lambda i: 0.0)
+
+
+def test_master_table_markdown_renders_every_judge_and_floors():
+    from experiments.master_table import COLUMNS, render_markdown
+    from src.analysis import judge_row
+
+    rows = {
+        key: judge_row([make_pair(f"x/{i}", s=1.0, b=0.5) for i in range(4)],
+                       lambda i: 0.5, n_boot=100)
+        for key in ("qwen2.5-0.5b", "llama-3.2-1b")
+    }
+    md = render_markdown(rows, {"longer_chars": 0.42}, "minimal", 4)
+    lines = md.splitlines()
+
+    def cells(line: str) -> int:
+        """Column separators, ignoring the escaped pipes inside |s|."""
+        return line.replace(r"\|", "").count("|")
+
+    # Header, separator, one row per judge, three floor rows — all the same
+    # width, which is the property an unescaped pipe in a header would break.
+    assert cells(lines[0]) == len(COLUMNS) + 1
+    assert all(cells(line) == len(COLUMNS) + 1 for line in lines[1:7])
+    assert r"median \|s\|" in lines[0]
+    # Family x scale order comes from MODEL_STYLES, not the dict insertion order.
+    assert lines[2].startswith("| qwen2.5-0.5b |")
+    assert lines[3].startswith("| llama-3.2-1b |")
+    assert "0.500" in lines[4] and "*random floor*" in lines[4]
+    assert "0.420" in lines[6] and "*longer-response floor*" in lines[6]
+    assert "0.5B" in lines[2] and "1B" in lines[3]
+    assert "seed 0" in md and "4 stratified" in md

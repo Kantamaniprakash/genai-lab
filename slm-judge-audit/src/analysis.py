@@ -409,3 +409,58 @@ def summarize_pairs(pairs: Sequence[SwapPair], n_boot: int = 10_000, seed: int =
         },
         "frac_bias_dominates": float(np.mean(np.abs(b_values) > np.abs(s_values))),
     }
+
+
+def judge_row(
+    pairs: Sequence[SwapPair],
+    longer_correct_of: Callable[[str], float],
+    n_boot: int = 10_000,
+    seed: int = 0,
+) -> dict:
+    """One judge's headline row for the cross-judge comparison table.
+
+    A strict subset of :func:`summarize_pairs` in spirit, but adds the two
+    quantities the per-store block cannot know because they compare the judge
+    against a *baseline evaluated on the same items*: the paired delta of the
+    symmetrized verdict against the pick-the-longer-response floor, and the
+    per-order accuracies that make a saturated position bias visible at a
+    glance (0.99/0.02 is an always-A machine; 0.60/0.58 is a judge).
+    """
+    if not pairs:
+        raise ValueError("no complete swap pairs")
+    b_values = np.array([p.b for p in pairs])
+    s_values = np.array([p.s for p in pairs])
+
+    sym_mean, sym_lo, sym_hi = bootstrap_mean_ci(
+        [p.sym_correct for p in pairs], n_boot=n_boot, seed=seed
+    )
+    raw_mean, raw_lo, raw_hi = bootstrap_mean_ci(
+        [p.raw_correct_mean for p in pairs], n_boot=n_boot, seed=seed
+    )
+    rescue, rescue_lo, rescue_hi = paired_bootstrap_delta_ci(
+        pairs, lambda p: p.sym_correct, lambda p: p.raw_correct_mean,
+        n_boot=n_boot, seed=seed,
+    )
+    over_len, over_len_lo, over_len_hi = paired_bootstrap_delta_ci(
+        pairs, lambda p: p.sym_correct, lambda p: longer_correct_of(p.item_id),
+        n_boot=n_boot, seed=seed,
+    )
+    return {
+        "n_items": len(pairs),
+        "n_boot": n_boot,
+        "bootstrap_seed": seed,
+        "compliance_rate": float(np.mean([p.compliant_both for p in pairs])),
+        "raw_acc": {"mean": raw_mean, "ci95": [raw_lo, raw_hi]},
+        "raw_acc_chosen_first": float(np.mean([p.raw_correct_cf for p in pairs])),
+        "raw_acc_rejected_first": float(np.mean([p.raw_correct_rf for p in pairs])),
+        "sym_acc": {"mean": sym_mean, "ci95": [sym_lo, sym_hi]},
+        "sym_minus_raw": {"mean": rescue, "ci95": [rescue_lo, rescue_hi]},
+        "sym_minus_longer": {"mean": over_len, "ci95": [over_len_lo, over_len_hi]},
+        "longer_floor": float(np.mean([longer_correct_of(p.item_id) for p in pairs])),
+        "positional_flip_rate": float(np.mean([p.positional_flip for p in pairs])),
+        "median_b": float(np.median(b_values)),
+        "frac_b_positive": float(np.mean(b_values > 0)),
+        "sd_b": float(b_values.std(ddof=1)),
+        "median_abs_s": float(np.median(np.abs(s_values))),
+        "frac_bias_dominates": float(np.mean(np.abs(b_values) > np.abs(s_values))),
+    }

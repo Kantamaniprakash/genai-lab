@@ -6,9 +6,10 @@ baselines, with paired bootstrap confidence intervals.**
 
 *Status: phase 2 (baselines & main grid) — harness complete (runner, analysis
 core, floors, value-over-length probe, calibration, bias-structure test,
-per-subset view; 85 tests). Five full grids done on the same 600-item
-stratified sample × both orders: Qwen2.5 0.5B/1.5B/3B and Llama-3.2 1B/3B —
-findings 1–25 below; the Qwen2.5-7B grid is running.
+per-subset view, cross-judge table; 87 tests). Five full grids done on the
+same 600-item stratified sample × both orders: Qwen2.5 0.5B/1.5B/3B and
+Llama-3.2 1B/3B — findings 1–25 below, cross-cut in
+[Results at a glance](#results-at-a-glance); the Qwen2.5-7B grid is running.
 Headlines: debiased judge quality is non-monotone in scale (0.568 → 0.502 →
 0.742 within the Qwen family — a 1.5B valley where the emergent preference is
 a verbosity preference that RewardBench punishes, closing again at 3B);
@@ -93,6 +94,104 @@ instruction-following axis is embedded in the same artifact — LLMBar is
 deliberately *not* loaded separately, which would double-count it. Stratified
 subsampling (largest-remainder by subset, seeded) preserves composition for
 budget-limited grids.
+
+## Results at a glance
+
+Every completed grid in one place. The per-grid sections below were written as
+each grid finished, so each compares its new judge against whichever judges
+existed at the time; this table is the cross-cut, regenerated from the raw
+records by `python -m experiments.master_table` (source of truth:
+`results/summary/master_table__minimal.{json,md}`).
+
+| judge | params | compliant | acc A-first | acc B-first | flip rate | median b | b > 0 | median \|s\| | bias > signal | raw acc | sym acc (95% CI) | Δ sym−raw | Δ sym−longer |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| qwen2.5-0.5b | 0.5B | 1.000 | 1.000 | 0.002 | 0.002 | +3.65 | 0.998 | 0.24 | 0.998 | 0.501 | 0.568 [0.528, 0.608] | +0.068 [+0.027, +0.107] | +0.143 [+0.088, +0.198] |
+| qwen2.5-1.5b | 1.5B | 1.000 | 0.805 | 0.293 | 0.298 | +0.83 | 0.745 | 0.50 | 0.702 | 0.549 | 0.502 [0.462, 0.542] | -0.048 [-0.081, -0.013] | +0.077 [+0.026, +0.129] |
+| qwen2.5-3b | 3B | 1.000 | 0.368 | 0.865 | 0.380 | -5.55 | 0.192 | 3.64 | 0.620 | 0.617 | 0.742 [0.707, 0.777] | +0.125 [+0.095, +0.154] | +0.317 [+0.269, +0.361] |
+| llama-3.2-1b | 1B | 0.512 | 0.312 | 0.728 | 0.183 | -0.34 | 0.275 | 0.14 | 0.817 | 0.520 | 0.555 [0.517, 0.595] | +0.035 [-0.001, +0.072] | +0.130 [+0.084, +0.177] |
+| llama-3.2-3b | 3B | 0.863 | 0.990 | 0.023 | 0.033 | +2.34 | 0.998 | 0.44 | 0.967 | 0.507 | 0.652 [0.613, 0.690] | +0.145 [+0.107, +0.182] | +0.227 [+0.181, +0.273] |
+| *random floor* |  |  |  |  |  |  |  |  |  | 0.500 |  |  |  |
+| *always-A floor* |  |  |  |  |  |  |  |  |  | 0.500 |  |  |  |
+| *longer-response floor* |  |  |  |  |  |  |  |  |  |  | 0.425 |  |  |
+
+Every completed grid for rubric `minimal`, same 600 stratified RewardBench
+items, both presentation orders. `b` is position-bias log-odds toward whatever
+sits in position A; `s` is the order-invariant preference log-odds for the
+gold-chosen response. Raw accuracy assigns each item's presentation order
+uniformly at random; symmetrized accuracy is `sign(s)`. Intervals are 95%
+paired bootstrap over items (10,000 resamples, seed 0). The always-A floor
+sits at exactly 0.5 over the exhaustive order pair by construction.
+
+`Δ sym−longer` compares each judge against the *fixed*
+pick-the-longer-response rule, which scores 0.425 here — below chance, because
+RewardBench's composition punishes verbosity. Clearing a below-chance floor is
+a weak test, and this column is not the length-baseline verdict: the real
+opponent is the *fitted* one-parameter length model, which is free to learn
+the anti-verbosity direction and scores 0.575 on these items. Only the two 3B
+judges beat that one (findings 13–14, 18, 22).
+
+**How to read it.** Four columns carry most of the audit's message:
+
+- **`acc A-first` / `acc B-first`** is the fastest bias test in the table. A
+  judge at 1.000/0.002 (Qwen2.5-0.5B) or 0.990/0.023 (Llama-3.2-3B) is
+  answering with a position, not a verdict; 0.805/0.293 is a lean; nothing
+  here is symmetric.
+- **`flip rate`** is the only one of these a black-box audit can measure — and
+  it is anti-correlated with the truth. The two most saturated judges post the
+  *lowest* flip rates in the table (0.002 and 0.033), because a bias large
+  enough to never be overturned never produces a flip to count
+  (findings 3, 6, 21).
+- **`bias > signal`** is the fraction of items where position bias exceeds the
+  content signal in magnitude. It is above 0.6 for every judge measured, and
+  above 0.96 for two of them.
+- **`sym acc`** is judge quality after the bias is removed by symmetrization,
+  and it is **not monotone in scale**: within Qwen2.5 it runs
+  0.568 → 0.502 → 0.742 from 0.5B to 3B (finding 16's valley).
+
+The `qwen2.5-7b` row is absent because that grid is still running; the script
+prints its coverage and excludes it rather than averaging a partial sample in.
+
+![judge scaling](results/figures/scaling__minimal.png)
+
+*Symmetrized and raw accuracy (left) and the bias-vs-signal race (right)
+against nominal parameter count, both families, with the trivial floors. The
+left panel is the valley; the right panel is why raw accuracy hides it.*
+
+### Findings index
+
+Findings are numbered in the order they were established and are never
+rewritten afterwards — a later finding that overturns an earlier one says so
+rather than editing it (16 revises 9; 25 resolves the thread opened under 7).
+Claims below are the log entries verbatim; `research/NOTES.md` carries each
+one's evidence, dated.
+
+| # | claim | section |
+|---|---|---|
+| 1 | The readout is valid at 0.5B. | [First results](#first-results--qwen25-05b-minimal-rubric-n600-both-orders) |
+| 2 | The 0.5B judge is functionally an always-A machine. | [First results](#first-results--qwen25-05b-minimal-rubric-n600-both-orders) |
+| 3 | Black-box flip counting cannot see this failure mode. | [First results](#first-results--qwen25-05b-minimal-rubric-n600-both-orders) |
+| 4 | Symmetrization rescues a real but weak signal; the length floor is below chance here. | [First results](#first-results--qwen25-05b-minimal-rubric-n600-both-orders) |
+| 5 | Verdict-format compliance is a per-family property, and the readout diagnostics are load-bearing. | [Cross-family contrast](#cross-family-contrast--llama-32-1b-on-the-identical-sample) |
+| 6 | Bias direction, magnitude, and the flip-rate ranking all invert across families. | [Cross-family contrast](#cross-family-contrast--llama-32-1b-on-the-identical-sample) |
+| 7 | After debiasing, the two judges are statistically indistinguishable overall but differ sharply by category. | [Cross-family contrast](#cross-family-contrast--llama-32-1b-on-the-identical-sample) |
+| 8 | The logit readout survives its own validity check at 1B. | [Does the audit survive its own validity check?](#does-the-audit-survive-its-own-validity-check) |
+| 9 | Debiased judge quality scales *backwards* within the Qwen family. | [Scaling within a family](#scaling-within-a-family--qwen25-15b-identical-sample) |
+| 10 | The wrong-way preference is a Reasoning phenomenon that tracks length. | [Scaling within a family](#scaling-within-a-family--qwen25-15b-identical-sample) |
+| 11 | Bias direction is category-dependent *within* one family. | [Scaling within a family](#scaling-within-a-family--qwen25-15b-identical-sample) |
+| 12 | Every judge carries real signal beyond length, including the one that judges at chance; at 1.5B the binary verdict is what destroys it. | [Value over length](#value-over-length-is-there-a-judge-inside-the-verbosity-preference) |
+| 13 | Length mediates both standing mysteries. | [Value over length](#value-over-length-is-there-a-judge-inside-the-verbosity-preference) |
+| 14 | Against a deployable floor, these judges only pay on Safety. | [Value over length](#value-over-length-is-there-a-judge-inside-the-verbosity-preference) |
+| 15 | Symmetrization is also a calibration repair, except where the preference itself is broken. | [Are the verdict probabilities calibrated?](#are-the-verdict-probabilities-calibrated) |
+| 16 | The inverse scaling is a valley, not a trend. | [The 3B reversal](#the-3b-reversal--the-scaling-valley-closes-and-the-bias-flips) |
+| 17 | The verbosity preference was a mid-scale transient; the position bias that replaces it is the largest yet, in the opposite direction. | [The 3B reversal](#the-3b-reversal--the-scaling-valley-closes-and-the-bias-flips) |
+| 18 | First judge to beat the length floor; confidence still not trustworthy. | [The 3B reversal](#the-3b-reversal--the-scaling-valley-closes-and-the-bias-flips) |
+| 19 | The additive-shift hypothesis is rejected at every scale, and bias predictability is anti-correlated with bias magnitude. | [Is position bias a constant you can subtract?](#is-position-bias-a-constant-you-can-subtract) |
+| 20 | A fitted one-call correction fully substitutes for symmetrization at 0.5B, caps at half the gain at 3B, and actively hurts at 1.5B. | [Is position bias a constant you can subtract?](#is-position-bias-a-constant-you-can-subtract) |
+| 21 | Both families reverse bias direction with scale, in opposite senses; Llama-3.2-3B is a new always-A machine. | [The cross-family point at 3B](#the-cross-family-point-at-3b--llama-32-3b) |
+| 22 | Llama scale buys Chat, deepens the adversarial hole. | [The cross-family point at 3B](#the-cross-family-point-at-3b--llama-32-3b) |
+| 23 | Post-debiasing calibration is a family property; the format-breaking category migrates with scale. | [The cross-family point at 3B](#the-cross-family-point-at-3b--llama-32-3b) |
+| 24 | Subset accuracy ordering is the judge's local length-lean read through the subset's gold-length composition; the audit's weakest judge is its best formal-math judge. | [The per-subset view](#where-the-category-averages-hide-the-story--the-per-subset-view) |
+| 25 | The compliant-stratum penalty is real but category-localized and family × scale-dependent. | [The per-subset view](#where-the-category-averages-hide-the-story--the-per-subset-view) |
 
 ## First results — Qwen2.5-0.5B, minimal rubric, n=600, both orders
 
@@ -780,17 +879,18 @@ src/length_probe.py  conditional-logit value-over-length probe (nested
 src/calibration.py   folded confidence views, tie-safe equal-mass bins, ECE
 src/bias_model.py    variance decomposition of b_i + exact-LOO single-order
                   correction ladder (additive-shift test)
-experiments/      run_grid, summarize, make_figures, compliance_view,
-                  scaling_curve, length_probe, calibration, bias_model,
-                  subset_view
+experiments/      run_grid, summarize, master_table, make_figures,
+                  compliance_view, scaling_curve, length_probe, calibration,
+                  bias_model, subset_view
 results/raw/      one JSONL store per (model, rubric) + provenance sidecar
 results/summary/  quick-look JSON per store (+ __compliance, length_probe,
-                  calibration, bias_model, subset_view)
+                  calibration, bias_model, subset_view, master_table —
+                  the last also rendered as the markdown the README embeds)
 results/figures/  committed PNGs, regenerable from raw stores
-tests/            85 tests (schema, templates, readout arithmetic, store
+tests/            87 tests (schema, templates, readout arithmetic, store
                   resume, decomposition, bootstrap, floors, compliance
                   view, length probe, calibration, bias model, subset
-                  view, model smoke)
+                  view, cross-judge table, model smoke)
 research/NOTES.md living research log
 ```
 
@@ -799,11 +899,12 @@ research/NOTES.md living research log
 ```bash
 uv sync                      # analysis deps (numpy, pyarrow, matplotlib)
 uv run python -m src.data    # fetch pinned parquet, print composition
-uv run --group dev pytest    # 83 tests
+uv run --group dev pytest    # 87 tests
 uv sync --group judge        # llama-cpp-python (compiles ~5 min on 4 cores)
 # download the pinned GGUF named in src/judge.py MODELS into models/, then:
 uv run python -m experiments.run_grid --model qwen2.5-0.5b --rubric minimal --n 600 --seed 0
-uv run python -m experiments.summarize   # tables in results/summary/
+uv run python -m experiments.summarize   # per-store tables in results/summary/
+uv run python -m experiments.master_table      # cross-judge headline table (>=1 store)
 uv run python -m experiments.make_figures
 uv run python -m experiments.compliance_view   # readout-validity conditioning
 uv run python -m experiments.scaling_curve     # cross-model figure (>=2 stores)
