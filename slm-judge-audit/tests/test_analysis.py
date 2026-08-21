@@ -359,3 +359,19 @@ def test_interim_markdown_is_labelled_and_drops_full_sample_verdict():
     assert "findings 13–14" not in md
     full = render_markdown(rows, {"longer_chars": 0.9}, "minimal", 4)
     assert "findings 13–14" in full and not full.startswith("**INTERIM")
+
+
+def test_declutter_separates_collided_labels_without_moving_anchors():
+    from experiments.prefix_skew import declutter
+
+    # Two judges landing on the same accuracy, plus one well clear of them.
+    placed = declutter([(0.911, "a", "#000"), (0.911, "b", "#111"),
+                        (0.500, "c", "#222")], gap=0.04)
+    anchors = [p[0] for p in placed]
+    label_ys = [p[1] for p in placed]
+
+    assert anchors == [0.500, 0.911, 0.911]        # true values, untouched
+    assert label_ys[0] == pytest.approx(0.500)     # lowest label never moves
+    assert label_ys[1] == pytest.approx(0.911)     # clear of the one below it
+    assert label_ys[2] == pytest.approx(0.951)     # pushed up by exactly gap
+    assert all(b - a >= 0.04 - 1e-9 for a, b in zip(label_ys, label_ys[1:]))

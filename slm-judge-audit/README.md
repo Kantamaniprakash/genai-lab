@@ -6,7 +6,7 @@ baselines, with paired bootstrap confidence intervals.**
 
 *Status: phase 2 (baselines & main grid) — harness complete (runner, analysis
 core, floors, value-over-length probe, calibration, bias-structure test,
-per-subset view, cross-judge table; 87 tests). Five full grids done on the
+per-subset view, cross-judge table; 90 tests). Five full grids done on the
 same 600-item stratified sample × both orders: Qwen2.5 0.5B/1.5B/3B and
 Llama-3.2 1B/3B — findings 1–25 below, cross-cut in
 [Results at a glance](#results-at-a-glance); the Qwen2.5-7B grid is running.
@@ -180,6 +180,17 @@ benchmarks.
   the unmatched comparison suggested. Roughly seventy percent of that apparent
   effect was composition. The same restriction moves symmetrized accuracy by
   +0.169 at Qwen2.5-3B and +0.259 at Llama-3.2-3B.
+
+![what the item prefix does to every judge](results/figures/prefix_skew__minimal.png)
+
+*Every judge's symmetrized accuracy on the full sample and on the 45 items the
+in-flight 7B grid had finished, same items on both sides. The restriction is
+not a uniform optimism: it moves Llama-3.2-3B by +0.259 and Qwen2.5-0.5B by
+−0.013, reordering the field. The dashed line is the trivial
+pick-the-longer-response floor, which swings further than any judge — from
+0.425, far below chance, to 0.978 — where it outscores all six judges.
+Qwen2.5-7B has only a right-hand point because its full-sample row does not
+exist yet.*
 
 The remedy is in the tooling rather than in a note asking future runs to be
 careful: `python -m experiments.master_table --restrict-to qwen2.5-7b` cuts
@@ -923,18 +934,18 @@ src/length_probe.py  conditional-logit value-over-length probe (nested
 src/calibration.py   folded confidence views, tie-safe equal-mass bins, ECE
 src/bias_model.py    variance decomposition of b_i + exact-LOO single-order
                   correction ladder (additive-shift test)
-experiments/      run_grid, summarize, master_table, make_figures,
-                  compliance_view, scaling_curve, length_probe, calibration,
-                  bias_model, subset_view
+experiments/      run_grid, summarize, master_table, prefix_skew,
+                  make_figures, compliance_view, scaling_curve, length_probe,
+                  calibration, bias_model, subset_view
 results/raw/      one JSONL store per (model, rubric) + provenance sidecar
 results/summary/  quick-look JSON per store (+ __compliance, length_probe,
                   calibration, bias_model, subset_view, master_table —
                   the last also rendered as the markdown the README embeds)
 results/figures/  committed PNGs, regenerable from raw stores
-tests/            87 tests (schema, templates, readout arithmetic, store
+tests/            90 tests (schema, templates, readout arithmetic, store
                   resume, decomposition, bootstrap, floors, compliance
                   view, length probe, calibration, bias model, subset
-                  view, cross-judge table, model smoke)
+                  view, cross-judge table, figure layout, model smoke)
 research/NOTES.md living research log
 ```
 
@@ -943,13 +954,14 @@ research/NOTES.md living research log
 ```bash
 uv sync                      # analysis deps (numpy, pyarrow, matplotlib)
 uv run python -m src.data    # fetch pinned parquet, print composition
-uv run --group dev pytest    # 87 tests
+uv run --group dev pytest    # 90 tests
 uv sync --group judge        # llama-cpp-python (compiles ~5 min on 4 cores)
 # download the pinned GGUF named in src/judge.py MODELS into models/, then:
 uv run python -m experiments.run_grid --model qwen2.5-0.5b --rubric minimal --n 600 --seed 0
 uv run python -m experiments.summarize   # per-store tables in results/summary/
 uv run python -m experiments.master_table      # cross-judge headline table (>=1 store)
 uv run python -m experiments.master_table --restrict-to qwen2.5-7b   # matched interim read on an in-flight grid
+uv run python -m experiments.prefix_skew --interim-for qwen2.5-7b    # what that prefix does to every judge
 uv run python -m experiments.make_figures
 uv run python -m experiments.compliance_view   # readout-validity conditioning
 uv run python -m experiments.scaling_curve     # cross-model figure (>=2 stores)

@@ -769,8 +769,11 @@ judgments) — the slow end of the per-host ledger, comparable to day 5's ~40
 tok/s container rather than day 6's ~54 tok/s. The store is resumable and
 checkpoint-committed; this is a multi-session grid and the honest plan is to
 say so rather than to shrink n and lose comparability with the five completed
-grids. Session ended with the store at 93/1200 judgments (47 inherited, 46
-added). Every cross-judge analysis below therefore runs over the five
+grids. Session ended with the store at 100/1200 judgments (47 inherited, 53
+added). A second measurement taken while the day's bootstraps were running
+came out at 0.026 judg/s — worth recording as the *contended* rate, since it
+is the reason next session should keep analysis off the box while a grid is
+up. Every cross-judge analysis below therefore runs over the five
 *completed* grids.
 
 ### Built: the cross-judge headline table (`experiments/master_table.py`)
@@ -852,7 +855,17 @@ grids interpretable, and is the obvious fix — but applying it now would break
 resume-compatibility with the six stores already collected, so the guard
 stands instead.
 
-89 tests green, ruff clean.
+Rendered `experiments/prefix_skew.py` — a slope chart of every judge's
+symmetrized accuracy full-sample vs restricted, floor included, read straight
+out of the two committed summaries (it runs no judgments). It carries the
+finding better than the table does: the lines fan rather than shift, and the
+floor's dashed line crosses from bottom to top of the field. Label placement
+needed a `declutter` pass — both 3B judges land on exactly 0.911 restricted, so
+naive annotation stacked them into an unreadable smear; labels are separated by
+a minimum gap with hairlines back to their true values, and the anchors never
+move.
+
+90 tests green, ruff clean.
 
 ### Next steps (Day 8)
 
