@@ -867,6 +867,40 @@ move.
 
 90 tests green, ruff clean.
 
+### Lab housekeeping — the landing page and CI had both gone stale
+
+Noticed while the grid ran, and worth the interruption because both were
+misrepresenting the lab to anyone who visits it.
+
+- **The root README still called `rag-chunking-bench` the current flagship**,
+  five weeks after it closed, and its whole results section was that project's.
+  Restructured: the current flagship is `slm-judge-audit` with its own
+  at-a-glance section (the non-monotone scaling, the anti-informative flip
+  rate, bias beating signal on 62.0–99.8% of items, the rejected additive-shift
+  assumption, and only the two 3B judges beating the fitted length baseline) and
+  the scaling figure as the hero; `rag-chunking-bench` keeps everything it had
+  under "Completed flagship". Nothing was deleted.
+- **`scripts/sync_latest.py` was hardcoded to `rag-chunking-bench`**, which is
+  why "Latest from the lab" was frozen at 2026-07-16. It now reads the flagship
+  name out of the `## Current flagship:` line in ROADMAP.md — the one place the
+  answer is already maintained — and the workflow watches `*/research/NOTES.md`
+  plus ROADMAP.md so a handover triggers it too. Its finding parser only knew
+  the old log's numbered-list shape; it now also matches bold-paragraph and
+  `###`-heading findings (both used here), dedupes a finding restated inline,
+  and orders by finding number. Selftest extended to cover all three shapes.
+- **CI only ever tested `rag-chunking-bench`** — the closed project — so the
+  active flagship's 90 tests were not covered by the badge on the landing page.
+  The matrix is now project × python-version. Verified locally first on 3.11,
+  3.12 and 3.13 (90 passed, 1 skipped on each) rather than discovering it in
+  the badge; `--group dev` confirmed to resolve for both projects. The judge
+  runner stays out of CI: llama-cpp-python compiles from source and the one
+  test that needs it is guarded and skips.
+
+Checked but *not* changed: `rag-chunking-bench`'s README claims 365 tests while
+a default install collects 349. That is correct — `tests/test_dense.py` opens
+with `pytest.importorskip("sentence_transformers")`, so its 16 tests are not
+collected without the dense group, and 349 + 16 = 365.
+
 ### Next steps (Day 8)
 
 1. **Resume the 7B grid first thing** — `uv run python -m experiments.run_grid

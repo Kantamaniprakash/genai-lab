@@ -2,7 +2,9 @@ name: Sync README digest
 on:
   push:
     branches: ["main"]
-    paths: ["rag-chunking-bench/research/NOTES.md"]
+    # Any project's log can be the current one; ROADMAP.md is what names it,
+    # so a flagship handover triggers the digest too.
+    paths: ["*/research/NOTES.md", "ROADMAP.md", "scripts/sync_latest.py"]
   workflow_dispatch:
 permissions:
   contents: write
