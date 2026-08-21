@@ -769,8 +769,9 @@ judgments) — the slow end of the per-host ledger, comparable to day 5's ~40
 tok/s container rather than day 6's ~54 tok/s. The store is resumable and
 checkpoint-committed; this is a multi-session grid and the honest plan is to
 say so rather than to shrink n and lose comparability with the five completed
-grids. Session ended with the store at 131/1200 judgments (47 inherited, 84
-added); the runner's own late-session read was 0.03 judg/s, ETA 537 min. A second measurement taken while the day's bootstraps were running
+grids. Session ended with the store at 134/1200 judgments — 67 complete swap
+pairs, no partial item (47 inherited, 87 added); the runner's own late-session
+read was 0.03 judg/s, ETA 537 min for the remainder. A second measurement taken while the day's bootstraps were running
 came out at 0.026 judg/s — worth recording as the *contended* rate, since it
 is the reason next session should keep analysis off the box while a grid is
 up. Every cross-judge analysis below therefore runs over the five
