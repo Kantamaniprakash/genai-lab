@@ -326,3 +326,36 @@ def test_master_table_markdown_renders_every_judge_and_floors():
     assert "0.420" in lines[6] and "*longer-response floor*" in lines[6]
     assert "0.5B" in lines[2] and "1B" in lines[3]
     assert "seed 0" in md and "4 stratified" in md
+
+
+def test_composition_note_quantifies_prefix_skew():
+    from experiments.master_table import composition_note
+
+    full = [f"chat/{i}" for i in range(10)] + [f"safety/{i}" for i in range(10)]
+    restricted = [f"chat/{i}" for i in range(4)]   # an alphabetical prefix
+    note = composition_note(restricted, full,
+                            lambda i: i.split("/", 1)[0].capitalize())
+    assert "Chat 100% (vs 50% in the full sample)" in note
+    assert "Safety 0% (vs 50% in the full sample)" in note
+    assert "Safety is not represented at all." in note
+
+
+def test_interim_markdown_is_labelled_and_drops_full_sample_verdict():
+    from experiments.master_table import render_markdown
+    from src.analysis import judge_row
+
+    rows = {"qwen2.5-7b": judge_row(
+        [make_pair(f"x/{i}", s=1.0, b=0.5) for i in range(4)],
+        lambda i: 0.5, n_boot=100)}
+    skew = "Category composition of the restricted set: Chat 100%."
+    md = render_markdown(rows, {"longer_chars": 0.9}, "minimal", 4,
+                         interim="qwen2.5-7b", skew=skew)
+
+    assert md.startswith("**INTERIM — not a result.**")
+    assert skew in md
+    assert "alphabetical prefix" in md
+    # The length-baseline verdict is a full-sample claim and must not ride
+    # along on a restricted table, where the floor itself is a different number.
+    assert "findings 13–14" not in md
+    full = render_markdown(rows, {"longer_chars": 0.9}, "minimal", 4)
+    assert "findings 13–14" in full and not full.startswith("**INTERIM")

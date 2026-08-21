@@ -157,6 +157,40 @@ prints its coverage and excludes it rather than averaging a partial sample in.
 against nominal parameter count, both families, with the trivial floors. The
 left panel is the valley; the right panel is why raw accuracy hides it.*
 
+### Reading a grid that is still running
+
+`stratified_sample` returns its items sorted by `item_id` and `run_grid` walks
+them in that order, so a grid caught mid-run has finished an **alphabetical
+prefix of the subsets**, not a random subsample. At low coverage that prefix
+can sit entirely inside one category, which makes any mid-run peek compared
+against another judge's *overall* number a comparison between two different
+benchmarks.
+
+- **Finding 26 — mid-run peeks in this harness are compositionally confounded,
+  and the audit already made that mistake once.** At 45/600 items the 7B
+  prefix is 100% Chat (`alpacaeval-easy/hard/length`) against 12% Chat in the
+  full sample; Chat Hard, Reasoning and Safety are absent entirely. On that
+  prefix the *floor itself* inverts: pick-the-longer-response scores **0.978**,
+  against **0.425** on the full sample — so on these items every judge in the
+  audit, including the two that beat the fitted length model overall, loses to
+  the trivial length heuristic. The day-6 log entry read the 7B prefix's median
+  `|s|` of ~10 against Qwen2.5-3B's full-sample 3.64 and inferred "a heavily
+  saturated preference readout at 7B". Recomputed on the identical 45 items,
+  3B's median `|s|` is **8.68** and 7B's is **11.04** — a 1.3x gap, not the 3x
+  the unmatched comparison suggested. Roughly seventy percent of that apparent
+  effect was composition. The same restriction moves symmetrized accuracy by
+  +0.169 at Qwen2.5-3B and +0.259 at Llama-3.2-3B.
+
+The remedy is in the tooling rather than in a note asking future runs to be
+careful: `python -m experiments.master_table --restrict-to qwen2.5-7b` cuts
+every judge down to the items the in-flight grid has finished, so the rows are
+matched by construction, and stamps the output with the measured category skew
+and an INTERIM banner. The committed
+`results/summary/master_table__minimal__interim_qwen2.5-7b.{json,md}` is the
+45-item snapshot finding 26 was computed on; re-running the command regenerates
+it at whatever coverage the grid has reached, which is why those numbers are
+not pasted into this report. None of them is a claim about the 7B judge.
+
 ### Findings index
 
 Findings are numbered in the order they were established and are never
@@ -192,6 +226,7 @@ one's evidence, dated.
 | 23 | Post-debiasing calibration is a family property; the format-breaking category migrates with scale. | [The cross-family point at 3B](#the-cross-family-point-at-3b--llama-32-3b) |
 | 24 | Subset accuracy ordering is the judge's local length-lean read through the subset's gold-length composition; the audit's weakest judge is its best formal-math judge. | [The per-subset view](#where-the-category-averages-hide-the-story--the-per-subset-view) |
 | 25 | The compliant-stratum penalty is real but category-localized and family × scale-dependent. | [The per-subset view](#where-the-category-averages-hide-the-story--the-per-subset-view) |
+| 26 | Mid-run peeks in this harness are compositionally confounded, and the audit already made that mistake once. | [Reading a grid that is still running](#reading-a-grid-that-is-still-running) |
 
 ## First results — Qwen2.5-0.5B, minimal rubric, n=600, both orders
 
@@ -856,6 +891,15 @@ Recorded as they were hit, not reconstructed afterwards (dated entries in
   cross-fitted, but its bootstrap resamples fixed per-item LOO scores —
   correction-refit variance is not resampled (negligible at group-mean
   scale, noted in the module docstring).
+- **Partial grids are ordered, not sampled.** The execution order is
+  `item_id`-sorted, so an in-flight store covers an alphabetical prefix of the
+  subsets and is unusable as a subsample of the benchmark (finding 26). Every
+  cross-judge script refuses to mix item sets for this reason, and interim
+  reads go through `master_table --restrict-to`, which matches items across
+  judges and prints the category skew. A randomized execution order would make
+  partial grids interpretable and is the obvious fix; it is not applied
+  retroactively because it would break resume-compatibility with the six
+  stores already collected under the current order.
 - **Per-host throughput variance.** Identical container specs prefill up to
   ~3x apart across sessions (measured 2026-07-23: ~40 vs ~120 tok/s at 3B,
   same nominal 4-vCPU class). Timing numbers in this README are per-run
@@ -905,6 +949,7 @@ uv sync --group judge        # llama-cpp-python (compiles ~5 min on 4 cores)
 uv run python -m experiments.run_grid --model qwen2.5-0.5b --rubric minimal --n 600 --seed 0
 uv run python -m experiments.summarize   # per-store tables in results/summary/
 uv run python -m experiments.master_table      # cross-judge headline table (>=1 store)
+uv run python -m experiments.master_table --restrict-to qwen2.5-7b   # matched interim read on an in-flight grid
 uv run python -m experiments.make_figures
 uv run python -m experiments.compliance_view   # readout-validity conditioning
 uv run python -m experiments.scaling_curve     # cross-model figure (>=2 stores)

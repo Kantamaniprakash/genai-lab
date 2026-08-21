@@ -37,6 +37,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Callable, Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -113,7 +114,36 @@ def fitted_length_note(rubric: str = "minimal") -> str:
     return f" and scores {accs.pop():.3f} on these items"
 
 
-def render_markdown(rows: dict[str, dict], floors: dict, rubric: str, n_items: int) -> str:
+def composition_note(restricted: Sequence[str], full: Sequence[str],
+                     category_of: Callable[[str], str]) -> str:
+    """How badly the restricted item set misrepresents the full sample.
+
+    ``stratified_sample`` returns items sorted by ``item_id`` and ``run_grid``
+    walks them in that order, so the items a partial grid has finished are an
+    *alphabetical prefix by subset*, not a random subsample. At small coverage
+    that prefix can sit entirely inside one category. Quantifying the skew is
+    the difference between an interim read and a misleading one.
+    """
+    def shares(ids: Sequence[str]) -> dict[str, float]:
+        counts: dict[str, int] = {}
+        for item_id in ids:
+            counts[category_of(item_id)] = counts.get(category_of(item_id), 0) + 1
+        return {cat: n / len(ids) for cat, n in counts.items()}
+
+    got, want = shares(restricted), shares(full)
+    parts = [
+        f"{cat} {got.get(cat, 0.0):.0%} (vs {want[cat]:.0%} in the full sample)"
+        for cat in sorted(want)
+    ]
+    missing = [cat for cat in sorted(want) if cat not in got]
+    tail = (f" {', '.join(missing)} {'is' if len(missing) == 1 else 'are'} "
+            f"not represented at all." if missing else "")
+    return ("Category composition of the restricted set: " + "; ".join(parts)
+            + "." + tail)
+
+
+def render_markdown(rows: dict[str, dict], floors: dict, rubric: str, n_items: int,
+                    interim: str | None = None, skew: str = "") -> str:
     """The table as markdown, judges in family × scale order, floors below.
 
     Floors occupy the same columns where they are defined and are left blank
@@ -148,26 +178,47 @@ def render_markdown(rows: dict[str, dict], floors: dict, rubric: str, n_items: i
     lines.append(floor_line("longer-response floor", "sym acc (95% CI)",
                             floors["longer_chars"]))
 
+    if interim is not None:
+        header = (
+            f"**INTERIM — not a result.** Every judge below is restricted to "
+            f"the {n_items} items the in-flight `{interim}` grid has finished, "
+            f"so the rows are matched (same items, same orders) but the sample "
+            f"is small and *not* representative: `run_grid` walks the sample in "
+            f"`item_id` order, so a partial grid covers an alphabetical prefix "
+            f"of the subsets rather than a random draw. {skew} Nothing here is "
+            f"a finding about `{interim}`, and none of it belongs in a "
+            f"cross-judge claim until the grid closes over the full sample.\n\n"
+        )
+    else:
+        header = ""
+
+    scope = ("all judges over the same {n} items".format(n=n_items) if interim
+             else f"same {n_items} stratified RewardBench items")
     caption = (
-        f"Every completed grid for rubric `{rubric}`, same {n_items} stratified "
-        f"RewardBench items, both presentation orders. `b` is position-bias "
-        f"log-odds toward whatever sits in position A; `s` is the "
+        f"Rubric `{rubric}`, {scope}, both presentation orders. `b` is "
+        f"position-bias log-odds toward whatever sits in position A; `s` is the "
         f"order-invariant preference log-odds for the gold-chosen response. "
         f"Raw accuracy assigns each item's presentation order uniformly at "
         f"random; symmetrized accuracy is `sign(s)`. Intervals are 95% paired "
         f"bootstrap over items ({rows[ordered[0]]['n_boot']:,} resamples, "
         f"seed {rows[ordered[0]]['bootstrap_seed']}). The always-A floor sits "
-        f"at exactly 0.5 over the exhaustive order pair by construction.\n\n"
-        f"`Δ sym−longer` compares each judge against the *fixed* "
-        f"pick-the-longer-response rule, which scores {floors['longer_chars']:.3f} "
-        f"here — below chance, because RewardBench's composition punishes "
-        f"verbosity. Clearing a below-chance floor is a weak test, and this "
-        f"column is not the length-baseline verdict: the real opponent is the "
-        f"*fitted* one-parameter length model, which is free to learn the "
-        f"anti-verbosity direction{fitted_length_note(rubric)}. Only the two 3B "
-        f"judges beat that one (findings 13–14, 18, 22)."
+        f"at exactly 0.5 over the exhaustive order pair by construction."
     )
-    return "\n".join(lines) + "\n\n" + caption + "\n"
+    if interim is None:
+        # A full-sample verdict; it would not survive being quoted next to a
+        # restricted table, so it is written only for the full one.
+        caption += (
+            f"\n\n`Δ sym−longer` compares each judge against the *fixed* "
+            f"pick-the-longer-response rule, which scores "
+            f"{floors['longer_chars']:.3f} here — below chance, because "
+            f"RewardBench's composition punishes verbosity. Clearing a "
+            f"below-chance floor is a weak test, and this column is not the "
+            f"length-baseline verdict: the real opponent is the *fitted* "
+            f"one-parameter length model, which is free to learn the "
+            f"anti-verbosity direction{fitted_length_note(rubric)}. Only the "
+            f"two 3B judges beat that one (findings 13–14, 18, 22)."
+        )
+    return header + "\n".join(lines) + "\n\n" + caption + "\n"
 
 
 def main() -> None:
@@ -176,6 +227,11 @@ def main() -> None:
     parser.add_argument("--models", nargs="*", default=None,
                         help="model keys to include (default: every completed "
                              "store; use this to exclude an in-flight run)")
+    parser.add_argument("--restrict-to", default=None, metavar="MODEL",
+                        help="interim mode: restrict every judge to the items "
+                             "MODEL has finished, for a matched read on an "
+                             "in-flight grid. Writes the __interim outputs and "
+                             "reports the composition skew of the restriction.")
     args = parser.parse_args()
 
     fetch()
@@ -198,28 +254,44 @@ def main() -> None:
             continue
         pairs, incomplete = assemble_pairs(load_records([path]))
         if incomplete:
+            # A grid caught mid-item: run_grid writes an item's two orders
+            # consecutively, so at most the trailing item is half-written.
+            # Its pair is unusable, the rest of the store is fine.
             print(f"[master] {key}: {incomplete} item(s) missing a swap order — "
-                  f"excluded")
-            continue
+                  f"dropped, {len(pairs)} complete pairs kept")
         covered[key] = (pairs, frozenset(p.item_id for p in pairs))
 
     if not covered:
         raise SystemExit(f"no complete stores for rubric {args.rubric}")
-    reference = max((ids for _, ids in covered.values()), key=len)
+    widest = max((ids for _, ids in covered.values()), key=len)
+
+    if args.restrict_to is not None:
+        if args.restrict_to not in covered:
+            raise SystemExit(f"no usable store for --restrict-to {args.restrict_to}")
+        reference = covered[args.restrict_to][1]
+        print(f"[master] interim: restricting every judge to the "
+              f"{len(reference)} items {args.restrict_to} has finished")
+    else:
+        reference = widest
 
     rows: dict[str, dict] = {}
     for key, (pairs, ids) in covered.items():
-        if ids != reference:
-            if ids < reference:
-                print(f"[master] {key}: {len(ids)}/{len(reference)} items — "
-                      f"excluded, grid still in flight")
-                continue
+        if not reference <= ids:
+            missing = len(reference - ids)
+            print(f"[master] {key}: {len(ids)} items, {missing} of the "
+                  f"reference set missing — excluded, grid still in flight")
+            continue
+        if args.restrict_to is None and ids != reference:
             raise SystemExit(
                 f"{key} covers items outside the reference set "
                 f"({len(ids - reference)} extra); refusing to compare"
             )
-        rows[key] = judge_row(pairs, longer_correct_of)
-        print(f"[master] {key}: sym {rows[key]['sym_acc']['mean']:.3f}")
+        # In interim mode a completed judge is cut down to the reference set,
+        # so every row is computed on identical items — the whole point.
+        restricted = [p for p in pairs if p.item_id in reference]
+        rows[key] = judge_row(restricted, longer_correct_of)
+        print(f"[master] {key}: sym {rows[key]['sym_acc']['mean']:.3f} "
+              f"(n={len(restricted)})")
 
     shared = tuple(sorted(reference))
     floors = {
@@ -228,16 +300,28 @@ def main() -> None:
         "always_a_raw": RANDOM_ACCURACY,
     }
 
+    skew = ""
+    if args.restrict_to is not None:
+        skew = composition_note(shared, sorted(widest),
+                                lambda i: items_by_id[i].category)
+        print(f"[master] {skew}")
+
+    stem = (f"master_table__{args.rubric}"
+            + (f"__interim_{args.restrict_to}" if args.restrict_to else ""))
+
     SUMMARY_DIR.mkdir(parents=True, exist_ok=True)
-    out_json = SUMMARY_DIR / f"master_table__{args.rubric}.json"
+    out_json = SUMMARY_DIR / f"{stem}.json"
     with open(out_json, "w") as f:
         json.dump({"rubric": args.rubric, "n_items": len(shared),
+                   "interim_for": args.restrict_to,
+                   "composition_note": skew or None,
                    "floors": floors, "judges": rows}, f, indent=2, sort_keys=True)
         f.write("\n")
     print(f"[master] wrote {out_json}")
 
-    markdown = render_markdown(rows, floors, args.rubric, len(shared))
-    out_md = SUMMARY_DIR / f"master_table__{args.rubric}.md"
+    markdown = render_markdown(rows, floors, args.rubric, len(shared),
+                               interim=args.restrict_to, skew=skew)
+    out_md = SUMMARY_DIR / f"{stem}.md"
     with open(out_md, "w") as f:
         f.write(markdown)
     print(f"[master] wrote {out_md}")

@@ -750,3 +750,132 @@ format-complies; parse-and-drop keeps the worse-judged half.
 
 7B analyses + README restructure around the scaling arc; full day-6 entry
 continues below.
+
+## 2026-08-21 — Day 7: the cross-judge table, and what a partial grid is not (finding 26)
+
+(Gap 08-02..08-20: no sessions ran. The 7B store was left at 47/1200 by the
+day-6 checkpoint and is where this session picked it up.)
+
+Fresh container, so the day started with setup rather than science: `uv sync
+--group judge` (llama-cpp-python compiles ~6 min on 4 cores) and a re-download
+of the pinned 7B GGUF, SHA256 re-verified against the registry pin
+(`65b8fcd9…1423`, 4.68 GB) before the first forward pass. Grid relaunched
+immediately; everything below was written while it ran.
+
+### The host is slow, and the 7B grid will not close in one session
+
+Measured 0.04–0.05 judg/s at 7B (ETA 440 min for the remaining 1,113
+judgments) — the slow end of the per-host ledger, comparable to day 5's ~40
+tok/s container rather than day 6's ~54 tok/s. The store is resumable and
+checkpoint-committed; this is a multi-session grid and the honest plan is to
+say so rather than to shrink n and lose comparability with the five completed
+grids. Session ended with the store at 93/1200 judgments (47 inherited, 46
+added). Every cross-judge analysis below therefore runs over the five
+*completed* grids.
+
+### Built: the cross-judge headline table (`experiments/master_table.py`)
+
+The README's results grew in grid-arrival order, so each section compares its
+new judge against whichever judges existed at the time and no table ever
+showed all five at once. `master_table` recomputes one row per completed grid
+from raw records and writes both the JSON and the markdown the README embeds.
+Two columns are new to the audit:
+
+- **per-order accuracy** (chosen-first / rejected-first) — the fastest visual
+  bias test in the audit. 1.000/0.002 at Qwen2.5-0.5B and 0.990/0.023 at
+  Llama-3.2-3B are always-A machines on sight; 0.805/0.293 is a lean.
+- **Δ sym−longer**, the paired delta against the fixed length heuristic, with
+  a caption that says outright this is a *weak* test (the fixed floor is 0.425,
+  below chance) and is not the length-baseline verdict — the fitted
+  one-parameter opponent scores 0.575 and is read out of the length-probe
+  summary rather than hand-copied.
+
+Every number in the table reproduces the per-grid sections exactly, which is
+the cross-check the table was worth building for on its own. Also added a
+findings index (all 26, claims verbatim from this log, linked to their
+sections) — a 900-line report with numbered findings and no index is the first
+thing a referee complains about.
+
+Coverage discipline in the tool: the reference item set is the widest any store
+covers; a store over a strict subset is a grid in flight and is dropped with
+its coverage printed; a store carrying items *outside* the reference set aborts
+the comparison. A grid caught mid-item (at most the trailing item is
+half-written, since `run_grid` writes an item's two orders consecutively) keeps
+its complete pairs and reports the dropped one.
+
+### Finding 26 — mid-run peeks in this harness are compositionally confounded
+
+Writing the coverage guard exposed something worse than a missing table.
+`stratified_sample` sorts its output by `item_id` and `run_grid` walks that
+order, so a partial grid has finished an **alphabetical prefix of the
+subsets** — not a random subsample. At 45/600 the 7B prefix is 100% Chat
+(`alpacaeval-easy` 20, `-hard` 19, `-length` 6 items) against 12% Chat in the
+full sample; Chat Hard, Reasoning and Safety are absent entirely.
+
+On that prefix the floor itself inverts: pick-the-longer-response scores
+**0.978**, against **0.425** on the full sample. Every judge in the audit —
+including the two 3B judges that beat the fitted length model overall — loses
+to the trivial length heuristic on these items.
+
+Which makes the day-6 peek an artifact. That entry read the 7B prefix's median
+`|s|` (~10 at n=34) against Qwen2.5-3B's *full-sample* 3.64 and inferred "a
+heavily saturated preference readout at 7B". Recomputed on the identical 45
+items:
+
+| judge | median \|s\| full | median \|s\| @45 | sym acc full | sym acc @45 |
+|---|---|---|---|---|
+| qwen2.5-0.5b | 0.24 | 0.24 | 0.568 | 0.556 |
+| qwen2.5-1.5b | 0.50 | 0.61 | 0.502 | 0.644 |
+| qwen2.5-3b | 3.64 | 8.68 | 0.742 | 0.911 |
+| qwen2.5-7b | — | 11.04 | — | 0.956 |
+| llama-3.2-1b | 0.14 | 0.13 | 0.555 | 0.756 |
+| llama-3.2-3b | 0.44 | 0.97 | 0.652 | 0.911 |
+
+3B's median `|s|` on these items is 8.68, not 3.64: the gap to 7B is 1.3x, not
+the ~3x the unmatched comparison implied, and about 68% of the apparent effect
+was composition. Note also how unevenly the restriction moves judges — +0.169
+sym at Qwen-3B, +0.259 at Llama-3B, −0.012 at Qwen-0.5B — so a prefix read is
+not even a uniformly optimistic distortion, it reorders the field.
+
+The fix went into the tooling, not into a note asking future sessions to be
+careful: `master_table --restrict-to <model>` cuts every judge down to the
+items the in-flight grid has finished, so rows are matched by construction, and
+stamps the output with an INTERIM banner plus the measured category skew. The
+full-sample length-baseline verdict is deliberately dropped from the interim
+caption — on a restricted table the floor is a different number and that
+sentence would be false. Live interim numbers stay in
+`results/summary/master_table__minimal__interim_qwen2.5-7b.{json,md}`, never
+pasted into the README, because they change at every checkpoint.
+
+Recorded as a limitation too: a randomized execution order would make partial
+grids interpretable, and is the obvious fix — but applying it now would break
+resume-compatibility with the six stores already collected, so the guard
+stands instead.
+
+89 tests green, ruff clean.
+
+### Next steps (Day 8)
+
+1. **Resume the 7B grid first thing** — `uv run python -m experiments.run_grid
+   --model qwen2.5-7b --rubric minimal --n 600 --seed 0 --threads 4`. It
+   resumes from the store; on a fresh container re-download the pinned GGUF
+   first (`src/judge.py` MODELS carries repo, revision and SHA256; the runner
+   verifies the digest at load and refuses to run without it). Expect ~7 h at
+   this host's rate — plan on it spanning sessions and checkpoint-commit the
+   store before the session ends, as today.
+2. **While it runs, do not start CPU-heavy analyses** — today's bootstraps
+   measurably slowed the grid (load average 5.1 with 4 vCPUs). Writeup work is
+   free; analysis is not.
+3. **When the grid closes**: rerun `summarize`, `master_table`, `scaling_curve`,
+   `length_probe`, `calibration`, `bias_model`, `subset_view`, `compliance_view`
+   over six stores, then write findings 27+ against the questions the 7B point
+   is meant to settle — does the Qwen valley stay closed above 3B; does the
+   B-lean that appeared at 3B keep growing; does 7B beat the fitted length
+   floor by more than 3B's +0.205; is Qwen calibration still broken at the top
+   of the family. Only then restructure the results narrative around the
+   scaling arc (still outstanding from day 6 — the glance table and findings
+   index are the spine it will hang on).
+4. **After 7B**: Llama-3.1-8B as the family counterpart, then the
+   rubric-sensitivity axis (planned experiment 5, the last untouched phase-3
+   item — `detailed` rubric already exists in `src/prompts.py`, so it is purely
+   a compute question: one more grid per model).

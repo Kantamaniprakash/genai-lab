@@ -68,8 +68,19 @@ instruction-following axis for free. Pinned revision + SHA256, verified at load.
    with scale in opposite senses, Llama-3B is a new always-A machine that
    falls below chance on adversarial Chat Hard while hitting 0.889 on
    Chat, and post-debiasing calibration is a family property, findings
-   21–23. Next: Qwen2.5-7B — resumable two-session grid if the host is
-   slow — then Llama-3.1-8B.)*
+   21–23. 2026-08-21: the cross-judge headline table — the spine the
+   arrival-ordered README never had, with per-order accuracy and the
+   paired delta against the length floor, every number reproducing the
+   per-grid sections — plus a findings index; and finding 26, which came
+   out of building its coverage guard: a partial grid in this harness is
+   an alphabetical prefix of the subsets, not a subsample, so the day-6
+   7B peek was composition (matched on the same 45 items, Qwen-3B's
+   median |s| is 8.68, not the 3.64 it was compared against, and the
+   length floor on that prefix is 0.978 against 0.425 overall). Interim
+   reads now go through `master_table --restrict-to`, which matches items
+   across judges and prints the skew. The 7B grid is slow on this host
+   (~0.04 judg/s, ~7 h) and spans sessions; store at 93/1200.
+   Next: finish Qwen2.5-7B, then Llama-3.1-8B.)*
 3. **Analysis axes** — position bias as additive log-odds shift (test the
    structural model); symmetrization debiasing gains; calibration; value over
    length baseline; rubric-prompt sensitivity; category/subset heterogeneity.
