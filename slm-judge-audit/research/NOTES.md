@@ -1058,3 +1058,35 @@ for the legacy Chat-heavy prefix against 723 for the balanced draw —
 essentially equal, so per-judgment cost here is close to composition-independent
 and ETA is a hardware fact. The balanced order neither helps nor hurts wall
 clock; it only fixes what the partial store means.
+
+### Next steps (Day 9)
+
+1. **Resume the 7B grid first thing** — `uv run python -m experiments.run_grid
+   --model qwen2.5-7b --rubric minimal --n 600 --seed 0 --threads 4`. Balanced
+   is now the default order, so the command no longer needs `--order`; it
+   resumes from the store and schedules whatever is most under-represented. On
+   a fresh container, re-download the pinned GGUF first (`src/judge.py` MODELS
+   carries repo, revision and SHA256; the runner verifies the digest at load
+   and refuses to run without it). The launch banner now prints the store's
+   coverage, so the first thing the log says is how readable the store is.
+2. **Keep analysis off the box while a grid is up.** Day 7 measured the
+   contended rate at 0.026 judg/s against 0.04 idle; today's ruff+pytest runs
+   visibly dented the early rate. Writeup work is free, bootstraps are not.
+3. **When the grid closes**: rerun `summarize`, `master_table`,
+   `scaling_curve`, `length_probe`, `calibration`, `bias_model`, `subset_view`,
+   `compliance_view` over six stores, then write findings 28+ against the
+   questions the 7B point is meant to settle — does the Qwen valley stay closed
+   above 3B; does the B-lean that appeared at 3B keep growing; does 7B beat the
+   fitted length floor by more than 3B's +0.205; is Qwen calibration still
+   broken at the top of the family. Only then restructure the results narrative
+   around the scaling arc (outstanding since day 6 — the glance table, findings
+   index and now the schedule section are the spine it will hang on).
+4. **After 7B**: Llama-3.1-8B as the family counterpart — and note it will be
+   the first grid collected entirely under the scheduler, so its partial store
+   is readable from item 55 on, unlike this one. Then the rubric-sensitivity
+   axis (planned experiment 5, the last untouched phase-3 item; `detailed`
+   already exists in `src/prompts.py`, so it is purely a compute question).
+5. **Do not** paste interim 7B numbers into the README. The store still carries
+   the 67-item inherited prefix and converges only by dilution; `master_table
+   --restrict-to qwen2.5-7b` remains the only honest interim read, and it is a
+   matched cross-judge comparison, not a benchmark estimate.
