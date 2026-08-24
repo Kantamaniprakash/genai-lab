@@ -927,3 +927,134 @@ collected without the dense group, and 349 + 16 = 365.
    rubric-sensitivity axis (planned experiment 5, the last untouched phase-3
    item — `detailed` rubric already exists in `src/prompts.py`, so it is purely
    a compute question: one more grid per model).
+
+## 2026-08-24 — Day 8: the partial grid becomes a sample (finding 27)
+
+(Gap 08-22..08-23: no sessions ran. The 7B store was left at 134/1200 by the
+day-7 checkpoint and is where this session picked it up.)
+
+Fresh container again: `uv sync --group judge` (llama-cpp-python resolved to a
+wheel this time, no 6-minute compile), the pinned 7B GGUF re-downloaded and
+SHA256 re-verified against the registry pin (`65b8fcd9…1423`, 4.68 GB), and the
+RewardBench parquet re-fetched and verified. The runner re-derived `n_ctx` 2784
+from `max_prompt_tokens` 2768, byte-identical to the sidecar written on day 6 —
+the context sizing is a property of (n, seed, rubric), which is what lets a grid
+span sessions at all.
+
+### The plan was "resume the grid first thing"; it changed after ten minutes
+
+Day 7 closed with a note to relaunch immediately and not to touch anything
+CPU-heavy while it ran. Before launching I went to re-read how resume decides
+what is left, and found the thing day 7 had assumed without checking.
+
+`ResultStore.existing_keys` returns a **set** of `(model, rubric, order,
+item_id)`, and `run_grid` filters candidate prompts against that set.
+`assemble_pairs` groups records by `item_id` and iterates `sorted(by_item)`.
+So the order judgments are executed in is not observable anywhere: not by
+resume, not by any analysis, not by any figure. The day-7 limitation —
+"a randomized execution order would make partial grids interpretable and is the
+obvious fix; it is not applied retroactively because it would break
+resume-compatibility with the six stores already collected" — was simply
+false, and it had been load-bearing enough to keep finding 26's root cause in
+place for a whole session. The guard (`master_table --restrict-to`) was built
+instead of the fix.
+
+That is worth being precise about, because the guard and the fix do different
+things. Matching item sets across judges recovers **comparability**; it can
+never recover **representativeness**. Six judges matched on an all-Chat prefix
+are six judges measured on Chat. No amount of care at read time fixes a store
+whose composition is wrong — only the schedule can.
+
+So: write the scheduler first, then launch. Cost about forty minutes of grid
+time, against every future partial read of this store and every grid after it.
+
+### `src/schedule.py` — deficit scheduling
+
+At each step, serve the stratum with the largest proportional deficit
+
+    deficit_s = p_s * (D + 1) - d_s
+
+(share `p_s`, finished in stratum `d_s`, total finished `D`) — largest-remainder
+apportionment run incrementally. Ties break by subset name, items inside a
+subset keep `item_id` order, so a schedule is a deterministic function of
+(sample, finished set) with no RNG anywhere. The scheduling unit stays the
+*item*, both orders consecutively, because the swap pair is what every analysis
+consumes; an item left half-judged by an interrupted run is scheduled first on
+the next run, so a store carries at most one orphan and only while a run is up.
+
+The bound is the reason to prefer this over a seeded shuffle. Deficits sum to
+exactly 1 at every step, so the served stratum's deficit is at most 1 and drops
+to at most 0 once served: no subset is ever more than one item from its
+proportional share, at any prefix, in **every** realization. A shuffle gives
+that in expectation, which is the wrong guarantee when the object being read is
+one store rather than an ensemble.
+
+Checked rather than assumed, since assuming is what produced the day-7 error:
+against a greedy rule that directly minimizes total-variation distance at each
+step, the apportionment rule is not merely competitive but **identical at every
+step to floating-point noise** — max deviation 1.1e-16 from scratch and 5.6e-16
+resuming the real 67-item prefix. The cheap principled rule is also the optimal
+one here, so there is no tradeoff to write up.
+
+**Finding 27 — a partial grid is a scheduling choice, not a fact of the
+harness, and the objection that kept the old order was false.** Under the
+legacy `item_id` order a store sits 0.497 in total-variation distance from the
+benchmark's subset composition at the halfway point (300/600 items) and first
+stays under 0.05 only at item 569 of 600 — unusable for essentially the whole
+run. Deficit scheduling is under 0.05 from item 55 and holds every subset
+within one item of proportional throughout.
+
+### What this cannot do, and the store that proves it
+
+The 67 items already judged under the old order cannot be un-judged. The
+scheduler makes everything it *adds* proportional, so the store's composition
+converges to the target only by dilution: category total-variation 0.746 at the
+handover, 0.090 at 300 items, 0.000 at completion. There is a matching exact
+statement for the drift metric — an over-represented stratum with `d` items at
+share `p` falls back inside the one-item bound only at `D > (d-1)/p`, and the
+scheduler recovers exactly there and not one item later (asserted as a test).
+
+So the 7B row is still not a benchmark number, and today did not make it one.
+It is now merely *becoming* one at the fastest rate arithmetic allows, which
+day 7's ordering was not doing at all. Interim reads still go through
+`master_table --restrict-to`, and the limitation is rewritten rather than
+deleted.
+
+### Built
+
+- `src/schedule.py`: `balanced_order`, `coverage` (per-stratum drift plus
+  total-variation distance from target), `format_coverage`.
+- `experiments/run_grid.py`: `--order balanced|sorted`, default balanced;
+  `sorted` reproduces a historical run. Coverage is printed at launch and
+  every 20 judgments at the category level, so the log itself says how
+  readable the store currently is. `execution_order` recorded in the sidecar.
+  `n_ctx` sizing explicitly documented as computed over the whole sample, never
+  the scheduled subset — otherwise a long grid's context could drift between
+  sessions.
+- `experiments/schedule_coverage.py` + `results/figures/schedule_coverage.png`:
+  the three trajectories (legacy, balanced, balanced-resuming-the-prefix) at
+  both stratum levels. It runs no judgments and reads no store — a stable
+  artifact of (sample, schedule) that does not change as the grid advances,
+  unlike the interim master table.
+- 29 new tests (119 total, 1 skipped without a GGUF; ruff clean). Two of my
+  first-draft assertions were wrong about the recovery dynamics and were
+  replaced by derived ones rather than loosened: the rare-subset wait is
+  exactly the deficit crossing `(6/96)(D+1) - 5 >= (90/96)(D+1) - (D-5)`, i.e.
+  84th; the bound recovers exactly at `floor((d-1)/p) + 1 - d`, i.e. 204th.
+  Total-variation contraction is *not* strictly monotone — rounding an integer
+  item into a share can add back a fraction of one item's distance in the tail
+  — so the test asserts no step ever adds back a whole item's worth, which is
+  the true statement.
+
+### Host and grid state
+
+The host prefills at **52.4 tok/s** at 7B (mean prefill 13.79 s over the
+session's judgments), against 30.1 tok/s for the 134 records inherited from
+days 6–7 — a mid-speed container by the per-host ledger, roughly day 6's.
+
+Worth recording because I nearly wrote the opposite: the speedup is **host
+throughput, not the new schedule's item mix**. Mean prompt length is 703 tokens
+for the legacy Chat-heavy prefix against 723 for the balanced draw —
+essentially equal, so per-judgment cost here is close to composition-independent
+and ETA is a hardware fact. The balanced order neither helps nor hurts wall
+clock; it only fixes what the partial store means.

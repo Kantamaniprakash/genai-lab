@@ -79,7 +79,21 @@ instruction-following axis for free. Pinned revision + SHA256, verified at load.
    length floor on that prefix is 0.978 against 0.425 overall). Interim
    reads now go through `master_table --restrict-to`, which matches items
    across judges and prints the skew. The 7B grid is slow on this host
-   (~0.04 judg/s, ~7 h) and spans sessions; store at 93/1200.
+   (~0.04 judg/s, ~7 h) and spans sessions; store at 134/1200.
+   2026-08-24: finding 27 — the root cause behind finding 26 got fixed
+   rather than guarded. `src/schedule.py` serves the subset with the
+   largest proportional deficit, so a partial grid is a stratified sample
+   at every prefix (under 0.05 total-variation distance from item 55,
+   against item 569 for the legacy `item_id` order) and no subset ever
+   drifts more than one item from proportional. Day 7's reason for not
+   doing this — that reordering would break resume-compatibility — was
+   false and had never been checked: resume is keyed on the *set* of
+   finished judgments and analyses group by `item_id`, so execution order
+   is unobservable. Matching item sets recovers comparability between
+   judges; only the schedule recovers representativeness of the benchmark.
+   The 7B store's inherited 67 sorted-order items cannot be un-judged, so
+   its composition converges by dilution only and the 7B row stays a
+   non-claim until the grid completes.
    Next: finish Qwen2.5-7B, then Llama-3.1-8B.)*
 3. **Analysis axes** — position bias as additive log-odds shift (test the
    structural model); symmetrization debiasing gains; calibration; value over

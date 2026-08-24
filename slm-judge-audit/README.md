@@ -93,7 +93,9 @@ benchmark (419 instances with objective gold preferences), so the adversarial
 instruction-following axis is embedded in the same artifact — LLMBar is
 deliberately *not* loaded separately, which would double-count it. Stratified
 subsampling (largest-remainder by subset, seeded) preserves composition for
-budget-limited grids.
+budget-limited grids, and the grid's *execution* order preserves it again at
+every prefix, so a grid read before it finishes is still a sample of the
+benchmark ([the schedule, not the guard](#the-schedule-not-the-guard)).
 
 ## Results at a glance
 
@@ -159,12 +161,14 @@ left panel is the valley; the right panel is why raw accuracy hides it.*
 
 ### Reading a grid that is still running
 
-`stratified_sample` returns its items sorted by `item_id` and `run_grid` walks
-them in that order, so a grid caught mid-run has finished an **alphabetical
-prefix of the subsets**, not a random subsample. At low coverage that prefix
-can sit entirely inside one category, which makes any mid-run peek compared
-against another judge's *overall* number a comparison between two different
-benchmarks.
+A 7B grid takes about seven hours on this hardware, so it spans sessions and
+is read while incomplete more often than not. Until 2026-08-24
+`stratified_sample` returned its items sorted by `item_id` and `run_grid`
+walked them in that order, so a grid caught mid-run had finished an
+**alphabetical prefix of the subsets**, not a random subsample. At low coverage
+that prefix sits entirely inside one category, which makes any mid-run peek
+compared against another judge's *overall* number a comparison between two
+different benchmarks.
 
 - **Finding 26 — mid-run peeks in this harness are compositionally confounded,
   and the audit already made that mistake once.** At 45/600 items the 7B
@@ -192,15 +196,75 @@ pick-the-longer-response floor, which swings further than any judge — from
 Qwen2.5-7B has only a right-hand point because its full-sample row does not
 exist yet.*
 
-The remedy is in the tooling rather than in a note asking future runs to be
-careful: `python -m experiments.master_table --restrict-to qwen2.5-7b` cuts
-every judge down to the items the in-flight grid has finished, so the rows are
-matched by construction, and stamps the output with the measured category skew
-and an INTERIM banner. The committed
+The first remedy was in the reading rather than the running:
+`python -m experiments.master_table --restrict-to qwen2.5-7b` cuts every judge
+down to the items the in-flight grid has finished, so the rows are matched by
+construction, and stamps the output with the measured category skew and an
+INTERIM banner. The committed
 `results/summary/master_table__minimal__interim_qwen2.5-7b.{json,md}` is the
 45-item snapshot finding 26 was computed on; re-running the command regenerates
 it at whatever coverage the grid has reached, which is why those numbers are
 not pasted into this report. None of them is a claim about the 7B judge.
+
+Matching rows is the right guard, but it only ever recovers *comparability
+between judges* — never representativeness of the benchmark. Restricted to an
+all-Chat prefix, six matched judges are six judges measured on Chat. The
+composition is a property of the schedule, so that is where it is now fixed.
+
+#### The schedule, not the guard
+
+`src/schedule.py` chooses the next item to close the largest proportional
+deficit `deficit_s = p_s * (D + 1) − d_s`, for stratum share `p_s`, items
+finished in it `d_s`, and total finished `D` — largest-remainder apportionment
+run incrementally, with ties broken by subset name and items inside a subset
+kept in `item_id` order, so a schedule is reproducible from (sample, finished
+set) with no RNG. Both presentation orders of an item still run consecutively,
+because the swap pair is the unit every analysis consumes.
+
+Because the deficits sum to exactly 1 at every step, the served stratum's
+deficit is at most 1 and drops to at most 0 once served: **no subset ever
+drifts more than one item from its proportional share, at any prefix.** That
+is a bound on every realization, which a seeded shuffle would only deliver in
+expectation — the distinction that matters when the thing being read is one
+store, not an ensemble.
+
+- **Finding 27 — a partial grid is a scheduling choice, not a fact of the
+  harness, and the objection that kept the old order was false.** Under the
+  legacy order the store sits **0.497** in total-variation distance from the
+  benchmark's subset composition at the halfway point (300/600 items) and
+  first stays under 0.05 only at item **569** of 600 — the ordering is
+  unusable for essentially the entire run. Deficit scheduling is under 0.05 from item
+  **55** onward and holds every subset within one item of proportional
+  throughout; against a greedy rule that directly minimizes total-variation at
+  each step it is not merely close but **identical at every step to
+  floating-point noise** (max deviation 5.6e-16 on the audit sample, both from
+  scratch and resuming the inherited prefix), so the apportionment rule gives
+  up nothing to direct optimization of the quantity being read. The 2026-08-21 entry
+  had recorded that reordering "would break resume-compatibility with the six
+  stores already collected" and kept the alphabetical order on that basis.
+  That was wrong and was never checked: `ResultStore` resumes on the *set* of
+  `(model, rubric, order, item_id)` keys and `assemble_pairs` groups records
+  in `item_id` order, so execution order is not observable by any analysis in
+  this project. `--order sorted` still reproduces a historical run.
+
+![representativeness of a partial grid under each execution order](results/figures/schedule_coverage.png)
+
+*Total-variation distance between a partial store's composition and the
+composition it is meant to be sampling, after every item, at both stratum
+levels. Red is the legacy `item_id` order — the staircase is whole subsets
+being completed one at a time, and it is still 0.50 away at the halfway mark.
+Blue is deficit scheduling from scratch: the first few items cannot be
+proportional at all (one finished item is 100% of one subset), then the
+distance collapses as fast as integrality permits. Yellow is the actual
+Qwen2.5-7B store, which inherited 67 sorted-order items before the scheduler
+existed; those cannot be un-judged, so its distance can only dilute as the
+store grows — 0.746 at the handover, 0.090 at 300 items, 0 at completion.
+Regenerated by `experiments/schedule_coverage.py`, which runs no judgments.*
+
+The inherited prefix is why the 7B row is still not readable as a benchmark
+number even now: the store is representative *in what it has added*, not in
+what it holds. Interim reads continue to go through `master_table
+--restrict-to`, and the honest statement of the 7B point remains "not yet".
 
 ### Findings index
 
@@ -238,6 +302,7 @@ one's evidence, dated.
 | 24 | Subset accuracy ordering is the judge's local length-lean read through the subset's gold-length composition; the audit's weakest judge is its best formal-math judge. | [The per-subset view](#where-the-category-averages-hide-the-story--the-per-subset-view) |
 | 25 | The compliant-stratum penalty is real but category-localized and family × scale-dependent. | [The per-subset view](#where-the-category-averages-hide-the-story--the-per-subset-view) |
 | 26 | Mid-run peeks in this harness are compositionally confounded, and the audit already made that mistake once. | [Reading a grid that is still running](#reading-a-grid-that-is-still-running) |
+| 27 | A partial grid is a scheduling choice, not a fact of the harness, and the objection that kept the old order was false. | [The schedule, not the guard](#the-schedule-not-the-guard) |
 
 ## First results — Qwen2.5-0.5B, minimal rubric, n=600, both orders
 
@@ -902,15 +967,17 @@ Recorded as they were hit, not reconstructed afterwards (dated entries in
   cross-fitted, but its bootstrap resamples fixed per-item LOO scores —
   correction-refit variance is not resampled (negligible at group-mean
   scale, noted in the module docstring).
-- **Partial grids are ordered, not sampled.** The execution order is
-  `item_id`-sorted, so an in-flight store covers an alphabetical prefix of the
-  subsets and is unusable as a subsample of the benchmark (finding 26). Every
-  cross-judge script refuses to mix item sets for this reason, and interim
-  reads go through `master_table --restrict-to`, which matches items across
-  judges and prints the category skew. A randomized execution order would make
-  partial grids interpretable and is the obvious fix; it is not applied
-  retroactively because it would break resume-compatibility with the six
-  stores already collected under the current order.
+- **One store still carries an unrepresentative prefix.** Execution order is
+  coverage-balanced since 2026-08-24 (finding 27), so partial grids started
+  under the scheduler are stratified samples at every prefix. The five
+  completed grids are unaffected — a finished grid is the full sample whatever
+  order it was walked in — but the in-flight Qwen2.5-7B store inherited 67
+  items judged under the old `item_id` order, and those cannot be un-judged.
+  Its composition therefore converges to the target only by dilution (category
+  total-variation 0.746 at the handover, 0.090 at 300 items, 0 at completion),
+  and until it completes, 7B numbers are read only through `master_table
+  --restrict-to`, matched against the other judges, and are not benchmark
+  estimates. Every cross-judge script still refuses to mix item sets.
 - **Per-host throughput variance.** Identical container specs prefill up to
   ~3x apart across sessions (measured 2026-07-23: ~40 vs ~120 tok/s at 3B,
   same nominal 4-vCPU class). Timing numbers in this README are per-run
@@ -927,6 +994,8 @@ src/data.py       pinned RewardBench download, validation, stratified sampling
 src/prompts.py    rubric templates, order swap, single-token verdict design
 src/judge.py      llama.cpp runner: chat templates, pinned GGUFs, logit
                   readout, resumable JSONL result stores
+src/schedule.py   coverage-balanced execution order: a partial grid is a
+                  stratified sample at every prefix, not an alphabetical one
 src/analysis.py   swap-pair assembly, s/b decomposition, paired bootstrap
 src/baselines.py  always-A / longer-response / random floors
 src/length_probe.py  conditional-logit value-over-length probe (nested
@@ -935,17 +1004,20 @@ src/calibration.py   folded confidence views, tie-safe equal-mass bins, ECE
 src/bias_model.py    variance decomposition of b_i + exact-LOO single-order
                   correction ladder (additive-shift test)
 experiments/      run_grid, summarize, master_table, prefix_skew,
-                  make_figures, compliance_view, scaling_curve, length_probe,
-                  calibration, bias_model, subset_view
+                  schedule_coverage, make_figures, compliance_view,
+                  scaling_curve, length_probe, calibration, bias_model,
+                  subset_view
 results/raw/      one JSONL store per (model, rubric) + provenance sidecar
 results/summary/  quick-look JSON per store (+ __compliance, length_probe,
                   calibration, bias_model, subset_view, master_table —
                   the last also rendered as the markdown the README embeds)
 results/figures/  committed PNGs, regenerable from raw stores
-tests/            90 tests (schema, templates, readout arithmetic, store
-                  resume, decomposition, bootstrap, floors, compliance
-                  view, length probe, calibration, bias model, subset
-                  view, cross-judge table, figure layout, model smoke)
+tests/            119 tests, 1 skipped without a pinned GGUF present
+                  (schema, templates, readout arithmetic, store
+                  resume, execution-order proportionality, decomposition,
+                  bootstrap, floors, compliance view, length probe,
+                  calibration, bias model, subset view, cross-judge table,
+                  figure layout, model smoke)
 research/NOTES.md living research log
 ```
 
@@ -954,7 +1026,7 @@ research/NOTES.md living research log
 ```bash
 uv sync                      # analysis deps (numpy, pyarrow, matplotlib)
 uv run python -m src.data    # fetch pinned parquet, print composition
-uv run --group dev pytest    # 90 tests
+uv run --group dev pytest    # 119 tests (1 skipped without a GGUF)
 uv sync --group judge        # llama-cpp-python (compiles ~5 min on 4 cores)
 # download the pinned GGUF named in src/judge.py MODELS into models/, then:
 uv run python -m experiments.run_grid --model qwen2.5-0.5b --rubric minimal --n 600 --seed 0
@@ -962,6 +1034,7 @@ uv run python -m experiments.summarize   # per-store tables in results/summary/
 uv run python -m experiments.master_table      # cross-judge headline table (>=1 store)
 uv run python -m experiments.master_table --restrict-to qwen2.5-7b   # matched interim read on an in-flight grid
 uv run python -m experiments.prefix_skew --interim-for qwen2.5-7b    # what that prefix does to every judge
+uv run python -m experiments.schedule_coverage                       # representativeness of a partial grid, per execution order
 uv run python -m experiments.make_figures
 uv run python -m experiments.compliance_view   # readout-validity conditioning
 uv run python -m experiments.scaling_curve     # cross-model figure (>=2 stores)
