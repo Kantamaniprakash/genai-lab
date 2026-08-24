@@ -1048,16 +1048,35 @@ deleted.
 
 ### Host and grid state
 
-The host prefills at **52.4 tok/s** at 7B (mean prefill 13.79 s over the
-session's judgments), against 30.1 tok/s for the 134 records inherited from
-days 6–7 — a mid-speed container by the per-host ledger, roughly day 6's.
+The host prefills at **54.6 tok/s** at 7B over the session's 306 judgments,
+against 30.1 tok/s for the 134 records inherited from days 6–7 — a mid-speed
+container by the per-host ledger, roughly day 6's.
 
-Worth recording because I nearly wrote the opposite: the speedup is **host
-throughput, not the new schedule's item mix**. Mean prompt length is 703 tokens
-for the legacy Chat-heavy prefix against 723 for the balanced draw —
-essentially equal, so per-judgment cost here is close to composition-independent
-and ETA is a hardware fact. The balanced order neither helps nor hurts wall
-clock; it only fixes what the partial store means.
+Per-judgment throughput went 0.043 → 0.107 judg/s, a 2.5x speedup, and it
+decomposes cleanly: **1.81x from host tok/s and 1.38x from shorter prompts**
+(mean 703 tokens for the legacy Chat-heavy prefix against 510 for the balanced
+draw). So the balanced order is also, incidentally, cheaper per judgment here —
+RewardBench's Chat subsets carry the longest responses in the benchmark, and
+the alphabetical order front-loaded exactly those.
+
+Recorded because I got this wrong mid-session and had written the opposite.
+At 47 judgments in, the balanced draw's mean prompt was 723 tokens —
+indistinguishable from the prefix's 703 — and I concluded per-judgment cost was
+composition-independent and the speedup purely hardware. Those 47 were the
+deficit rule's opening burst into `math-prm` and `xstest-should-respond`, whose
+chain-of-thought responses are long; the next 259 averaged 471 tokens. Reading
+a trend off the first few percent of a run, in the exact session that built a
+scheduler because prefixes of runs are unrepresentative. The claim is corrected
+above rather than deleted, and n=306 is what it now rests on.
+
+**Session close.** Grid stopped deliberately at a clean boundary rather than
+left to die with the container: store at **440/1200 judgments, 220 complete
+items, zero orphans**, argmax compliance **1.000** across all 440. Coverage
+distance from the target composition fell from 0.858 to **0.167** at subset
+level and 0.746 to **0.148** at category level; max subset drift 17.77 → 12.67
+items. 306 judgments added this session against 87 on day 7 and 47 on day 6.
+The remaining 760 judgments are ~2 h at this host's rate. The store resumes
+untouched — that is the whole point of the protocol.
 
 ### Next steps (Day 9)
 
