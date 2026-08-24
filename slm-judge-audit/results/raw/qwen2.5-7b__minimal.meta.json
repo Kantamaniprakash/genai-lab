@@ -1,5 +1,6 @@
 {
   "chat_template": "chatml",
+  "execution_order": "balanced",
   "llama_cpp_python": "0.3.34",
   "max_prompt_tokens": 2768,
   "model_file": "Qwen2.5-7B-Instruct-Q4_K_M.gguf",
