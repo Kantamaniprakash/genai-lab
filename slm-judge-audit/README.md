@@ -222,26 +222,31 @@ set) with no RNG. Both presentation orders of an item still run consecutively,
 because the swap pair is the unit every analysis consumes.
 
 Because the deficits sum to exactly 1 at every step, the served stratum's
-deficit is at most 1 and drops to at most 0 once served: **no subset ever
-drifts more than one item from its proportional share, at any prefix.** That
-is a bound on every realization, which a seeded shuffle would only deliver in
-expectation — the distinction that matters when the thing being read is one
-store, not an ensemble.
+deficit is at most 1 and drops to at most 0 once served: in a grid started
+under the scheduler, **no subset ever drifts more than one item from its
+proportional share, at any prefix.** That is a bound on every realization,
+which a seeded shuffle would only deliver in expectation — the distinction
+that matters when the thing being read is one store, not an ensemble. A grid
+that *inherits* a skew is the one case the bound does not cover on contact:
+over-judged items cannot be un-judged, so the excess can only dilute, and the
+scheduler recovers the bound exactly at `D > (d − 1) / p` for an inherited `d`
+items at share `p` — the earliest arithmetic allows, asserted as a test.
 
 - **Finding 27 — a partial grid is a scheduling choice, not a fact of the
   harness, and the objection that kept the old order was false.** Under the
   legacy order the store sits **0.497** in total-variation distance from the
   benchmark's subset composition at the halfway point (300/600 items) and
   first stays under 0.05 only at item **569** of 600 — the ordering is
-  unusable for essentially the entire run. Deficit scheduling is under 0.05 from item
-  **55** onward and holds every subset within one item of proportional
-  throughout; against a greedy rule that directly minimizes total-variation at
-  each step it is not merely close but **identical at every step to
-  floating-point noise** (max deviation 5.6e-16 on the audit sample, both from
-  scratch and resuming the inherited prefix), so the apportionment rule gives
-  up nothing to direct optimization of the quantity being read. The 2026-08-21 entry
-  had recorded that reordering "would break resume-compatibility with the six
-  stores already collected" and kept the alphabetical order on that basis.
+  unusable for essentially the entire run. Deficit scheduling is under 0.05
+  from item **55** onward and holds every subset within one item of
+  proportional throughout; against a greedy rule that directly minimizes
+  total-variation at each step it is not merely close but **identical at every
+  step to floating-point noise** (max deviation 5.6e-16 on the audit sample,
+  both from scratch and resuming the inherited prefix), so the apportionment
+  rule gives up nothing to direct optimization of the quantity being read.
+  The 2026-08-21 entry had recorded that reordering "would break
+  resume-compatibility with the six stores already collected" and kept the
+  alphabetical order on that basis.
   That was wrong and was never checked: `ResultStore` resumes on the *set* of
   `(model, rubric, order, item_id)` keys and `assemble_pairs` groups records
   in `item_id` order, so execution order is not observable by any analysis in
