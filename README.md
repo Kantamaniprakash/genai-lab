@@ -11,11 +11,11 @@ Hands-on experiments with current Gen AI techniques — RAG, agents, evals, fine
 
 <!-- auto-generated from research/NOTES.md by scripts/sync_latest.py; do not hand-edit -->
 
-**2026-08-21 — Day 7: the cross-judge table, and what a partial grid is not (finding 26)**
+**2026-08-24 — Day 8: the partial grid becomes a sample (finding 27)**
 
-- Finding 26 — mid-run peeks in this harness are compositionally confounded.
+- Finding 27 — a partial grid is a scheduling choice, not a fact of the harness, and the objection that kept the old order was false.
 
-[Full entry →](slm-judge-audit/research/NOTES.md#2026-08-21--day-7-the-cross-judge-table-and-what-a-partial-grid-is-not-finding-26)
+[Full entry →](slm-judge-audit/research/NOTES.md#2026-08-24--day-8-the-partial-grid-becomes-a-sample-finding-27)
 <!-- latest-end -->
 
 ![Symmetrized and raw judge accuracy vs parameter count, with the bias-versus-signal race](slm-judge-audit/results/figures/scaling__minimal.png)
