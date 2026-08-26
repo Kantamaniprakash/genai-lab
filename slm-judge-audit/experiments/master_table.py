@@ -114,6 +114,30 @@ def fitted_length_note(rubric: str = "minimal") -> str:
     return f" and scores {accs.pop():.3f} on these items"
 
 
+def fitted_length_verdict(rubric: str = "minimal") -> str:
+    """Which judges beat the fitted length model, read from the probe summary.
+
+    A judge beats it when its overall joint − length-only accuracy delta has a
+    95% CI above zero. The earlier caption hardcoded "only the two 3B judges",
+    which silently went stale the day the 7B grid completed — the verdict is
+    now computed from the same summary the number comes from."""
+    path = SUMMARY_DIR / f"length_probe__{rubric}.json"
+    if not path.exists():
+        return ""
+    with open(path) as f:
+        models = json.load(f)["models"]
+    winners = sorted(
+        key for key, m in models.items()
+        if m["overall"]["acc_joint_minus_length"]["ci95"][0] > 0
+    )
+    if not winners:
+        return " No judge measured so far beats that one."
+    names = ", ".join(f"`{w}`" for w in winners)
+    return (f" Of the {len(models)} judges measured, only {names} beat that "
+            f"one (overall joint − length-only accuracy, 95% CI above zero; "
+            f"see the value-over-length section).")
+
+
 def composition_note(restricted: Sequence[str], full: Sequence[str],
                      category_of: Callable[[str], str]) -> str:
     """How badly the restricted item set misrepresents the full sample.
@@ -215,8 +239,8 @@ def render_markdown(rows: dict[str, dict], floors: dict, rubric: str, n_items: i
             f"below-chance floor is a weak test, and this column is not the "
             f"length-baseline verdict: the real opponent is the *fitted* "
             f"one-parameter length model, which is free to learn the "
-            f"anti-verbosity direction{fitted_length_note(rubric)}. Only the "
-            f"two 3B judges beat that one (findings 13–14, 18, 22)."
+            f"anti-verbosity direction{fitted_length_note(rubric)}."
+            f"{fitted_length_verdict(rubric)}"
         )
     return header + "\n".join(lines) + "\n\n" + caption + "\n"
 

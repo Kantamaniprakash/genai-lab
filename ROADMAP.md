@@ -94,7 +94,17 @@ instruction-following axis for free. Pinned revision + SHA256, verified at load.
    The 7B store's inherited 67 sorted-order items cannot be un-judged, so
    its composition converges by dilution only and the 7B row stays a
    non-claim until the grid completes.
-   Next: finish Qwen2.5-7B, then Llama-3.1-8B.)*
+   2026-08-26: the 7B grid closed at 1200/1200 (four sessions, compliance
+   1.000 throughout) — findings 28–31: the Qwen arc becomes
+   0.568 → 0.502 → 0.742 → 0.837 and 7B is the audit's first
+   signal-dominant judge (|b| > |s| on only 26.8% of items); the flip-rate
+   inversion completes (the best judge posts the highest flip rate, 0.732);
+   7B beats the fitted length floor in every category, adversarial Chat
+   Hard included, by the audit's largest margin; the one-call debiasing
+   ceiling falls again (68% → 47% → 25% of the symmetrization gain within
+   Qwen) and Qwen stays overconfident at its top size.
+   Next: Llama-3.1-8B, the family counterpart — the last planned scaling
+   point.)*
 3. **Analysis axes** — position bias as additive log-odds shift (test the
    structural model); symmetrization debiasing gains; calibration; value over
    length baseline; rubric-prompt sensitivity; category/subset heterogeneity.

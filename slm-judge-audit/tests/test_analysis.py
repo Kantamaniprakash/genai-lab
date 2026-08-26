@@ -356,9 +356,10 @@ def test_interim_markdown_is_labelled_and_drops_full_sample_verdict():
     assert "alphabetical prefix" in md
     # The length-baseline verdict is a full-sample claim and must not ride
     # along on a restricted table, where the floor itself is a different number.
-    assert "findings 13–14" not in md
+    assert "the real opponent is the *fitted*" not in md
     full = render_markdown(rows, {"longer_chars": 0.9}, "minimal", 4)
-    assert "findings 13–14" in full and not full.startswith("**INTERIM")
+    assert "the real opponent is the *fitted*" in full
+    assert not full.startswith("**INTERIM")
 
 
 def test_declutter_separates_collided_labels_without_moving_anchors():

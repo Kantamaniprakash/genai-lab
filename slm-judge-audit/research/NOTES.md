@@ -1109,3 +1109,125 @@ untouched — that is the whole point of the protocol.
    the 67-item inherited prefix and converges only by dilution; `master_table
    --restrict-to qwen2.5-7b` remains the only honest interim read, and it is a
    matched cross-judge comparison, not a benchmark estimate.
+
+## 2026-08-26 — Day 9: the 7B grid closes; findings 28–31
+
+(A session ran on 08-25 that this log does not narrate: its checkpoint commits
+carry the grid from 440 to 1166/1200 over ~4.5 h, but the session ended without
+a NOTES entry — presumably the container died after the last checkpoint. The
+commit trail is the record for that day; nothing else appears to have been
+touched. This is what checkpoint-committing the store every few minutes is
+for.)
+
+Fresh container: `uv sync --group judge` resolved llama-cpp-python to a wheel,
+the pinned 7B GGUF re-downloaded and SHA256 re-verified against the registry
+pin (`65b8fcd9…1423`, 4.68 GB), RewardBench parquet re-fetched and verified,
+122 tests green before touching anything.
+
+### The grid is done
+
+The remaining 34 judgments ran in 4.1 min (0.14 judg/s — the fastest host of
+the four this grid has seen; per-host variance to the end). Store closed at
+**1200/1200 judgments, 600 complete items, zero orphans, argmax compliance
+1.000 across all 1,200** — Qwen format discipline holds at a fourth size, and
+the final coverage print reads total-variation 0.000, max drift 0.00 items.
+The audit's first multi-session grid: 47 judgments on day 6, 87 on day 7, 306
+on day 8, 726 on the unlogged 08-25 session, 34 today, spanning 2026-08-01 to
+2026-08-26.
+
+### Findings (all analyses rerun over six stores; four questions, four answers)
+
+**Finding 28 — the valley resolves into a climb, and 7B is the audit's first
+signal-dominant judge.** Sym acc 0.837 [0.807, 0.867]; paired +0.095
+[+0.058, +0.132] over Qwen-3B, +0.335 over the 1.5B valley floor, +0.185 over
+Llama-3B. The Qwen arc is 0.568 → 0.502 → 0.742 → 0.837. Structurally new:
+|b| > |s| on only 26.8% of items (62.0–99.8% for every other judge); median
+|s| 9.08 vs median |b| 2.78 — signal 3.3x bias where even the 3B had bias
+1.7x signal. Best in all four categories at once (Chat 0.944, Reasoning
+0.854, Safety 0.838, Chat Hard 0.696) — no earlier judge held the lead
+anywhere near uniformly.
+
+**Finding 29 — the flip-rate inversion completes: the audit's best judge
+posts its highest flip rate.** Per-order accuracy 0.762/0.800 — the first
+near-symmetric pair in the audit. The 3B's B-lean did *not* keep growing:
+median b collapses −5.55 → +0.23 (b > 0 on 52.0%), but dispersion stays
+(sd 4.89, second only to 3B's 5.47) — the bias lost its direction, not its
+size; it is now per-item idiosyncrasy. Consequence: flip rate 0.732, the
+audit's highest, on the audit's best judge — a content-following verdict
+names a different letter whenever the responses swap seats. Both extremes of
+the black-box consistency metric now belong to its two worst possible
+readings (0.002 on the worst-biased judge, 0.732 on the best judge).
+
+**Finding 30 — 7B beats the fitted length baseline by the audit's largest
+margin, significantly in every category.** β_s +1.853 [+1.652, +2.126];
+joint − length-only +0.272 [+0.230, +0.327] (3B: +0.205). Per category:
+Chat +0.153, Chat Hard +0.082 [+0.011, +0.201] (first significant
+adversarial delta in the audit), Reasoning +0.259, Safety +0.432 — all CIs
+exclude 0, a first. Overall sign-vs-length agreement 0.489 (the most
+length-neutral judge measured); math-prm agreement 0.233 with subset sym
+0.778 [0.69, 0.86] — anti-length pointed where the subset rewards it, like
+the 0.5B's 0.844, but this time backed by the audit's largest
+length-controlled Reasoning coefficient (β_s +2.132).
+
+**Finding 31 — the one-call correction ceiling keeps falling as judges
+improve, and Qwen overconfidence survives to the top of the family.**
+Additive shift rejected at a sixth scale (category R² 0.115; subset+length
+0.328, residual sd 4.01). Ladder: best fitted rung 0.795 [0.768, 0.821]
+(regression), significantly below the oracle (Δ −0.042 [−0.060, −0.022]) —
+~25% of the symmetrization gain, extending finding 20's arc within Qwen:
+68% (0.5B) → 47% (3B) → 25% (7B). The deployment inversion is worth
+recording: the 7B's *uncorrected* single call (0.781) already beats every
+other judge's two-call oracle. Calibration: sym ECE 0.121 [0.093, 0.150],
+mean conf 0.958 vs acc 0.837 — milder than 3B's 0.153, still overconfident;
+finding 23's family split is now exact at four Qwen sizes (only 0.5B
+calibrated) vs two Llama sizes (both calibrated).
+
+### Tooling: the caption that would have gone stale today, and did
+
+`master_table`'s generated caption hardcoded "Only the two 3B judges beat
+that one" — written on day 7, false the moment the 7B probe ran. The verdict
+is now computed from the length-probe summary (winners = overall
+joint − length-only CI above zero), so the sentence updates itself when the
+8B grid lands. New `tests/test_master_table.py` pins winners-from-CIs,
+no-winners, missing-summary, and sort order; the one existing test that
+asserted the hardcoded string now asserts the paragraph's presence instead.
+123 tests total (122 passed, 1 skipped without a GGUF), ruff clean.
+
+### Writeup
+
+README: new section "The 7B tier — the audit's first signal-dominant judge"
+(3B-vs-7B table, findings 28–31, decomposition figure and its distinctive
+shape — centered on b = 0, stretched along s); glance table regenerated with
+the 7B row; status paragraph rewritten around six grids and findings 1–31;
+"how to read it" bullets updated (the bias > signal bullet now has its
+counterexample); findings index +28–31; subset highlight table gained the
+7B column with a note that findings 24–25 predate it; the
+unrepresentative-prefix limitation rewritten in the past tense; prefix_skew
+caption updated. Root README's flagship section updated to six grids and
+the completed arc. All cross-judge figures regenerated from the six stores
+(scaling curve, probe forest, calibration, bias model, subset forest,
+7B decomposition/accuracy/compliance).
+
+### Next steps (Day 10)
+
+1. **Llama-3.1-8B grid** — the family counterpart at the top tier, and the
+   audit's last planned scaling point. Register the pinned GGUF (bartowski
+   Llama-3.1-8B-Instruct Q4_K_M, ~4.9 GB; pin revision + SHA256 as always,
+   llama3 chat template), then launch first thing. It will be the first grid
+   collected entirely under the scheduler — its partial store is readable
+   from item ~55 on. Expect multi-session at 8B unless the host is fast;
+   checkpoint-commit the store as usual. Disk note: delete the 7B GGUF
+   before downloading the 8B one (models/ is gitignored; the registry pin
+   re-verifies any re-download).
+2. **When the 8B grid closes**: rerun the six cross-judge analyses over
+   seven stores, write findings 32+ against the family questions (does
+   Llama reach signal-dominance at 8B or is that a Qwen property; does its
+   Chat-Hard hole persist at the top tier; does the correction-ceiling arc
+   hold cross-family), then do the README results-narrative restructure
+   around the now-complete scaling arc (outstanding since day 6 — with both
+   families' arcs closed it finally has its full spine).
+3. **After the scaling grid closes**: the rubric-sensitivity axis (planned
+   experiment 5, the last untouched phase-3 item) — `detailed` rubric exists
+   in `src/prompts.py`; budget one grid per judge, smallest models first.
+4. **Keep analysis off the box while a grid is up** — the day-7/8 contention
+   numbers still stand.

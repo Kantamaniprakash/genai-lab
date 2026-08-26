@@ -1,0 +1,118 @@
+{
+  "baselines": {
+    "by_category": {
+      "Chat": {
+        "always_a_raw": 0.5,
+        "longer_chars": 0.7916666666666666,
+        "longer_words": 0.7569444444444444,
+        "n_items": 72,
+        "random": 0.5
+      },
+      "Chat Hard": {
+        "always_a_raw": 0.5,
+        "longer_chars": 0.33152173913043476,
+        "longer_words": 0.375,
+        "n_items": 92,
+        "random": 0.5
+      },
+      "Reasoning": {
+        "always_a_raw": 0.5,
+        "longer_chars": 0.3697916666666667,
+        "longer_words": 0.375,
+        "n_items": 288,
+        "random": 0.5
+      },
+      "Safety": {
+        "always_a_raw": 0.5,
+        "longer_chars": 0.41216216216216217,
+        "longer_words": 0.4222972972972973,
+        "n_items": 148,
+        "random": 0.5
+      }
+    },
+    "overall": {
+      "always_a_raw": 0.5,
+      "longer_chars": 0.425,
+      "longer_words": 0.4325,
+      "n_items": 600,
+      "random": 0.5
+    }
+  },
+  "bias_b": {
+    "frac_positive": 0.52,
+    "iqr": [
+      -2.835984706878662,
+      2.7507519721984863
+    ],
+    "mean": 0.15136083285013835,
+    "median": 0.23435735702514648,
+    "sd": 4.889996441873601
+  },
+  "bootstrap_seed": 0,
+  "by_category": {
+    "Chat": {
+      "mean_b": 1.9739943610297308,
+      "median_abs_s": 11.269376754760742,
+      "n_items": 72,
+      "raw_acc": 0.9236111111111112,
+      "sym_acc": 0.9444444444444444
+    },
+    "Chat Hard": {
+      "mean_b": 2.2136245395826255,
+      "median_abs_s": 9.227846145629883,
+      "n_items": 92,
+      "raw_acc": 0.6630434782608695,
+      "sym_acc": 0.6956521739130435
+    },
+    "Reasoning": {
+      "mean_b": -1.5474623607264624,
+      "median_abs_s": 6.311779022216797,
+      "n_items": 288,
+      "raw_acc": 0.7569444444444444,
+      "sym_acc": 0.8541666666666666
+    },
+    "Safety": {
+      "mean_b": 1.288544648402446,
+      "median_abs_s": 15.08868408203125,
+      "n_items": 148,
+      "raw_acc": 0.831081081081081,
+      "sym_acc": 0.8378378378378378
+    }
+  },
+  "compliance_rate": 1.0,
+  "frac_bias_dominates": 0.2683333333333333,
+  "mass_ab_min_p50": 0.9999999998687318,
+  "n_boot": 10000,
+  "n_incomplete_items": 0,
+  "n_items": 600,
+  "positional_flip_rate": 0.7316666666666667,
+  "preference_s": {
+    "mean": 7.536185042063395,
+    "median_abs": 9.08010196685791,
+    "sd": 7.843242569645312
+  },
+  "raw_acc": {
+    "ci95": [
+      0.755,
+      0.8058333333333333
+    ],
+    "mean": 0.7808333333333334
+  },
+  "raw_acc_chosen_first": 0.7616666666666667,
+  "raw_acc_rejected_first": 0.8,
+  "store": "qwen2.5-7b__minimal",
+  "sym_acc": {
+    "ci95": [
+      0.8066666666666666,
+      0.8666666666666667
+    ],
+    "mean": 0.8366666666666667
+  },
+  "sym_minus_raw": {
+    "ci95": [
+      0.035,
+      0.07583333333333334
+    ],
+    "mean": 0.05583333333333333
+  }
+}

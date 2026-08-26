@@ -1,9 +1,11 @@
 {
+  "composition_note": null,
   "floors": {
     "always_a_raw": 0.5,
     "longer_chars": 0.425,
     "random": 0.5
   },
+  "interim_for": null,
   "judges": {
     "llama-3.2-1b": {
       "bootstrap_seed": 0,
@@ -218,6 +220,49 @@
           0.15416666666666667
         ],
         "mean": 0.125
+      }
+    },
+    "qwen2.5-7b": {
+      "bootstrap_seed": 0,
+      "compliance_rate": 1.0,
+      "frac_b_positive": 0.52,
+      "frac_bias_dominates": 0.2683333333333333,
+      "longer_floor": 0.425,
+      "median_abs_s": 9.08010196685791,
+      "median_b": 0.23435735702514648,
+      "n_boot": 10000,
+      "n_items": 600,
+      "positional_flip_rate": 0.7316666666666667,
+      "raw_acc": {
+        "ci95": [
+          0.755,
+          0.8058333333333333
+        ],
+        "mean": 0.7808333333333334
+      },
+      "raw_acc_chosen_first": 0.7616666666666667,
+      "raw_acc_rejected_first": 0.8,
+      "sd_b": 4.889996441873601,
+      "sym_acc": {
+        "ci95": [
+          0.8066666666666666,
+          0.8666666666666667
+        ],
+        "mean": 0.8366666666666667
+      },
+      "sym_minus_longer": {
+        "ci95": [
+          0.36666666666666664,
+          0.45666666666666667
+        ],
+        "mean": 0.4116666666666667
+      },
+      "sym_minus_raw": {
+        "ci95": [
+          0.035,
+          0.07583333333333334
+        ],
+        "mean": 0.05583333333333333
       }
     }
   },

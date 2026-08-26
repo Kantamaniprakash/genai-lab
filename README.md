@@ -11,11 +11,14 @@ Hands-on experiments with current Gen AI techniques — RAG, agents, evals, fine
 
 <!-- auto-generated from research/NOTES.md by scripts/sync_latest.py; do not hand-edit -->
 
-**2026-08-24 — Day 8: the partial grid becomes a sample (finding 27)**
+**2026-08-26 — Day 9: the 7B grid closes; findings 28–31**
 
-- Finding 27 — a partial grid is a scheduling choice, not a fact of the harness, and the objection that kept the old order was false.
+- Finding 28 — the valley resolves into a climb, and 7B is the audit's first signal-dominant judge.
+- Finding 29 — the flip-rate inversion completes: the audit's best judge posts its highest flip rate.
+- Finding 30 — 7B beats the fitted length baseline by the audit's largest margin, significantly in every category.
+- Finding 31 — the one-call correction ceiling keeps falling as judges improve, and Qwen overconfidence survives to the top of the family.
 
-[Full entry →](slm-judge-audit/research/NOTES.md#2026-08-24--day-8-the-partial-grid-becomes-a-sample-finding-27)
+[Full entry →](slm-judge-audit/research/NOTES.md#2026-08-26--day-9-the-7b-grid-closes-findings-2831)
 <!-- latest-end -->
 
 ![Symmetrized and raw judge accuracy vs parameter count, with the bias-versus-signal race](slm-judge-audit/results/figures/scaling__minimal.png)
@@ -38,28 +41,32 @@ day-by-day research log.
 
 ### Results at a glance
 
-Five completed grids (Qwen2.5 0.5B/1.5B/3B and Llama-3.2 1B/3B, all Q4_K_M) on
-the same 600 stratified [RewardBench](https://arxiv.org/abs/2403.13787) items in
-both presentation orders, everything on 4 CPU cores; the Qwen2.5-7B grid is
-still running. Findings 1–26 and the full cross-judge table live in the
+Six completed grids (Qwen2.5 0.5B/1.5B/3B/7B and Llama-3.2 1B/3B, all Q4_K_M)
+on the same 600 stratified [RewardBench](https://arxiv.org/abs/2403.13787)
+items in both presentation orders, everything on 4 CPU cores. Findings 1–31 and
+the full cross-judge table live in the
 [project README](slm-judge-audit/README.md#results-at-a-glance):
 
 - **Debiased judge quality is not monotone in scale.** Within Qwen2.5 it runs
-  **0.568 → 0.502 → 0.742** from 0.5B to 3B — a valley at 1.5B, where the
-  preference that emerges with scale is a *verbosity* preference that
-  RewardBench punishes.
-- **Flip-rate "consistency" is anti-informative.** The two most saturated
-  judges post the *lowest* flip rates in the audit (0.002 and 0.033): a bias
-  large enough never to be overturned never produces a flip to count. Every
-  black-box audit that scores consistency this way would rank them best.
-- **Position bias beats the content signal** on 62.0% to 99.8% of items
-  depending on the judge, and the two families reverse bias *direction* with
-  scale in opposite senses.
-- **The assumption behind cheap debiasing is false.** Position bias is never an
-  additive constant; a fitted one-call correction fully substitutes for
-  two-call symmetrization at 0.5B but recovers only about half the gain at 3B.
+  **0.568 → 0.502 → 0.742 → 0.837** from 0.5B to 7B — a valley at 1.5B, where
+  the preference that emerges with scale is a *verbosity* preference that
+  RewardBench punishes, then a monotone climb.
+- **Flip-rate "consistency" is anti-informative at both ends.** The two most
+  saturated judges post the *lowest* flip rates in the audit (0.002 and
+  0.033): a bias large enough never to be overturned never produces a flip to
+  count. And the audit's *best* judge posts the *highest* (0.732), because a
+  content-following verdict changes letter whenever the responses swap seats.
+- **Position bias beats the content signal** on 62.0% to 99.8% of items for
+  five of the six judges — Qwen2.5-7B is the audit's first *signal-dominant*
+  judge (26.8%) — and the two families reverse bias *direction* with scale in
+  opposite senses.
+- **The assumption behind cheap debiasing is false.** Position bias is never
+  an additive constant, and the share of the two-call symmetrization gain a
+  fitted one-call correction recovers *falls* as judges improve: 68% at 0.5B,
+  47% at 3B, 25% at 7B.
 - **Most of these judges do not beat a length heuristic.** Against a fitted
-  one-parameter length baseline (0.575), only the two 3B judges come out ahead.
+  one-parameter length baseline (0.575), only the two 3Bs and the 7B come out
+  ahead — the 7B by the largest margin, and in every category.
 
 ## Completed flagship — `rag-chunking-bench`
 
