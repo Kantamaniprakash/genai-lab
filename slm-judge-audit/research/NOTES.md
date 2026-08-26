@@ -1243,3 +1243,11 @@ whatever the store holds.
    in `src/prompts.py`; budget one grid per judge, smallest models first.
 4. **Keep analysis off the box while a grid is up** — the day-7/8 contention
    numbers still stand.
+5. **Dependency housekeeping (GitHub flags 3 dependabot alerts on the
+   repo).** An osv.dev sweep over both uv.lock files today localizes them:
+   `diskcache==5.6.3` (GHSA-w8v5-vhqr-4h9v, a llama-cpp-python transitive
+   here) and `setuptools==81.0.0` (GHSA-h35f-9h28-mq5c) in this project's
+   lock, `torch==2.12.1` (GHSA-rrmf-rvhw-rf47) in rag-chunking-bench's dense
+   group. Deferred today because re-locking and re-running both test suites
+   would contend with the 8B grid; it is a clean lock-bump + full-suite job
+   for a session where the box is free.
