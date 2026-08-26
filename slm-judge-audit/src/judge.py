@@ -145,6 +145,15 @@ MODELS: dict[str, JudgeModel] = {
         template="chatml",
         params_b=7.0,
     ),
+    "llama-3.1-8b": JudgeModel(
+        key="llama-3.1-8b",
+        repo="bartowski/Meta-Llama-3.1-8B-Instruct-GGUF",
+        revision="bf5b95e96dac0462e2a09145ec66cae9a3f12067",
+        filename="Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf",
+        sha256="7b064f5842bf9532c91456deda288a1b672397a54fa729aa665952863033557c",
+        template="llama3",
+        params_b=8.0,
+    ),
     "llama-3.2-1b": JudgeModel(
         key="llama-3.2-1b",
         repo="bartowski/Llama-3.2-1B-Instruct-GGUF",

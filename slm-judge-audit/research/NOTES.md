@@ -1208,17 +1208,29 @@ the completed arc. All cross-judge figures regenerated from the six stores
 (scaling curve, probe forest, calibration, bias model, subset forest,
 7B decomposition/accuracy/compliance).
 
+### Late session: the 8B grid is registered and running
+
+The day had compute left after the writeup, so day 10's first item moved up.
+Registered `llama-3.1-8b` (bartowski Meta-Llama-3.1-8B-Instruct-GGUF, revision
+`bf5b95e9`, Q4_K_M, SHA256 `7b064f58…557c` verified against HF's LFS oid after
+download and at load; llama3 template; the 7B GGUF deleted first for disk —
+models/ is gitignored and the registry pin re-verifies any re-download), added
+its eighth MODEL_STYLES entry (darkest red, continuing the family gradient),
+and launched n=600 seed 0 both orders. Max prompt is 2,748 tokens under the
+Llama tokenizer → n_ctx 2764. Early rate 0.10 judg/s (ETA ~3.3 h) — this grid
+is the first collected entirely under the deficit scheduler, so its partial
+store is a stratified sample from item ~55 on, and any mid-run read via
+`master_table --restrict-to llama-3.1-8b` is composition-clean by
+construction. Checkpoint-commits as the store grows; the session closes with
+whatever the store holds.
+
 ### Next steps (Day 10)
 
-1. **Llama-3.1-8B grid** — the family counterpart at the top tier, and the
-   audit's last planned scaling point. Register the pinned GGUF (bartowski
-   Llama-3.1-8B-Instruct Q4_K_M, ~4.9 GB; pin revision + SHA256 as always,
-   llama3 chat template), then launch first thing. It will be the first grid
-   collected entirely under the scheduler — its partial store is readable
-   from item ~55 on. Expect multi-session at 8B unless the host is fast;
-   checkpoint-commit the store as usual. Disk note: delete the 7B GGUF
-   before downloading the 8B one (models/ is gitignored; the registry pin
-   re-verifies any re-download).
+1. **Resume the Llama-3.1-8B grid first thing** — `uv run python -m
+   experiments.run_grid --model llama-3.1-8b --rubric minimal --n 600
+   --seed 0 --threads 4`. On a fresh container re-download the pinned GGUF
+   first; the runner verifies the digest at load and refuses to run without
+   it. It is the audit's last planned scaling point.
 2. **When the 8B grid closes**: rerun the six cross-judge analyses over
    seven stores, write findings 32+ against the family questions (does
    Llama reach signal-dominance at 8B or is that a Qwen property; does its

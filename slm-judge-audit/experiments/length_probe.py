@@ -50,6 +50,7 @@ MODEL_STYLES = {
     "qwen2.5-7b": ("#0a2a55", "o"),
     "llama-3.2-1b": ("#e08a84", "s"),
     "llama-3.2-3b": ("#c2483f", "s"),
+    "llama-3.1-8b": ("#7a201a", "s"),
 }
 
 STRATA = ("Overall", "Chat", "Chat Hard", "Reasoning", "Safety")
