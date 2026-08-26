@@ -4,7 +4,7 @@ This lab runs one flagship research project at a time, worked daily until it wou
 survive review by a demanding referee. Everything here is real: every number in a
 writeup comes from an experiment actually run in this repo.
 
-## Current flagship: `slm-judge-audit` — started 2026-07-17, phase 2 (baselines & main grid)
+## Current flagship: `slm-judge-audit` — started 2026-07-17, phase 3 (analysis axes: rubric sensitivity) + writeup restructure
 
 **Question.** How reliable are small open-weight LLMs (0.5B–8B, the sizes people
 actually deploy for cheap large-scale evaluation) as zero-shot pairwise judges —
@@ -103,8 +103,20 @@ instruction-following axis for free. Pinned revision + SHA256, verified at load.
    Hard included, by the audit's largest margin; the one-call debiasing
    ceiling falls again (68% → 47% → 25% of the symmetrization gain within
    Qwen) and Qwen stays overconfident at its top size.
-   Next: Llama-3.1-8B, the family counterpart — the last planned scaling
-   point.)*
+   Later the same day the Llama-3.1-8B grid ran end-to-end in one
+   190-minute session — the first grid collected entirely under the
+   scheduler — closing the scaling axis at seven judges: findings 32–35.
+   The family arcs never cross (Llama-8B ties Qwen-3B at 2.7x the
+   parameters and trails Qwen-7B by −0.113); Llama's adversarial Chat-Hard
+   hole persists to 8B while its Chat hits 0.958, the audit's best
+   category score; the audit's largest length-controlled coefficient rides
+   its largest length lean and pays for it on math-prm (0.389, below
+   chance); the one-call debiasing ceiling holds at ~25% at 8B with finer
+   corrections actively hurting; and the Safety compliance migration
+   replicates. **Phase 2 is complete.**
+   Next: phase-3 remainder — the rubric-sensitivity axis (minimal vs
+   detailed, paired in log-odds) — and the results-narrative restructure
+   around the completed scaling arc.)*
 3. **Analysis axes** — position bias as additive log-odds shift (test the
    structural model); symmetrization debiasing gains; calibration; value over
    length baseline; rubric-prompt sensitivity; category/subset heterogeneity.

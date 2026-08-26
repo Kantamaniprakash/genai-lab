@@ -1251,3 +1251,89 @@ whatever the store holds.
    group. Deferred today because re-locking and re-running both test suites
    would contend with the 8B grid; it is a clean lock-bump + full-suite job
    for a session where the box is free.
+
+## 2026-08-26 — Day 9, second act: the 8B grid runs end-to-end; the scaling axis closes (findings 32–35)
+
+The 8B grid launched in the late session finished the same day: 1,200
+judgments in 190.5 min at a steady 0.10 judg/s — the audit's first
+single-session grid at the large tier, and the first collected entirely under
+the deficit scheduler (category total-variation never above 0.006 at any
+100-judgment checkpoint after warmup; the log's own coverage lines are the
+record). Store verified: 600 complete items, zero orphans; compliance 0.910 —
+the Llama partial-compliance signature, all 97 non-compliant judgments... see
+finding 35 for where they sit. All seven-store analyses rerun; one tooling fix
+en route: `scaling_curve.family_of` didn't know the `llama-3.1` prefix and
+refused the store — the family line now takes both `llama-3.1`/`llama-3.2`
+prefixes as "Llama-3" (Meta ships them as one herd; the release-version
+confound is recorded in the README limitations).
+
+**Finding 32 — the two family arcs never cross: at the top tier, family beats
+scale.** Llama monotone 0.555 → 0.652 → 0.723 (paired +0.072 [+0.032, +0.110]
+over its 3B), no valley; second signal-dominant judge (|b| > |s| on 33.5%;
+per-order 0.613/0.752; bias direction reversed a second time within the
+family, median b −0.59 after 3B's saturated +2.34). But against the other
+family on identical items: −0.018 [−0.055, +0.018] vs Qwen2.5-3B (a tie with
+a 2.7x smaller judge) and −0.113 [−0.150, −0.078] vs Qwen2.5-7B.
+
+**Finding 33 — the adversarial hole is a family property all the way up.**
+Chat Hard: 0.435 → 0.348 → 0.522 — back to chance, no further; −0.174
+[−0.272, −0.076] behind Qwen-7B on the same 92 items; llmbar-adver-neighbor
+0.333, GPTInst 0.421. Chat meanwhile hits 0.958 — the audit's best category
+score anywhere, dead heat with Qwen-7B (+0.014 [−0.028, +0.056]). Llama
+scale buys Chat, never adversarial robustness (finding 22, now at 8B).
+
+**Finding 34 — the audit's strongest length-controlled signal rides its
+strongest length lean, and pays for it on math-prm.** β_s +2.376
+[+1.948, +2.998] (largest in audit); joint − length +0.233 [+0.185, +0.283]
+(fourth judge over the fitted floor, second-largest margin). Yet
+sign(s)-vs-length agreement is 0.633 — the most length-following judge
+measured (Llama: 0.622 → 0.596 → 0.633; Qwen-7B 0.489) — and math-prm lands
+below chance at 0.389 [0.29, 0.49] where Qwen-7B holds 0.778: finding 24's
+composition mechanism operating at the top tier. Chat Hard: β_s +0.755
+significant but the accuracy delta over the length floor is null (+0.027).
+
+**Finding 35 — the one-call ceiling holds at ~25% at 8B, finer corrections
+actively hurt, and the Safety compliance migration replicates.** Additive
+shift rejected at a seventh scale (category R² 0.124); subset+length R²
+0.492 — second-most predictable bias in the audit, with length covariates
+adding +0.16 (the family's length sensitivity is in its *bias* too). Ladder:
+global 0.692 [0.662, 0.721] is the best rung (24% of the gain — the 7B's
+ceiling, again), while category 0.676 and subset 0.673 fall *below*
+no-correction 0.682. Calibration: sym ECE 0.101, signed gap +0.042 —
+Llama's first mildly overconfident member (1B +0.005, 3B −0.012), still
+well under Qwen-7B's +0.121; the family split survives, blurred at the
+edge. Compliance: non-compliance 100% Safety-concentrated (0.635 compliant
+there, 1.000 in every other category) and the compliant Safety stratum
+judges worse, −0.179 [−0.306, −0.046] — finding 25's Llama-3B result
+(−0.223) replicated at 8B. Parse-and-drop would keep the worse half again.
+
+**Writeup.** README: status rewritten (phase 2 closed), 8B row in the glance
+table, "how to read it" bullets extended to the seven-judge field, new
+section "The 8B tier — family beats scale" with findings 32–35 and the 8B
+decomposition figure, subset highlight table gained the Llama-8B column,
+family-geometry limitation now records the 3.1-vs-3.2 release confound;
+findings index 32–35. ROADMAP: phase 2 marked complete, header moved to
+phase 3. Root README flagship section updated to the seven-grid field. All
+cross-judge artifacts regenerated over seven stores.
+
+### Next steps (Day 10) — supersedes the earlier day-10 list
+
+1. **The rubric-sensitivity axis** (planned experiment 5, the last untouched
+   phase-3 item): `detailed` rubric grids, paired against `minimal` in
+   log-odds per item. Budget one grid per judge and start small —
+   qwen2.5-0.5b (~1 h) and llama-3.2-1b first, since their minimal-rubric
+   pathologies (always-A saturation; partial compliance) are the most
+   interesting to test for rubric dependence. The paired-in-log-odds
+   analysis needs a small new module (paired Δz per item across rubrics);
+   design it before running anything.
+2. **The results-narrative restructure** around the completed scaling arc —
+   outstanding since day 6, now fully unblocked: reorganize the README
+   results from grid-arrival order into the arc (families × scale, the
+   valley, the direction chiasm, signal-dominance at the top, the
+   correction ceiling, the family verdict), keeping the per-grid sections
+   as the archival record beneath.
+3. **Dependency housekeeping** (item 5 above) now that the box is free:
+   bump diskcache/setuptools pins here and torch in rag-chunking-bench,
+   re-lock, full suites, push.
+4. **Cleanup**: the 8B GGUF (4.9 GB) can be deleted at session start if
+   disk is needed; re-download is pinned and verified.

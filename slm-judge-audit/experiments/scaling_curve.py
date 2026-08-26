@@ -43,15 +43,19 @@ FIGURES_DIR = RESULTS_DIR.parent / "figures"
 
 FAMILY_STYLES = {
     "Qwen2.5": ("#2a78d6", "o"),
-    "Llama-3.2": ("#c2483f", "s"),
+    "Llama-3": ("#c2483f", "s"),
 }
 
 
 def family_of(model_key: str) -> str:
+    # Llama-3.2 1B/3B and Llama-3.1 8B are plotted as one family line: Meta
+    # releases them as one herd (the 3.2 small models derive from the 3.1
+    # models), and the audit reads 8B as the family's top scaling point. The
+    # release-version difference is recorded as a limitation in the README.
     if model_key.startswith("qwen2.5"):
         return "Qwen2.5"
-    if model_key.startswith("llama-3.2"):
-        return "Llama-3.2"
+    if model_key.startswith(("llama-3.1", "llama-3.2")):
+        return "Llama-3"
     raise ValueError(f"unknown family for {model_key}")
 
 

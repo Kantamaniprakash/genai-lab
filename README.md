@@ -11,14 +11,14 @@ Hands-on experiments with current Gen AI techniques — RAG, agents, evals, fine
 
 <!-- auto-generated from research/NOTES.md by scripts/sync_latest.py; do not hand-edit -->
 
-**2026-08-26 — Day 9: the 7B grid closes; findings 28–31**
+**2026-08-26 — Day 9, second act: the 8B grid runs end-to-end; the scaling axis closes (findings 32–35)**
 
-- Finding 28 — the valley resolves into a climb, and 7B is the audit's first signal-dominant judge.
-- Finding 29 — the flip-rate inversion completes: the audit's best judge posts its highest flip rate.
-- Finding 30 — 7B beats the fitted length baseline by the audit's largest margin, significantly in every category.
-- Finding 31 — the one-call correction ceiling keeps falling as judges improve, and Qwen overconfidence survives to the top of the family.
+- Finding 32 — the two family arcs never cross: at the top tier, family beats scale.
+- Finding 33 — the adversarial hole is a family property all the way up.
+- Finding 34 — the audit's strongest length-controlled signal rides its strongest length lean, and pays for it on math-prm.
+- Finding 35 — the one-call ceiling holds at ~25% at 8B, finer corrections actively hurt, and the Safety compliance migration replicates.
 
-[Full entry →](slm-judge-audit/research/NOTES.md#2026-08-26--day-9-the-7b-grid-closes-findings-2831)
+[Full entry →](slm-judge-audit/research/NOTES.md#2026-08-26--day-9-second-act-the-8b-grid-runs-end-to-end-the-scaling-axis-closes-findings-3235)
 <!-- latest-end -->
 
 ![Symmetrized and raw judge accuracy vs parameter count, with the bias-versus-signal race](slm-judge-audit/results/figures/scaling__minimal.png)
@@ -41,32 +41,40 @@ day-by-day research log.
 
 ### Results at a glance
 
-Six completed grids (Qwen2.5 0.5B/1.5B/3B/7B and Llama-3.2 1B/3B, all Q4_K_M)
-on the same 600 stratified [RewardBench](https://arxiv.org/abs/2403.13787)
-items in both presentation orders, everything on 4 CPU cores. Findings 1–31 and
-the full cross-judge table live in the
+The scaling grid is complete: seven grids (Qwen2.5 0.5B/1.5B/3B/7B and
+Llama-3 1B/3B/8B, all Q4_K_M) on the same 600 stratified
+[RewardBench](https://arxiv.org/abs/2403.13787) items in both presentation
+orders, everything on 4 CPU cores. Findings 1–35 and the full cross-judge
+table live in the
 [project README](slm-judge-audit/README.md#results-at-a-glance):
 
-- **Debiased judge quality is not monotone in scale.** Within Qwen2.5 it runs
-  **0.568 → 0.502 → 0.742 → 0.837** from 0.5B to 7B — a valley at 1.5B, where
-  the preference that emerges with scale is a *verbosity* preference that
-  RewardBench punishes, then a monotone climb.
+- **Debiased judge quality is not monotone in scale — and at the top tier,
+  family beats scale.** Within Qwen2.5 it runs **0.568 → 0.502 → 0.742 →
+  0.837** from 0.5B to 7B — a valley at 1.5B, where the preference that
+  emerges with scale is a *verbosity* preference that RewardBench punishes,
+  then a monotone climb. Llama-3 runs 0.555 → 0.652 → 0.723 with no valley,
+  and its 8B is statistically indistinguishable from Qwen's 3B — a judge
+  2.7x smaller from the other family.
 - **Flip-rate "consistency" is anti-informative at both ends.** The two most
   saturated judges post the *lowest* flip rates in the audit (0.002 and
   0.033): a bias large enough never to be overturned never produces a flip to
-  count. And the audit's *best* judge posts the *highest* (0.732), because a
-  content-following verdict changes letter whenever the responses swap seats.
+  count. And the audit's two *best* judges post the two *highest* (0.732 and
+  0.665), because a content-following verdict changes letter whenever the
+  responses swap seats.
 - **Position bias beats the content signal** on 62.0% to 99.8% of items for
-  five of the six judges — Qwen2.5-7B is the audit's first *signal-dominant*
-  judge (26.8%) — and the two families reverse bias *direction* with scale in
-  opposite senses.
+  five of the seven judges — only Qwen2.5-7B (26.8%) and Llama-3.1-8B
+  (33.5%) are *signal-dominant* — and the two families reverse bias
+  *direction* with scale in opposite senses.
 - **The assumption behind cheap debiasing is false.** Position bias is never
   an additive constant, and the share of the two-call symmetrization gain a
   fitted one-call correction recovers *falls* as judges improve: 68% at 0.5B,
-  47% at 3B, 25% at 7B.
-- **Most of these judges do not beat a length heuristic.** Against a fitted
-  one-parameter length baseline (0.575), only the two 3Bs and the 7B come out
-  ahead — the 7B by the largest margin, and in every category.
+  47% at 3B, ~25% at 7B and 8B.
+- **Most of these judges do not beat a length heuristic, and adversarial
+  robustness is a family property.** Against a fitted one-parameter length
+  baseline (0.575), only both 3Bs, the 7B and the 8B come out ahead — the 7B
+  by the largest margin and in every category, while Llama's below-chance
+  hole on adversarial pairs persists to 8B (Chat Hard 0.522 vs Qwen-7B's
+  0.696 on identical items).
 
 ## Completed flagship — `rag-chunking-bench`
 
