@@ -1,0 +1,21 @@
+{
+  "chat_template": "llama3",
+  "execution_order": "balanced",
+  "llama_cpp_python": "0.3.34",
+  "max_prompt_tokens": 2748,
+  "model_file": "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf",
+  "model_key": "llama-3.1-8b",
+  "model_repo": "bartowski/Meta-Llama-3.1-8B-Instruct-GGUF",
+  "model_revision": "bf5b95e96dac0462e2a09145ec66cae9a3f12067",
+  "model_sha256": "7b064f5842bf9532c91456deda288a1b672397a54fa729aa665952863033557c",
+  "n_ctx": 2764,
+  "n_prompts": 1200,
+  "n_threads": 4,
+  "rubric": "minimal",
+  "sample_n": 600,
+  "sample_seed": 0,
+  "verdict_token_ids": [
+    32,
+    33
+  ]
+}
