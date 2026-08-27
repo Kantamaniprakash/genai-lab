@@ -25,9 +25,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.analysis import assemble_pairs  # noqa: E402
 from src.data import SUBSET_TO_CATEGORY  # noqa: E402
 from src.judge import MODELS, RESULTS_DIR, load_records  # noqa: E402
-from src.rubric_pair import rubric_pair_view  # noqa: E402
+from src.rubric_pair import match_rubric_pairs, rubric_pair_view  # noqa: E402
 
 SUMMARY_DIR = RESULTS_DIR.parent / "summary"
+FIGURES_DIR = RESULTS_DIR.parent / "figures"
 
 
 def category_of(item_id: str) -> str:
@@ -78,6 +79,82 @@ def format_table(views: dict[str, dict], rubric_a: str, rubric_b: str) -> str:
     return header + "\n".join(rows) + "\n" + caption
 
 
+def rubric_figure(
+    matched_by_model: dict[str, list], rubric_a: str, rubric_b: str, out: Path
+) -> None:
+    """One row per model: s vs s and b vs b across rubrics, item-paired.
+
+    Points off the identity line are what the rubric changed; points in the
+    off-diagonal quadrants of the left panel are rubric flips — the
+    symmetrized verdict changed with the prompt text alone.
+    """
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from experiments.make_figures import (
+        AXIS,
+        CATEGORY_STYLES,
+        INK,
+        INK_MUTED,
+        INK_SECONDARY,
+    )
+
+    models = sorted(matched_by_model, key=lambda k: (MODELS[k].params_b, k))
+    fig, axes = plt.subplots(
+        len(models), 2, figsize=(9.2, 4.3 * len(models)), squeeze=False
+    )
+    for row, model_key in enumerate(models):
+        matched = matched_by_model[model_key]
+        for col, component in enumerate(("s", "b")):
+            ax = axes[row][col]
+            xs_all = [getattr(p.a, component) for p in matched]
+            ys_all = [getattr(p.b, component) for p in matched]
+            lim = 1.06 * max(
+                (max(map(abs, xs_all + ys_all))), 1e-6
+            )
+            ax.axhline(0, color=AXIS, linewidth=0.8, zorder=1)
+            ax.axvline(0, color=AXIS, linewidth=0.8, zorder=1)
+            ax.plot([-lim, lim], [-lim, lim], color=INK_MUTED, linewidth=0.9,
+                    linestyle="--", zorder=1)
+            for cat, (color, marker) in CATEGORY_STYLES.items():
+                pts = [p for p in matched if category_of(p.item_id) == cat]
+                if not pts:
+                    continue
+                ax.scatter(
+                    [getattr(p.a, component) for p in pts],
+                    [getattr(p.b, component) for p in pts],
+                    s=13, alpha=0.55, linewidths=0, color=color, marker=marker,
+                    label=f"{cat} (n={len(pts)})" if col == 0 else None, zorder=2,
+                )
+            ax.set_xlim(-lim, lim)
+            ax.set_ylim(-lim, lim)
+            ax.set_aspect("equal")
+            ax.grid(True, alpha=0.6)
+            name = ("preference s" if component == "s" else "position bias b")
+            ax.set_xlabel(f"{name}, rubric `{rubric_a}` (log-odds)")
+            ax.set_ylabel(f"{name}, rubric `{rubric_b}` (log-odds)")
+            if component == "s":
+                flips = sum(1.0 - p.sym_verdict_agrees for p in matched)
+                ax.set_title(
+                    f"{model_key}: {name} across rubrics — "
+                    f"rubric flips {flips / len(matched):.1%}",
+                    color=INK,
+                )
+                ax.legend(loc="lower right", markerscale=1.3)
+            else:
+                ax.set_title(f"{model_key}: {name} across rubrics", color=INK)
+            ax.annotate(
+                "identity = rubric-invariant", xy=(0.03, 0.97),
+                xycoords="axes fraction", fontsize=8, color=INK_SECONDARY,
+                va="top",
+            )
+    fig.tight_layout()
+    fig.savefig(out)
+    plt.close(fig)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", default=None, choices=sorted(MODELS))
@@ -87,6 +164,7 @@ def main() -> None:
 
     model_keys = [args.model] if args.model else sorted(MODELS)
     views: dict[str, dict] = {}
+    matched_by_model: dict[str, list] = {}
     for model_key in model_keys:
         pairs_a = load_pairs(model_key, args.rubric_a)
         pairs_b = load_pairs(model_key, args.rubric_b)
@@ -105,6 +183,7 @@ def main() -> None:
                   f"{args.rubric_a}, {view['n_only_b']} only in {args.rubric_b}; "
                   f"matched {view['n_matched_items']}", flush=True)
         views[model_key] = view
+        matched_by_model[model_key] = match_rubric_pairs(pairs_a, pairs_b)[0]
 
     if not views:
         raise SystemExit("no model has complete swap pairs under both rubrics")
@@ -122,6 +201,15 @@ def main() -> None:
     (SUMMARY_DIR / f"{stem}.md").write_text(table)
     print(table)
     print(f"[rubric_view] wrote {out_json}")
+
+    # The committed figure spans every matched model, so it is only rendered
+    # by the sweep (no --model): a single-model invocation must not overwrite
+    # the canonical multi-model panel with a one-row version.
+    if matched_by_model and args.model is None:
+        FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+        fig_path = FIGURES_DIR / f"{stem}.png"
+        rubric_figure(matched_by_model, args.rubric_a, args.rubric_b, fig_path)
+        print(f"[rubric_view] wrote {fig_path}")
 
 
 if __name__ == "__main__":
