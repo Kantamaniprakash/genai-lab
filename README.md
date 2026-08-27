@@ -11,14 +11,13 @@ Hands-on experiments with current Gen AI techniques — RAG, agents, evals, fine
 
 <!-- auto-generated from research/NOTES.md by scripts/sync_latest.py; do not hand-edit -->
 
-**2026-08-26 — Day 9, second act: the 8B grid runs end-to-end; the scaling axis closes (findings 32–35)**
+**2026-08-27 — Day 10: the rubric axis opens — verdicts are rubric-fragile below 3B (findings 36–38); the results narrative gets its restructure**
 
-- Finding 32 — the two family arcs never cross: at the top tier, family beats scale.
-- Finding 33 — the adversarial hole is a family property all the way up.
-- Finding 34 — the audit's strongest length-controlled signal rides its strongest length lean, and pays for it on math-prm.
-- Finding 35 — the one-call ceiling holds at ~25% at 8B, finer corrections actively hurt, and the Safety compliance migration replicates.
+- Finding 36 — the symmetrized verdict is rubric-fragile at small scale: 30–43% of debiased verdicts change with the rubric text alone, an order of magnitude more churn than the net accuracy movement.
+- Finding 37 — at 0.5B the detailed rubric contracts the whole log-odds distribution and touches nothing structural.
+- Finding 38 — at 1B the rubric reverses both directional properties; the significant gain is a re-aimed length lean.
 
-[Full entry →](slm-judge-audit/research/NOTES.md#2026-08-26--day-9-second-act-the-8b-grid-runs-end-to-end-the-scaling-axis-closes-findings-3235)
+[Full entry →](slm-judge-audit/research/NOTES.md#2026-08-27--day-10-the-rubric-axis-opens--verdicts-are-rubric-fragile-below-3b-findings-3638-the-results-narrative-gets-its-restructure)
 <!-- latest-end -->
 
 ![Symmetrized and raw judge accuracy vs parameter count, with the bias-versus-signal race](slm-judge-audit/results/figures/scaling__minimal.png)
@@ -44,7 +43,8 @@ day-by-day research log.
 The scaling grid is complete: seven grids (Qwen2.5 0.5B/1.5B/3B/7B and
 Llama-3 1B/3B/8B, all Q4_K_M) on the same 600 stratified
 [RewardBench](https://arxiv.org/abs/2403.13787) items in both presentation
-orders, everything on 4 CPU cores. Findings 1–35 and the full cross-judge
+orders, everything on 4 CPU cores — plus the first two grids of the
+rubric-sensitivity axis. Findings 1–38 and the full cross-judge
 table live in the
 [project README](slm-judge-audit/README.md#results-at-a-glance):
 
@@ -75,6 +75,11 @@ table live in the
   by the largest margin and in every category, while Llama's below-chance
   hole on adversarial pairs persists to 8B (Chat Hard 0.522 vs Qwen-7B's
   0.696 on identical items).
+- **The verdict is rubric-fragile where the signal is small.** Rewording the
+  rubric — same items, same orders — flips 30% of the 0.5B's debiased
+  verdicts and 43% of the 1B's while barely moving net accuracy, and at 1B
+  it reverses the judge's bias direction and length orientation outright:
+  the prompt is a noise source of the same order as the content signal.
 
 ## Completed flagship — `rag-chunking-bench`
 

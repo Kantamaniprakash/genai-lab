@@ -1337,3 +1337,120 @@ cross-judge artifacts regenerated over seven stores.
    re-lock, full suites, push.
 4. **Cleanup**: the 8B GGUF (4.9 GB) can be deleted at session start if
    disk is needed; re-download is pinned and verified.
+
+## 2026-08-27 — Day 10: the rubric axis opens — verdicts are rubric-fragile below 3B (findings 36–38); the results narrative gets its restructure
+
+Fresh container: `uv sync --group judge`, both small GGUFs re-downloaded and
+SHA256-verified against the registry pins. Pre-work suite: 118 passed with
+the real-model smoke test failing against the still-downloading GGUF (it
+passed once the download finished; full suite green at end of day).
+
+### The paired rubric machinery
+
+The rubric axis is the order axis one level up: both stores cover the same
+600 items × both orders, so two rubrics compare paired per item in log-odds.
+New `src/rubric_pair.py`: inner-join of complete swap pairs across stores by
+`item_id` (unmatched counts surfaced, duplicate detection), per-rubric stats
+on the matched items, paired deltas with bootstrap CIs (sym/raw accuracy,
+s, b, |b|, |s|, positional flip rate, compliance — the rubric changes the
+instruction, so format discipline is allowed to move), cross-rubric
+consistency (the **rubric flip rate** — the prompt-level analogue of the
+positional flip rate — plus Pearson/Spearman of s and b with degenerate
+replicates excluded, not coerced), and the per-category block.
+`experiments/rubric_view.py` sweeps every model with both stores, merges
+single-model runs into the combined JSON without clobbering, renders the
+markdown table, and (sweep mode only, so a one-model rerun can't overwrite
+the canonical panel) draws the identity figure: s-vs-s and b-vs-b across
+rubrics, item-paired, per model. 7 new tests recover constructed effects
+from a synthetic judge whose rubric-B halves bias and shifts preference;
+130 total, ruff clean.
+
+### The grids
+
+Both `detailed` grids ran end-to-end today under the deficit scheduler,
+compliance-clean stores, TV 0.000 at close:
+- qwen2.5-0.5b__detailed: 1200/1200 in ~65 min (0.31 judg/s), n_ctx 2826
+  (max prompt 2810 — the detailed rubric adds ~42 tokens).
+- llama-3.2-1b__detailed: 1200/1200 in 92 min (0.22 judg/s avg).
+
+### Findings (against the minimal stores, paired on all 600 items)
+
+**Finding 36 — the symmetrized verdict is rubric-fragile at small scale:
+30–43% of debiased verdicts change with the rubric text alone, an order of
+magnitude more churn than the net accuracy movement.** 0.5B: rubric flip
+rate 0.303 [0.268, 0.340] against positional flip rate 0.000; flips are
+symmetric noise (84 right→wrong vs 98 wrong→right; Δ sym +0.023
+[−0.020, +0.067], null). 1B: flip rate 0.432 [0.393, 0.472] (259 flips,
+net +43), r(s) across rubrics 0.257 [0.140, 0.379]. Flips concentrate at
+small |s| (0.5B by minimal-|s| quartile: 0.42/0.40/0.30/0.09; 1B:
+0.52/0.43/0.49/0.29) — with median |s| ~0.15–0.24, the rubric perturbation
+is the same order as the signal, so the sign re-randomizes. Order-swap
+consistency is not verdict stability: a perfectly order-consistent judge
+(0.5B flips 0/600 under swap at detailed) still changes nearly a third of
+its verdicts when the prompt is reworded.
+
+**Finding 37 — at 0.5B the detailed rubric contracts the whole log-odds
+distribution and touches nothing structural.** Δ|b| −0.628 [−0.688, −0.567]
+(median b +3.65 → +3.03) but Δ|s| −0.165 [−0.194, −0.137] — proportionally
+more (−30% vs −17%) — and mean Δs −0.048 [−0.083, −0.012], slightly *away*
+from gold. Bias dominance rises 0.998 → 1.000, per-order accuracy stays
+exactly 1.000/0.000. Four explicit criteria including the anti-order
+instruction produce a 17% smaller push toward A and nothing else:
+prompt-side instruction is not a debiasing lever at this scale. b is more
+rubric-stable than s (r 0.735 vs 0.610) — the most reproducible property of
+this judge is its pathology.
+
+**Finding 38 — at 1B the rubric reverses both directional properties; the
+significant gain is a re-aimed length lean.** Bias direction flips B→A
+(median −0.34 → +0.62, mean −0.34 → +1.04, Δ|b| +0.64 [+0.55, +0.73]) —
+after 11/21/32, bias direction is now not even a property of a fixed
+(model, sample) pair. Length orientation reverses with it:
+sign(s)-vs-length agreement 0.622 → 0.408. That explains the headline
++0.072 [+0.018, +0.123] (0.555 → 0.627) exactly: Reasoning (longer usually
+wrong) +0.132 [+0.059, +0.205]; Chat (longer usually right, finding 13)
+−0.222 [−0.375, −0.069] — finding 24's composition mechanism operating
+within one judge across prompts. Compliance collapses 0.512 → 0.275
+(Chat 0.625 → 0.125, Safety 0.838 → 0.351, Chat Hard 0.793 → 0.380;
+Reasoning stays broken at ~0.23): the longer instruction makes the model
+less able to open with a verdict letter while judging better. Parse-and-
+drop under the detailed rubric keeps 165/600 items (27.5%) and they are
+the worse-judged stratum (0.570 vs 0.648, −0.079 [−0.167, +0.009]) —
+findings 8/25/35's warning at its sharpest.
+
+### Writeup
+
+README: new "The rubric axis" section (paired table, findings 36–38,
+identity-panel figure) at the end of the per-grid record; findings index
++36–38; planned experiment 5 marked started; the "one rubric so far"
+limitation rewritten (two rubrics × two judges; rubric-wording vs
+prompt-length not separable with two templates); status paragraph
+rewritten; test counts refreshed. And the long-outstanding
+results-narrative restructure landed: new "The scaling arc" section after
+the glance table telling the completed arc by theme (accuracy arcs, bias
+direction/dominance, the flip-rate inversion, the falling one-call
+ceiling, length + the adversarial family split, calibration/compliance
+signatures), with the twelve arrival-ordered sections demoted beneath a
+"The per-grid record" umbrella as the unrewritten archive. Anchors were
+level-independent, so no links broke.
+
+### Next steps (Day 11)
+
+1. **Extend the rubric axis upward**: `uv run python -m experiments.run_grid
+   --model qwen2.5-1.5b --rubric detailed --n 600 --seed 0 --threads 4`
+   (~2 h at day-3 rates) — the valley judge is the priority third point:
+   does the verbosity preference that defines the valley survive a rubric
+   that never mentions length, or is the valley itself rubric-specific?
+   Then qwen2.5-3b (~4 h) if the session has room. The key questions the
+   two small judges cannot answer: does rubric fragility (finding 36)
+   decay as |s| grows (prediction: yes — flip rate should fall roughly as
+   P(|s| < perturbation scale)), and does the bias-direction reversal
+   (finding 38) replicate at scales where bias is large rather than
+   near-zero?
+2. **After any new grid**: `experiments/rubric_view.py` sweep regenerates
+   the combined JSON/table/figure; single-model runs merge without
+   clobbering.
+3. **Dependency housekeeping** (carried from day 9, box was busy all of
+   today): bump diskcache/setuptools here and torch in rag-chunking-bench,
+   re-lock, full suites, push.
+4. **Disk**: both small GGUFs (~1.2 GB total) can stay; delete before any
+   7B/8B rubric grid.

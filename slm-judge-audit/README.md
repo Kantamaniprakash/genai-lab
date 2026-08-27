@@ -4,12 +4,15 @@
 position bias measured in log-odds, calibration, and value over trivial
 baselines, with paired bootstrap confidence intervals.**
 
-*Status: **the scaling grid is complete** — phase 2 closed 2026-08-26; now in
-phase 3 (rubric-sensitivity axis) plus the writeup restructure.
+*Status: **the scaling grid is complete** (phase 2 closed 2026-08-26) and
+the rubric-sensitivity axis is underway — first two rubric grids and
+findings 36–38 landed 2026-08-27, alongside the results-narrative
+restructure ([The scaling arc](#the-scaling-arc)).
 Harness: runner, analysis core, floors, value-over-length probe, calibration,
 bias-structure test, per-subset view, cross-judge table, coverage-balanced
-scheduler; 123 tests. Seven full grids on the same 600-item stratified sample
-× both orders: Qwen2.5 0.5B/1.5B/3B/7B and Llama-3 1B/3B/8B — findings 1–35
+scheduler, paired rubric analysis; 130 tests. Seven full grids on the same
+600-item stratified sample × both orders (Qwen2.5 0.5B/1.5B/3B/7B and
+Llama-3 1B/3B/8B) plus two `detailed`-rubric grids — findings 1–38
 below, cross-cut in [Results at a glance](#results-at-a-glance). Headlines:
 debiased judge quality is non-monotone in scale (0.568 → 0.502 → 0.742 →
 0.837 within the Qwen family — a 1.5B valley where the emergent preference is
@@ -29,9 +32,12 @@ hypothesis behind cheap debiasing is rejected at every scale, and the share
 of the symmetrization gain a fitted one-call correction can recover *falls*
 as judges improve (68% at 0.5B → 47% at 3B → ~25% at 7B and 8B); and
 post-debiasing calibration remains a family property (Qwen overconfident at
-every size above 0.5B; Llama at worst mildly so at 8B). Next: the
-rubric-sensitivity axis, and the results-narrative restructure around the
-completed scaling arc.*
+every size above 0.5B; Llama at worst mildly so at 8B). And on the new
+rubric axis: at the two smallest scales, 30–43% of symmetrized verdicts
+flip when only the rubric text changes — the prompt is a noise source of
+the same order as the content signal — and at 1B the rubric reverses the
+judge's bias direction and length orientation outright. Next: `detailed`
+grids for the larger judges, budgeted one per session.*
 
 ## Abstract
 
@@ -449,6 +455,9 @@ one's evidence, dated.
 | 33 | The adversarial hole is a family property all the way up. | [The 8B tier](#the-8b-tier--family-beats-scale-llama-31-8b) |
 | 34 | The audit's strongest length-controlled signal rides its strongest length lean, and pays for it on math-prm. | [The 8B tier](#the-8b-tier--family-beats-scale-llama-31-8b) |
 | 35 | At 8B the one-call ceiling holds at ~25%, finer corrections actively hurt, and the Safety compliance migration replicates. | [The 8B tier](#the-8b-tier--family-beats-scale-llama-31-8b) |
+| 36 | The symmetrized verdict is rubric-fragile at small scale: 30–43% of debiased verdicts change with the rubric text alone, an order of magnitude more churn than the net accuracy movement. | [The rubric axis](#the-rubric-axis--the-same-judges-under-a-different-prompt) |
+| 37 | At 0.5B the detailed rubric contracts the whole log-odds distribution and touches nothing structural. | [The rubric axis](#the-rubric-axis--the-same-judges-under-a-different-prompt) |
+| 38 | At 1B the rubric reverses both of the judge's directional properties, and the significant accuracy gain is a re-aimed length lean, not new judgment. | [The rubric axis](#the-rubric-axis--the-same-judges-under-a-different-prompt) |
 
 ## The per-grid record
 
@@ -1255,6 +1264,103 @@ the signal axis stretched — signal-dominant like Qwen-7B, but at a fraction
 of the |s| scale (median 1.17 vs 9.08), which is the geometric version of the
 family gap.*
 
+### The rubric axis — the same judges under a different prompt
+
+Everything above holds the rubric fixed and swaps the *order*; this section
+holds the order machinery fixed and swaps the *rubric*. The `detailed`
+template (defined alongside `minimal` in `src/prompts.py` since day 1) asks
+for the same one-letter verdict but spells out four explicit criteria —
+adherence, accuracy, helpfulness, safety. Because both stores cover the same
+600 items × both orders, the two rubrics compare exactly like the two
+orders: paired per item, in log-odds (`src/rubric_pair.py`,
+`experiments/rubric_view.py`). The first two grids are the audit's two
+smallest judges — chosen first because their minimal-rubric pathologies
+(the 0.5B's always-A saturation, the 1B's partial compliance) are the most
+interesting to test for prompt dependence. Deltas read detailed − minimal;
+the committed summary is `results/summary/rubric_pair__minimal_vs_detailed.{json,md}`.
+
+| | Qwen2.5-0.5B | Llama-3.2-1B |
+|---|---|---|
+| sym acc, minimal → detailed | 0.568 → 0.592 | 0.555 → 0.627 |
+| paired Δ sym acc | +0.023 [−0.020, +0.067] | **+0.072 [+0.018, +0.123]** |
+| **rubric flip rate** | **0.303 [0.268, 0.340]** | **0.432 [0.393, 0.472]** |
+| positional flip rate (detailed) | 0.000 | 0.168 |
+| r(s) across rubrics | 0.610 [0.553, 0.663] | 0.257 [0.140, 0.379] |
+| r(b) across rubrics | 0.735 [0.686, 0.778] | 0.527 [0.444, 0.600] |
+| median b, minimal → detailed | +3.65 → +3.03 | −0.34 → **+0.62** |
+| paired Δ \|b\| | −0.63 [−0.69, −0.57] | +0.64 [+0.55, +0.73] |
+| paired Δ \|s\| | −0.165 [−0.194, −0.137] | +0.108 [+0.072, +0.146] |
+| sign(s)-vs-length agreement | 0.491 → 0.476 | 0.622 → **0.408** |
+| compliance, minimal → detailed | 1.000 → 1.000 | 0.512 → **0.275** |
+
+- **Finding 36 — the symmetrized verdict is rubric-fragile at small scale:
+  30–43% of debiased verdicts change with the rubric text alone, an order
+  of magnitude more churn than the net accuracy movement.** At 0.5B, 30.3%
+  [26.8, 34.0] of items flip their symmetrized verdict between rubrics —
+  against a positional flip rate of 0.000 — and the flips are symmetric
+  noise: 84 right→wrong vs 98 wrong→right, netting the null +0.023. At 1B
+  the rubric flip rate is 0.432 [0.393, 0.472] (259 items flipped, net +43)
+  and cross-rubric r(s) is 0.257: the order-invariant preference under one
+  rubric barely predicts the other. The flips sit
+  exactly where the white-box account says they must — where the preference
+  is weakest (0.5B flip rate by \|s\| quartile: 0.42 / 0.40 / 0.30 / 0.09;
+  1B: 0.52 / 0.43 / 0.49 / 0.29): with median \|s\| ≈ 0.15–0.24 log-odds,
+  any perturbation of comparable scale re-randomizes the sign. The
+  order-swap consistency that "debiasing by symmetrization" buys is
+  therefore not verdict *stability* at these scales — a judge can be
+  perfectly order-consistent and still an unreliable measurement
+  instrument, because the prompt wording is a noise source of the same
+  order as the signal. Black-box rubric-consistency audits exist; what the
+  log-odds view adds is the mechanism (flips concentrate at small \|s\|)
+  and the decomposition of *what* moved (s, b, or both — below).
+- **Finding 37 — at 0.5B the detailed rubric contracts the whole log-odds
+  distribution and touches nothing structural.** Every summary shrinks
+  toward zero — Δ\|b\| −0.63 [−0.69, −0.57] (median +3.65 → +3.03), but
+  Δ\|s\| −0.165 [−0.194, −0.137] with it, proportionally *more* (−30% vs
+  −17%), and mean Δs is slightly *away* from gold (−0.048
+  [−0.083, −0.012]). Bias dominance rises to 100.0% of items, per-order
+  accuracy stays exactly 1.000 / 0.000, flip rate falls to exactly 0: the
+  judge remains a pure always-A machine that reads four explicit criteria,
+  including "do not let the order influence you", and expresses them as a
+  17% smaller push toward position A. Prompt-side instruction is not a
+  debiasing lever here. And position bias is the more rubric-*stable*
+  component (r(b) 0.735 vs r(s) 0.610): the judge's most reproducible
+  property is its pathology.
+- **Finding 38 — at 1B the rubric reverses both of the judge's directional
+  properties, and the significant accuracy gain is a re-aimed length lean,
+  not new judgment.** The detailed rubric flips the 1B's position bias from
+  a B-lean to an A-lean (median b −0.34 → +0.62, mean −0.34 → +1.04,
+  Δ\|b\| +0.64 [+0.55, +0.73]) — after findings 11, 21 and 32 showed bias
+  direction is not a family, scale, or per-model property, it is now not
+  even a property of a fixed (model, sample) pair: the rubric text alone
+  reverses it. The length orientation reverses with it:
+  sign(s)-vs-length agreement 0.622 → 0.408, from the family's
+  characteristic length-following to anti-length. That single reversal
+  explains the category pattern of the headline +0.072 [+0.018, +0.123]
+  exactly: Reasoning — where the longer answer is usually wrong — gains
+  +0.132 [+0.059, +0.205], while Chat — the one category where longer is
+  usually right (finding 13) — *loses* −0.222 [−0.375, −0.069]. Finding
+  24's mechanism (accuracy = the local length-lean read through the
+  subset's gold-length composition), previously seen across judges, here
+  operates *within one judge across prompts*. Meanwhile compliance
+  collapses, 0.512 → 0.275 (Chat 0.625 → 0.125, Safety 0.838 → 0.351;
+  Reasoning was already broken at 0.226 and stays there): the longer
+  instruction makes the model *less* able to open with a verdict letter
+  while judging *better* — the sharpest form yet of findings 8/25/35's
+  warning, since a parse-and-drop harness under the detailed rubric would
+  keep 165 of 600 items (27.5%) and they are the *worse*-judged stratum
+  (0.570 vs 0.648, gap −0.079 [−0.167, +0.009]).
+
+![cross-rubric identity panels](results/figures/rubric_pair__minimal_vs_detailed.png)
+
+*Item-paired log-odds across rubrics (top: 0.5B, bottom: 1B; left:
+preference s, right: position bias b; dashed line = rubric-invariant). The
+0.5B bias cloud sits uniformly below the identity in the far positive
+region — contraction without structural change (finding 37) — while the 1B
+bias cloud crosses zero upward: the rubric reverses the lean (finding 38).
+Both preference panels are near-blobs around the origin; that lack of
+identity-line structure is finding 36 drawn directly.*
+
 ## Planned experiments
 
 1. **Scaling grid** — Qwen2.5-Instruct 0.5B/1.5B/3B/7B, Llama-3-Instruct
@@ -1271,7 +1377,9 @@ family gap.*
    vs. log length ratio. *(Done above — findings 12–14; reruns automatically
    as new grids complete.)*
 5. **Prompt sensitivity** — minimal vs. detailed rubric as a paired
-   comparison in log-odds space.
+   comparison in log-odds space. *(Started 2026-08-27 — findings 36–38 on
+   the two smallest judges; the larger judges' rubric grids are budgeted
+   one per session as compute allows.)*
 
 ## Feasibility pilot (2026-07-17, real measurements, anecdote scale)
 
@@ -1330,10 +1438,13 @@ Recorded as they were hit, not reconstructed afterwards (dated entries in
   ~3x apart across sessions (measured 2026-07-23: ~40 vs ~120 tok/s at 3B,
   same nominal 4-vCPU class). Timing numbers in this README are per-run
   facts, not hardware benchmarks.
-- **Deterministic readout, one rubric so far.** Temperature-0 single-token
+- **Deterministic readout, two rubrics so far.** Temperature-0 single-token
   readout removes sampling noise by construction — reliability here means
-  bias/validity structure, not decode variance. The rubric-sensitivity axis
-  (planned experiment 5) is the remaining untested prompt degree of freedom.
+  bias/validity structure, not decode variance. The rubric axis is measured
+  at two rubrics × the two smallest judges (findings 36–38); whether rubric
+  fragility persists at the signal-dominant tier is untested until the
+  larger judges' `detailed` grids run, and two templates cannot separate
+  "rubric wording" from "prompt length" as the perturbation that matters.
 
 ## Repository layout
 
@@ -1351,16 +1462,18 @@ src/length_probe.py  conditional-logit value-over-length probe (nested
 src/calibration.py   folded confidence views, tie-safe equal-mass bins, ECE
 src/bias_model.py    variance decomposition of b_i + exact-LOO single-order
                   correction ladder (additive-shift test)
+src/rubric_pair.py   paired rubric-sensitivity analysis: per-item deltas,
+                  rubric flip rate, cross-rubric correlations
 experiments/      run_grid, summarize, master_table, prefix_skew,
                   schedule_coverage, make_figures, compliance_view,
                   scaling_curve, length_probe, calibration, bias_model,
-                  subset_view
+                  subset_view, rubric_view
 results/raw/      one JSONL store per (model, rubric) + provenance sidecar
 results/summary/  quick-look JSON per store (+ __compliance, length_probe,
                   calibration, bias_model, subset_view, master_table —
                   the last also rendered as the markdown the README embeds)
 results/figures/  committed PNGs, regenerable from raw stores
-tests/            119 tests, 1 skipped without a pinned GGUF present
+tests/            130 tests, 1 skipped without a pinned GGUF present
                   (schema, templates, readout arithmetic, store
                   resume, execution-order proportionality, decomposition,
                   bootstrap, floors, compliance view, length probe,
@@ -1374,7 +1487,7 @@ research/NOTES.md living research log
 ```bash
 uv sync                      # analysis deps (numpy, pyarrow, matplotlib)
 uv run python -m src.data    # fetch pinned parquet, print composition
-uv run --group dev pytest    # 119 tests (1 skipped without a GGUF)
+uv run --group dev pytest    # 130 tests (1 skipped without a GGUF)
 uv sync --group judge        # llama-cpp-python (compiles ~5 min on 4 cores)
 # download the pinned GGUF named in src/judge.py MODELS into models/, then:
 uv run python -m experiments.run_grid --model qwen2.5-0.5b --rubric minimal --n 600 --seed 0
