@@ -266,3 +266,73 @@ def rubric_pair_view(
         }
 
     return view
+
+
+def fragility_fit(
+    matched: Sequence[RubricPair],
+    n_quartiles: int = 4,
+    n_boot: int = N_BOOT,
+    seed: int = SEED,
+) -> dict:
+    """Fit the one-parameter perturbation account of rubric flips.
+
+    The white-box reading of the rubric flip rate is that rewording the
+    prompt perturbs the order-invariant preference, and the sign
+    re-randomizes exactly where |s| is small relative to the perturbation.
+    The simplest model with that content treats rubric B's preference as a
+    contracted copy of rubric A's plus homoskedastic noise,
+
+        s_B = lam * s_A + eps,   eps ~ N(0, sigma^2),
+
+    under which an item with reference preference s flips sign with
+    probability Phi(-lam * |s| / sigma). ``lam`` is the least-squares
+    through-origin slope and ``sigma`` the residual sd; the return value
+    reports both plus, per quartile of |s_A|, the observed flip rate (with
+    a bootstrap CI) against the model's prediction — so the fit is
+    falsifiable bin by bin, not just on the pooled rate.
+
+    Strict-sign convention: an exactly-zero s on either side counts as half
+    a flip, matching ``RubricPair.sym_verdict_agrees``.
+    """
+    if len(matched) < 3:
+        raise ValueError(f"only {len(matched)} matched items; need >= 3")
+    s_a = np.array([p.a.s for p in matched])
+    s_b = np.array([p.b.s for p in matched])
+    flips = np.array([1.0 - p.sym_verdict_agrees for p in matched])
+
+    denom = float(np.sum(s_a * s_a))
+    if denom == 0.0:
+        raise ValueError("all reference preferences are exactly zero")
+    lam = float(np.sum(s_a * s_b) / denom)
+    resid = s_b - lam * s_a
+    sigma = float(np.std(resid, ddof=1))
+
+    def predicted_flip(abs_s: np.ndarray) -> np.ndarray:
+        from math import erf, sqrt
+
+        z = -lam * abs_s / sigma
+        return np.array([0.5 * (1.0 + erf(v / sqrt(2.0))) for v in z])
+
+    abs_s = np.abs(s_a)
+    edges = np.quantile(abs_s, np.linspace(0, 1, n_quartiles + 1)[1:-1])
+    bin_of = np.digitize(abs_s, edges)
+    bins = []
+    for k in range(n_quartiles):
+        mask = bin_of == k
+        bins.append(
+            {
+                "n_items": int(mask.sum()),
+                "median_abs_s": float(np.median(abs_s[mask])),
+                "observed_flip": _mean_ci(list(flips[mask]), n_boot, seed),
+                "predicted_flip": float(np.mean(predicted_flip(abs_s[mask]))),
+            }
+        )
+    return {
+        "n_items": len(matched),
+        "lam": lam,
+        "sigma": sigma,
+        "median_abs_s": float(np.median(abs_s)),
+        "overall_flip": _mean_ci(list(flips), n_boot, seed),
+        "overall_predicted_flip": float(np.mean(predicted_flip(abs_s))),
+        "quartiles": bins,
+    }

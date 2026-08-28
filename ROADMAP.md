@@ -4,7 +4,7 @@ This lab runs one flagship research project at a time, worked daily until it wou
 survive review by a demanding referee. Everything here is real: every number in a
 writeup comes from an experiment actually run in this repo.
 
-## Current flagship: `slm-judge-audit` — started 2026-07-17, phase 3 (rubric-sensitivity axis underway; writeup restructure done 2026-08-27)
+## Current flagship: `slm-judge-audit` — started 2026-07-17, phase 3 (rubric-sensitivity axis underway: three of seven judges done; writeup restructure done 2026-08-27)
 
 **Question.** How reliable are small open-weight LLMs (0.5B–8B, the sizes people
 actually deploy for cheap large-scale evaluation) as zero-shot pairwise judges —
@@ -130,7 +130,15 @@ instruction-following axis for free. Pinned revision + SHA256, verified at load.
    both bias direction and length orientation, and the significant accuracy
    gain decomposes as a re-aimed length lean, with compliance collapsing
    0.512 → 0.275. The results-narrative restructure landed the same day.
-   Remaining: detailed grids for the five larger judges, one per session.)*
+   2026-08-28: the 1.5B detailed grid plus the perturbation model
+   (`fragility_fit`: s_det = λ·s_min + ε, flip probability Φ(−λ|s|/σ)) —
+   findings 39–41: the flip-rate arc 0.303/0.432/0.190 is ordered by
+   median |s|, not size, and the model reproduces each judge's quartile
+   profile; at 1.5B the rubric contracts both components and halves the
+   order asymmetry without moving the symmetrized verdict, and the 1B's
+   bias-direction reversal does not replicate where |b| is large; the
+   valley is rubric-invariant. Remaining: detailed grids for the four
+   larger judges, one per session.)*
 4. **Writeup** — README as a research report with real tables, figures, and
    limitations; reproduction audit in the `rag-chunking-bench` style.
 

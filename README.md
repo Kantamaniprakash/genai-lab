@@ -11,13 +11,13 @@ Hands-on experiments with current Gen AI techniques — RAG, agents, evals, fine
 
 <!-- auto-generated from research/NOTES.md by scripts/sync_latest.py; do not hand-edit -->
 
-**2026-08-27 — Day 10: the rubric axis opens — verdicts are rubric-fragile below 3B (findings 36–38); the results narrative gets its restructure**
+**2026-08-28 — Day 11: the fragility model — rubric flips are the signal-to-perturbation ratio (findings 39–41)**
 
-- Finding 36 — the symmetrized verdict is rubric-fragile at small scale: 30–43% of debiased verdicts change with the rubric text alone, an order of magnitude more churn than the net accuracy movement.
-- Finding 37 — at 0.5B the detailed rubric contracts the whole log-odds distribution and touches nothing structural.
-- Finding 38 — at 1B the rubric reverses both directional properties; the significant gain is a re-aimed length lean.
+- Finding 39 — rubric fragility is the signal-to-perturbation ratio, not a property of small judges, and the two-parameter model predicts where the flips are.
+- Finding 40 — at 1.5B the detailed rubric contracts both components and halves the order asymmetry without touching the symmetrized verdict; the 1B's direction reversal does not replicate where bias is sizable.
+- Finding 41 — the valley is rubric-invariant.
 
-[Full entry →](slm-judge-audit/research/NOTES.md#2026-08-27--day-10-the-rubric-axis-opens--verdicts-are-rubric-fragile-below-3b-findings-3638-the-results-narrative-gets-its-restructure)
+[Full entry →](slm-judge-audit/research/NOTES.md#2026-08-28--day-11-the-fragility-model--rubric-flips-are-the-signal-to-perturbation-ratio-findings-3941)
 <!-- latest-end -->
 
 ![Symmetrized and raw judge accuracy vs parameter count, with the bias-versus-signal race](slm-judge-audit/results/figures/scaling__minimal.png)
@@ -43,8 +43,8 @@ day-by-day research log.
 The scaling grid is complete: seven grids (Qwen2.5 0.5B/1.5B/3B/7B and
 Llama-3 1B/3B/8B, all Q4_K_M) on the same 600 stratified
 [RewardBench](https://arxiv.org/abs/2403.13787) items in both presentation
-orders, everything on 4 CPU cores — plus the first two grids of the
-rubric-sensitivity axis. Findings 1–38 and the full cross-judge
+orders, everything on 4 CPU cores — plus the first three grids of the
+rubric-sensitivity axis. Findings 1–41 and the full cross-judge
 table live in the
 [project README](slm-judge-audit/README.md#results-at-a-glance):
 
@@ -75,11 +75,15 @@ table live in the
   by the largest margin and in every category, while Llama's below-chance
   hole on adversarial pairs persists to 8B (Chat Hard 0.522 vs Qwen-7B's
   0.696 on identical items).
-- **The verdict is rubric-fragile where the signal is small.** Rewording the
-  rubric — same items, same orders — flips 30% of the 0.5B's debiased
-  verdicts and 43% of the 1B's while barely moving net accuracy, and at 1B
-  it reverses the judge's bias direction and length orientation outright:
-  the prompt is a noise source of the same order as the content signal.
+- **The verdict is rubric-fragile exactly where the signal is small — and a
+  two-parameter model predicts it.** Rewording the rubric — same items, same
+  orders — flips 30% of the 0.5B's debiased verdicts, 43% of the 1B's, and
+  19% of the 1.5B's, an arc ordered by preference strength rather than
+  size; a fitted perturbation model Φ(−λ|s|/σ) reproduces each judge's
+  flip-rate profile. At 1B the rubric reverses the judge's bias direction
+  and length orientation outright; at 1.5B it halves the order asymmetry
+  without moving the debiased verdict, and the scaling valley itself is
+  rubric-invariant.
 
 ## Completed flagship — `rag-chunking-bench`
 

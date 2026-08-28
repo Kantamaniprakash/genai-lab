@@ -123,3 +123,48 @@ def test_rubric_pair_view_deterministic_and_minimum_n():
     assert v1 == v2
     with pytest.raises(ValueError, match="matched items"):
         rubric_pair_view(pairs_a[:2], pairs_b[:2], "m", "d", n_boot=100)
+
+def test_fragility_fit_recovers_construction():
+    # Construct s_B = 0.5 * s_A + eps with known sigma; flips then follow
+    # Phi(-0.5 |s| / sigma) and the fit should recover both parameters.
+    from src.rubric_pair import fragility_fit
+
+    rng = np.random.default_rng(11)
+    lam_true, sigma_true = 0.5, 0.4
+    matched = []
+    for i in range(400):
+        s = float(rng.normal(0.0, 1.2))
+        b = float(rng.normal(1.0, 0.5))
+        s2 = lam_true * s + float(rng.normal(0.0, sigma_true))
+        item = f"sub{i % 2}/{i}"
+        matched.append(
+            RubricPair(item_id=item, a=sp(item, b + s, b - s),
+                       b=sp(item, b + s2, b - s2))
+        )
+    fit = fragility_fit(matched, n_boot=300, seed=0)
+    assert fit["n_items"] == 400
+    assert fit["lam"] == pytest.approx(lam_true, abs=0.05)
+    assert fit["sigma"] == pytest.approx(sigma_true, abs=0.05)
+    # Quartile structure: flip rate falls monotonically in |s|, and the
+    # model prediction lands inside (or near) each observed CI.
+    obs = [q["observed_flip"]["mean"] for q in fit["quartiles"]]
+    assert obs[0] > obs[-1]
+    for q in fit["quartiles"]:
+        lo, hi = q["observed_flip"]["ci95"]
+        assert lo - 0.05 <= q["predicted_flip"] <= hi + 0.05
+    assert sum(q["n_items"] for q in fit["quartiles"]) == 400
+
+
+def test_fragility_fit_edge_cases():
+    from src.rubric_pair import fragility_fit
+
+    with pytest.raises(ValueError, match="matched items"):
+        fragility_fit([])
+    # All-zero reference preferences cannot identify lam.
+    degenerate = [
+        RubricPair(item_id=f"s/{i}", a=sp(f"s/{i}", 1.0, 1.0),
+                   b=sp(f"s/{i}", 2.0, 1.0))
+        for i in range(5)
+    ]
+    with pytest.raises(ValueError, match="exactly zero"):
+        fragility_fit(degenerate)

@@ -1454,3 +1454,97 @@ level-independent, so no links broke.
    re-lock, full suites, push.
 4. **Disk**: both small GGUFs (~1.2 GB total) can stay; delete before any
    7B/8B rubric grid.
+
+## 2026-08-28 — Day 11: the fragility model — rubric flips are the signal-to-perturbation ratio (findings 39–41)
+
+Fresh container: `uv sync --group judge`; 0.5B/1.5B/3B GGUFs downloaded and
+SHA256-verified against the registry pins. Pre-work suite: 125 passed with
+the expected real-model smoke failure against the still-downloading 0.5B
+GGUF (132 passed, zero skips, at end of day with all models present).
+
+### The grid
+
+`qwen2.5-1.5b__detailed` ran end-to-end under the deficit scheduler:
+1200/1200 in 119.3 min (0.17 judg/s), n_ctx 2826, TV 0.000 at close,
+compliance 1.000, zero incomplete items. The third rubric point, and the
+first where the reference preference (median |s| 0.503 under minimal) is
+substantially larger than the rubric perturbation.
+
+### New machinery: the perturbation model
+
+Day 10 located rubric flips at small |s|; the falsifiable version is a
+model. `src/rubric_pair.fragility_fit`: s_detailed = λ·s_minimal + ε with
+ε homoskedastic Gaussian — λ the through-origin least-squares slope, σ the
+residual sd — under which an item flips sign with probability Φ(−λ|s|/σ).
+The fit reports observed-vs-predicted flip rates per quartile of |s| so it
+can fail bin by bin. `experiments/rubric_fragility.py` sweeps every judge
+with both stores, writes `rubric_fragility__minimal_vs_detailed.{json,md}`,
+and renders the flip-rate-vs-|s| figure (observed points + fitted curves).
+2 new tests (parameter recovery on a constructed field; degenerate-input
+errors); 132 total, ruff clean.
+
+### Findings (paired on all 600 items; day-10 questions answered)
+
+**Finding 39 — rubric fragility is the signal-to-perturbation ratio, not a
+property of small judges, and the two-parameter model predicts where the
+flips are.** Flip-rate arc 0.303 / 0.432 / 0.190 (0.5B / 1B / 1.5B) ordered
+exactly by median reference |s| (0.235 / 0.144 / 0.503) — the most fragile
+judge is the weakest-preference one, not the smallest. Fits: λ 0.345 /
+0.374 / 0.522, σ 0.236 / 0.532 / 0.418. Quartile profiles reproduced —
+0.5B nearly exactly (0.47/0.40/0.29/0.10 predicted vs 0.42/0.40/0.30/0.09
+observed). At 1.5B the mid-quartiles come in *below* prediction (0.26 vs
+0.34, 0.11 vs 0.18): with r(s) 0.834 the rubric moves the preference
+coherently, so fewer signs flip than equal-sized noise would produce. The
+model's failure direction is itself diagnostic.
+
+**Finding 40 — at 1.5B the detailed rubric contracts both components and
+halves the order asymmetry without touching the symmetrized verdict; the
+1B's direction reversal does not replicate where bias is sizable.**
+Δ|b| −0.36 [−0.41, −0.31] (median b +0.83 → +0.23 — 3.6x smaller, same
+sign), Δ|s| −0.294, λ ≈ 0.52. Per-order accuracy 0.805/0.293 → 0.617/0.445
+(gap 0.512 → 0.172) yet Δ sym −0.007 [−0.042, +0.028]: the anti-order
+instruction buys real single-call order robustness and nothing else —
+prompt-side debiasing pays only if you judge in one order. Finding 38's
+bias-direction reversal is a small-|b| phenomenon (1B median |b| ≈ 0.3 ≈
+the perturbation scale; 1.5B's 1.09 survives with its sign). Curiosity
+with a lesson: positional flip rate is exactly 179/600 under both rubrics
+(only 101 items shared) and bias dominance exactly 421/600 under both
+(343 shared) — frozen aggregates over churning items.
+
+**Finding 41 — the valley is rubric-invariant.** Sym 0.502 → 0.495 (null),
+Reasoning 0.368 → 0.375 (still below chance), length orientation weakened
+not re-aimed (sign-agreement 0.571 → 0.522), compliance 1.000 → 1.000.
+The valley is a property of the model at this scale, not of the prompt —
+now measured under two instructions. Family contrast: the detailed rubric
+collapsed Llama-1B compliance 0.512 → 0.275; both Qwen judges hold exactly
+1.000 — format discipline under instruction change is a family property,
+like calibration (finding 23).
+
+### Writeup
+
+README: 1.5B column in the rubric table, findings 39–41 bullets, the
+fragility figure with caption, identity-panel caption updated for three
+rows, findings index +39–41, status paragraph, limitations (fragility
+model's homoskedastic-Gaussian assumption and where it bends; larger-tier
+prediction explicitly marked untested), repository layout. ROADMAP phase-3
+line updated.
+
+### Next steps (Day 12)
+
+1. **Extend the rubric axis to 3B**: `uv run python -m experiments.run_grid
+   --model qwen2.5-3b --rubric detailed --n 600 --seed 0 --threads 4`
+   (~4 h at day-5 rates; the GGUF is already verified in models/). Key
+   question: finding 39's extrapolation — at median |s| 3.64 (minimal) the
+   model predicts a flip rate near zero; and does the detailed rubric
+   shrink the 3B's large B-lean (median b −2.34) or is prompt-side bias
+   reduction also capped where |b| is large? If the store is partial at
+   session end, resume — matching item sets keeps the paired analysis
+   honest at any prefix.
+2. **After the grid**: `experiments.summarize --store qwen2.5-3b__detailed`,
+   `rubric_view` sweep, `rubric_fragility` — all three regenerate their
+   committed artifacts; check the 3B point lands on/off its fitted curve.
+3. **Dependency housekeeping** (carried from day 9; the box was busy both
+   days): bump diskcache/setuptools here and torch in rag-chunking-bench,
+   re-lock, full suites, push.
+4. **Disk**: the 7B/8B GGUFs are not on this container; the three Qwen
+   GGUFs (~3.5 GB) fit comfortably. Nothing to clean.
