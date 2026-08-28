@@ -1557,3 +1557,60 @@ line updated.
    upstream ships a fix.
 4. **Disk**: the 7B/8B GGUFs are not on this container; the three Qwen
    GGUFs (~3.5 GB) fit comfortably. Nothing to clean.
+
+## 2026-08-28 — Day 11, second act: the 3B closes the day at four rubric points (findings 42–43)
+
+The box was free after the writeup, so the day-12 grid ran today:
+`qwen2.5-3b__detailed`, 1200/1200 in 242.0 min (0.08 judg/s) under the
+deficit scheduler, TV 0.000 at close, compliance 1.000, checkpointed to
+main throughout. All rubric analyses regenerated over four judges
+(`rubric_view`, `rubric_fragility`, per-store summary).
+
+**Finding 42 — the fragility arc extends to 3B on the model's own
+prediction, and the coherent-movement deviation grows with judge quality.**
+Flip rate 0.102 [0.078, 0.127] at median |s| 3.64; the four-judge arc
+0.303/0.432/0.190/0.102 stays ordered by |s|; r(s) 0.912. λ climbs
+0.345 → 0.374 → 0.522 → 0.767 (contraction weakens with scale), σ grows
+slower than |s|. The Gaussian model's weak-|s| over-prediction deepens
+(Q1 0.287 obs vs 0.394 pred; Q2 0.087 vs 0.201) exactly as r(s) rises:
+better judges move coherently under rubric change, not noisily.
+
+**Finding 43 — prompt-side debiasing works hardest where the bias is
+largest, but buys raw accuracy and order balance, never symmetrized
+quality — and it un-saturates the flip rate.** Audit's largest prompt-side
+bias reduction on its largest bias: Δ|b| −1.80 [−2.01, −1.59], median b
+−5.55 → −3.51, direction intact (with 1.5B: the rubric reverses direction
+only where |b| ≈ perturbation scale — the 1B). Raw acc +0.033
+[+0.016, +0.050] (chosen-first 0.368 → 0.428); sym +0.022 [−0.003, +0.047]
+null. Positional flip rate rises 0.380 → 0.438 (Δ +0.058 [+0.027, +0.092])
+— finding 3's flip-rate inversion driven within one judge by the prompt
+alone. All per-category deltas null; flips uniform 0.09–0.12. Compliance
+1.000 → 1.000 (third Qwen point). sign(s)-vs-length agreement 0.547 → 0.549
+(unmoved — no re-aiming, unlike the 1B).
+
+**Writeup.** README: 3B column in the rubric table, findings 42–43,
+both figure captions updated for four rows/judges, status + limitations
+(in-family extrapolation now tested through 3B; 7B/8B remain), findings
+index +42–43. ROADMAP and root README refreshed.
+
+### Next steps (Day 12) — supersedes the morning list
+
+1. **The 7B detailed grid** — the remaining Qwen point and the first
+   signal-dominant one: `uv run python -m experiments.run_grid --model
+   qwen2.5-7b --rubric detailed --n 600 --seed 0 --threads 4`. At day-6
+   rates (~0.04 judg/s) this is ~8 h — expect to span sessions; the GGUF
+   (4.9 GB) must be re-downloaded first (pins in src/judge.py). Launch
+   early, checkpoint often. Key predictions to test: flip rate ≈ 0.05 or
+   lower (median |s| 8.68-ish on the full sample; read it from the
+   minimal store first), and whether Δ|b| keeps scaling with |b| or the
+   prompt-side lever saturates.
+2. **Then the Llama detailed grids** (3.2-1B done; 3.2-3B ~4 h, 3.1-8B
+   ~3.2 h at day-9 rates) — the cross-family fragility question: does
+   Llama's larger σ persist at scale (the 1B point suggests family-scaled
+   perturbation sensitivity), and does the compliance collapse under the
+   detailed rubric (finding 38) replicate at 3B/8B where Safety was the
+   migration target?
+3. **After each grid**: `rubric_view` + `rubric_fragility` sweeps
+   regenerate all committed artifacts.
+4. **Disk**: delete the three small Qwen GGUFs before downloading the 7B
+   (~3.5 GB frees; 7B needs 4.9 GB); all pins verified in the registry.
