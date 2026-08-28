@@ -1543,8 +1543,17 @@ line updated.
 2. **After the grid**: `experiments.summarize --store qwen2.5-3b__detailed`,
    `rubric_view` sweep, `rubric_fragility` — all three regenerate their
    committed artifacts; check the 3B point lands on/off its fitted curve.
-3. **Dependency housekeeping** (carried from day 9; the box was busy both
-   days): bump diskcache/setuptools here and torch in rag-chunking-bench,
-   re-lock, full suites, push.
+3. **Dependency housekeeping — done at end of day 11** (carried from day
+   9). A fresh osv.dev sweep corrected day 9's localization: setuptools sat
+   in rag-chunking-bench's lock, not this project's. rag-chunking-bench:
+   setuptools 81.0.0 → 84.0.0 (GHSA-h35f-9h28-mq5c fixed in 83) and torch
+   2.12.1 → 2.13.0 (GHSA-rrmf-rvhw-rf47 fixed in 2.13.0), suite green after
+   the bump (363 passed, 2 skipped), lock now osv-clean. This project's
+   only flagged pin, diskcache 5.6.3 (GHSA-w8v5-vhqr-4h9v, unsafe pickle
+   deserialization), has **no fixed release** (last_affected = 5.6.3, the
+   latest version) — nothing to bump. Exposure assessed as low: diskcache
+   arrives as a llama-cpp-python transitive and this harness never
+   deserializes cache content from untrusted sources; revisit when
+   upstream ships a fix.
 4. **Disk**: the 7B/8B GGUFs are not on this container; the three Qwen
    GGUFs (~3.5 GB) fit comfortably. Nothing to clean.
