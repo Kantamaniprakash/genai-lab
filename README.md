@@ -11,12 +11,12 @@ Hands-on experiments with current Gen AI techniques — RAG, agents, evals, fine
 
 <!-- auto-generated from research/NOTES.md by scripts/sync_latest.py; do not hand-edit -->
 
-**2026-08-28 — Day 11, second act: the 3B closes the day at four rubric points (findings 42–43)**
+**2026-08-29 — Day 12: the 7B closes the Qwen rubric line — the lever stops paying at the top (findings 44–45)**
 
-- Finding 42 — the fragility arc extends to 3B on the model's own prediction, and the coherent-movement deviation grows with judge quality.
-- Finding 43 — prompt-side debiasing works hardest where the bias is largest, but buys raw accuracy and order balance, never symmetrized quality — and it un-saturates the flip rate.
+- Finding 44 — the arc closes at five points, λ plateaus, and the coherent-movement deviation peaks at 3B.
+- Finding 45 — at the family's top, prompt-side debiasing re-signs a balanced bias and buys nothing at all.
 
-[Full entry →](slm-judge-audit/research/NOTES.md#2026-08-28--day-11-second-act-the-3b-closes-the-day-at-four-rubric-points-findings-4243)
+[Full entry →](slm-judge-audit/research/NOTES.md#2026-08-29--day-12-the-7b-closes-the-qwen-rubric-line--the-lever-stops-paying-at-the-top-findings-4445)
 <!-- latest-end -->
 
 ![Symmetrized and raw judge accuracy vs parameter count, with the bias-versus-signal race](slm-judge-audit/results/figures/scaling__minimal.png)
@@ -42,9 +42,9 @@ day-by-day research log.
 The scaling grid is complete: seven grids (Qwen2.5 0.5B/1.5B/3B/7B and
 Llama-3 1B/3B/8B, all Q4_K_M) on the same 600 stratified
 [RewardBench](https://arxiv.org/abs/2403.13787) items in both presentation
-orders, everything on 4 CPU cores — plus the first four grids of the
-rubric-sensitivity axis. Findings 1–43 and the full cross-judge
-table live in the
+orders, everything on 4 CPU cores — plus five grids of the
+rubric-sensitivity axis, covering the full Qwen line. Findings 1–45 and
+the full cross-judge table live in the
 [project README](slm-judge-audit/README.md#results-at-a-glance):
 
 - **Debiased judge quality is not monotone in scale — and at the top tier,
@@ -77,14 +77,17 @@ table live in the
 - **The verdict is rubric-fragile exactly where the signal is small — and a
   two-parameter model predicts it.** Rewording the rubric — same items, same
   orders — flips 30% of the 0.5B's debiased verdicts, 43% of the 1B's, 19%
-  of the 1.5B's, and 10% of the 3B's: an arc ordered by preference strength
-  rather than size, with a fitted perturbation model Φ(−λ|s|/σ) reproducing
-  each judge's flip-rate profile. At 1B the rubric reverses the judge's
-  bias direction and length orientation outright; at 1.5B it halves the
-  order asymmetry without moving the debiased verdict and the scaling
-  valley itself is rubric-invariant; at 3B prompt-side debiasing posts its
-  largest bias reduction yet buys only raw accuracy and order balance —
-  the symmetrized verdict never moves.
+  of the 1.5B's, 10% of the 3B's, and 7% of the 7B's: an arc ordered by
+  preference strength rather than size, with a fitted perturbation model
+  Φ(−λ|s|/σ) reproducing each judge's flip-rate profile. At 1B the rubric
+  reverses the judge's bias direction and length orientation outright; at
+  1.5B it halves the order asymmetry without moving the debiased verdict
+  and the scaling valley itself is rubric-invariant; at 3B prompt-side
+  debiasing posts its largest bias reduction yet buys only raw accuracy
+  and order balance; and at 7B the lever stops paying altogether — it
+  pushes a balanced bias through zero into the opposite lean while every
+  accuracy and order-balance metric sits still. The symmetrized verdict
+  never moves at any scale.
 
 ## Completed flagship — `rag-chunking-bench`
 

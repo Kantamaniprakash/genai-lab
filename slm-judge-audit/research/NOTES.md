@@ -1614,3 +1614,81 @@ index +42–43. ROADMAP and root README refreshed.
    regenerate all committed artifacts.
 4. **Disk**: delete the three small Qwen GGUFs before downloading the 7B
    (~3.5 GB frees; 7B needs 4.9 GB); all pins verified in the registry.
+
+## 2026-08-29 — Day 12: the 7B closes the Qwen rubric line — the lever stops paying at the top (findings 44–45)
+
+The day-11 plan executed as written: fresh container, env rebuilt from the
+lockfile (127 tests green), the 7B GGUF re-downloaded and verified against
+the pinned SHA256, and `qwen2.5-7b__detailed` run end-to-end in one session
+under the deficit scheduler — 1200/1200 in 514.5 min (0.04 judg/s, the
+day-6 rate), TV 0.000 at close, compliance 1.000 throughout. All rubric
+analyses regenerated over five judges (`rubric_view`, `rubric_fragility`,
+per-store `summarize`).
+
+**Pre-registered check, resolved first.** Day 11 predicted "flip rate
+≈ 0.05 or lower" from the fragility trend, flagging that the true median
+|s| should be read from the minimal store before judging the outcome. Read
+before the grid ran: median |s| = 9.08 on the full 600 sample (the 8.68 in
+the day-11 note was the matched-prefix estimate). Observed flip rate:
+**0.068 [0.050, 0.090]** — the CI's lower edge touches the guess, and the
+fitted model's own quartile aggregate (~0.079) sits closer to the
+observation than the verbal prediction did. Scored as: arc confirmed,
+point estimate slightly high of the guess, model better than intuition.
+
+**Finding 44 — the arc closes at five points, λ plateaus, and the
+coherent-movement deviation peaks at 3B.** 0.303/0.432/0.190/0.102/0.068,
+ordered by reference median |s| (0.235/0.144/0.503/3.64/9.08) end to end.
+λ 0.345 → 0.374 → 0.522 → 0.767 → 0.777: the proportional contraction
+stops deepening past 3B, but Δ|s| is the audit's largest in absolute
+terms (−1.81 [−2.05, −1.58], median 9.08 → 7.00) because σ keeps growing
+(2.577). The honest correction: finding 42 extrapolated the weak-|s|
+over-prediction as "grows with r(s)" — it doesn't. With r(s) essentially
+tied (0.916 vs 0.912), Q1 obs/pred is 0.240/0.283 (ratio 0.85) against
+3B's 0.287/0.394 (0.73), Q2 0.027/0.033 against 0.087/0.201. The
+coherent-movement residual peaks at 3B; at 7B the homoskedastic Gaussian
+nearly suffices.
+
+**Finding 45 — at the family's top, prompt-side debiasing re-signs a
+balanced bias and buys nothing at all.** The 7B minimal store carries the
+audit's most balanced net bias (mean b +0.15, median +0.23, 52.0% of
+items leaning A — with item-level median |b| still 2.78). The detailed
+rubric pushes it through zero: mean −1.30, median −1.25, A-lean share
+37.0%, Δb −1.45 [−1.73, −1.18] negative in all four categories, against
+a modest Δ|b| −0.75 [−0.99, −0.51]. Finding 40's boundary replicates at
+the opposite end of the family: direction reversal happens exactly where
+the net lean sits at the perturbation's own scale (1B −0.34, 7B +0.23);
+the 3B's −5.55 only shrank. And unlike the 3B (raw +0.033, flips
++0.058), every purchase is null at 7B: raw +0.011, sym +0.008,
+positional flip rate 0.732 → 0.750 (Δ +0.018, null — still the audit's
+highest), sign(s)-vs-length 0.489 → 0.481, compliance 1.000 → 1.000
+(fourth Qwen point). Only category texture: Safety +0.047
+[+0.014, +0.088] canceled by borderline Chat Hard −0.065 [−0.130, 0.000],
+Chat Hard also carrying the highest flip rate (0.109) — adversarial
+items live at small |s| even for a signal-dominant judge.
+
+**Writeup.** README: 7B column in the rubric table, findings 44–45, both
+figure captions to five judges, status header, rubric-section intro,
+planned-experiments item 5, limitations (Qwen line closed; Llama 3B/8B
+remain), findings index +44–45. Root README and ROADMAP refreshed.
+
+### Next steps (Day 13)
+
+1. **The Llama-3.2-3B detailed grid** — `uv run python -m
+   experiments.run_grid --model llama-3.2-3b --rubric detailed --n 600
+   --seed 0 --threads 4` (~4 h at day-9 rates; GGUF 2.0 GB, pin in
+   src/judge.py; delete the 7B GGUF first if disk is tight). The
+   cross-family fragility questions from day 11 are still the open ones:
+   does Llama's larger σ persist at 3B (family-scaled perturbation
+   sensitivity), and does the 1B's compliance collapse under the detailed
+   rubric replicate where Safety was the migration target (finding 35)?
+   Note Llama-3B minimal is an always-A machine (median b +10.85,
+   finding 21) — the direction-reversal boundary (findings 40/45) predicts
+   *no* reversal, only shrinkage; and its median |s| (1.79) slots between
+   1.5B and 3B, so the arc predicts a flip rate between 0.190 and 0.102.
+2. **Then the Llama-3.1-8B detailed grid** (~3.2 h at day-9 rates,
+   GGUF 4.9 GB) — closes the rubric axis at seven judges; after it, the
+   rubric-axis figures/tables are final and phase 3 is complete.
+3. **After each grid**: `rubric_view` + `rubric_fragility` + `summarize`
+   regenerate all committed artifacts; update README tables/captions.
+4. **Then phase 4**: the writeup coherence pass and the
+   `rag-chunking-bench`-style clean-environment reproduction audit.

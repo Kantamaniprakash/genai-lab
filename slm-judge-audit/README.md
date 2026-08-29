@@ -5,15 +5,15 @@ position bias measured in log-odds, calibration, and value over trivial
 baselines, with paired bootstrap confidence intervals.**
 
 *Status: **the scaling grid is complete** (phase 2 closed 2026-08-26) and
-the rubric-sensitivity axis is underway — rubric grids for the four
-smallest judges and findings 36–43 landed 2026-08-27/28, alongside the
+the rubric-sensitivity axis is underway — rubric grids for the full Qwen
+line and the 1B Llama, findings 36–45, landed 2026-08-27/29, alongside the
 results-narrative restructure ([The scaling arc](#the-scaling-arc)).
 Harness: runner, analysis core, floors, value-over-length probe, calibration,
 bias-structure test, per-subset view, cross-judge table, coverage-balanced
 scheduler, paired rubric analysis with a fragility model; 132 tests. Seven
 full grids on the same 600-item stratified sample × both orders (Qwen2.5
-0.5B/1.5B/3B/7B and Llama-3 1B/3B/8B) plus four `detailed`-rubric grids —
-findings 1–43 below, cross-cut in
+0.5B/1.5B/3B/7B and Llama-3 1B/3B/8B) plus five `detailed`-rubric grids —
+findings 1–45 below, cross-cut in
 [Results at a glance](#results-at-a-glance). Headlines:
 debiased judge quality is non-monotone in scale (0.568 → 0.502 → 0.742 →
 0.837 within the Qwen family — a 1.5B valley where the emergent preference is
@@ -38,13 +38,15 @@ rubric axis: at the two smallest scales, 30–43% of symmetrized verdicts
 flip when only the rubric text changes — the prompt is a noise source of
 the same order as the content signal — at 1B the rubric reverses the
 judge's bias direction and length orientation outright, and the flip rate
-falls 0.190 → 0.102 through 1.5B and 3B exactly as the
+falls 0.190 → 0.102 → 0.068 through 1.5B, 3B and 7B exactly as the
 signal-to-perturbation account predicts (a fitted Φ(−λ\|s\|/σ) reproduces
-each judge's quartile profile) while the valley proves rubric-invariant
-and the 3B shows prompt-side debiasing at its strongest and its most
-bounded — Δ\|b\| −1.80 buying raw accuracy but no symmetrized gain.
-Next: `detailed` grids for 7B and the Llama tier, budgeted one per
-session.*
+each judge's quartile profile) while the valley proves rubric-invariant;
+the 3B shows prompt-side debiasing at its strongest and its most
+bounded — Δ\|b\| −1.80 buying raw accuracy but no symmetrized gain — and
+at 7B the lever stops paying altogether: it pushes a balanced bias
+through zero into a B-lean (median b +0.23 → −1.25) while every
+accuracy, order-balance and length metric sits still.
+Next: `detailed` grids for Llama 3B and 8B, budgeted one per session.*
 
 ## Abstract
 
@@ -470,6 +472,8 @@ one's evidence, dated.
 | 41 | The valley is rubric-invariant: the 1.5B's defining pathologies survive a rubric that spells out what to judge. | [The rubric axis](#the-rubric-axis--the-same-judges-under-a-different-prompt) |
 | 42 | The fragility arc extends to 3B on the model's own prediction, and the coherent-movement deviation grows with judge quality. | [The rubric axis](#the-rubric-axis--the-same-judges-under-a-different-prompt) |
 | 43 | Prompt-side debiasing works hardest where the bias is largest, but it buys raw accuracy and order balance, never symmetrized quality — and it un-saturates the flip rate. | [The rubric axis](#the-rubric-axis--the-same-judges-under-a-different-prompt) |
+| 44 | The fragility arc closes its fifth point on the model's prediction, and the coherent-movement deviation peaks at 3B rather than growing with judge quality. | [The rubric axis](#the-rubric-axis--the-same-judges-under-a-different-prompt) |
+| 45 | At the family's top the prompt-side lever stops paying: it re-signs a balanced bias rather than shrinking a large one, and nothing else moves. | [The rubric axis](#the-rubric-axis--the-same-judges-under-a-different-prompt) |
 
 ## The per-grid record
 
@@ -1292,23 +1296,26 @@ interesting to test for prompt dependence; the third is the 1.5B valley
 judge, the first point where the reference preference is substantially
 larger than the perturbation; the fourth is the 3B, the first
 above-the-valley judge and the first with a large-magnitude bias to test
-prompt-side debiasing against. Deltas read detailed − minimal; the
+prompt-side debiasing against; the fifth is the 7B — the audit's best and
+most signal-dominant judge, closing the Qwen line and asking whether any
+of the rubric's effects survive where the content signal dwarfs the
+perturbation. Deltas read detailed − minimal; the
 committed summary is
 `results/summary/rubric_pair__minimal_vs_detailed.{json,md}`.
 
-| | Qwen2.5-0.5B | Llama-3.2-1B | Qwen2.5-1.5B | Qwen2.5-3B |
-|---|---|---|---|---|
-| sym acc, minimal → detailed | 0.568 → 0.592 | 0.555 → 0.627 | 0.502 → 0.495 | 0.742 → 0.763 |
-| paired Δ sym acc | +0.023 [−0.020, +0.067] | **+0.072 [+0.018, +0.123]** | −0.007 [−0.042, +0.028] | +0.022 [−0.003, +0.047] |
-| **rubric flip rate** | **0.303 [0.268, 0.340]** | **0.432 [0.393, 0.472]** | **0.190 [0.160, 0.222]** | **0.102 [0.078, 0.127]** |
-| positional flip rate (detailed) | 0.000 | 0.168 | 0.298 | 0.438 |
-| r(s) across rubrics | 0.610 [0.553, 0.663] | 0.257 [0.140, 0.379] | 0.834 [0.798, 0.863] | 0.912 [0.893, 0.928] |
-| r(b) across rubrics | 0.735 [0.686, 0.778] | 0.527 [0.444, 0.600] | 0.879 [0.855, 0.898] | 0.845 [0.815, 0.870] |
-| median b, minimal → detailed | +3.65 → +3.03 | −0.34 → **+0.62** | +0.83 → +0.23 | −5.55 → −3.51 |
-| paired Δ \|b\| | −0.63 [−0.69, −0.57] | +0.64 [+0.55, +0.73] | −0.36 [−0.41, −0.31] | **−1.80 [−2.01, −1.59]** |
-| paired Δ \|s\| | −0.165 [−0.194, −0.137] | +0.108 [+0.072, +0.146] | −0.294 [−0.341, −0.245] | −0.868 [−1.070, −0.669] |
-| sign(s)-vs-length agreement | 0.491 → 0.476 | 0.622 → **0.408** | 0.571 → 0.522 | 0.547 → 0.549 |
-| compliance, minimal → detailed | 1.000 → 1.000 | 0.512 → **0.275** | 1.000 → 1.000 | 1.000 → 1.000 |
+| | Qwen2.5-0.5B | Llama-3.2-1B | Qwen2.5-1.5B | Qwen2.5-3B | Qwen2.5-7B |
+|---|---|---|---|---|---|
+| sym acc, minimal → detailed | 0.568 → 0.592 | 0.555 → 0.627 | 0.502 → 0.495 | 0.742 → 0.763 | 0.837 → 0.845 |
+| paired Δ sym acc | +0.023 [−0.020, +0.067] | **+0.072 [+0.018, +0.123]** | −0.007 [−0.042, +0.028] | +0.022 [−0.003, +0.047] | +0.008 [−0.013, +0.030] |
+| **rubric flip rate** | **0.303 [0.268, 0.340]** | **0.432 [0.393, 0.472]** | **0.190 [0.160, 0.222]** | **0.102 [0.078, 0.127]** | **0.068 [0.050, 0.090]** |
+| positional flip rate (detailed) | 0.000 | 0.168 | 0.298 | 0.438 | 0.750 |
+| r(s) across rubrics | 0.610 [0.553, 0.663] | 0.257 [0.140, 0.379] | 0.834 [0.798, 0.863] | 0.912 [0.893, 0.928] | 0.916 [0.900, 0.929] |
+| r(b) across rubrics | 0.735 [0.686, 0.778] | 0.527 [0.444, 0.600] | 0.879 [0.855, 0.898] | 0.845 [0.815, 0.870] | 0.702 [0.656, 0.743] |
+| median b, minimal → detailed | +3.65 → +3.03 | −0.34 → **+0.62** | +0.83 → +0.23 | −5.55 → −3.51 | +0.23 → **−1.25** |
+| paired Δ \|b\| | −0.63 [−0.69, −0.57] | +0.64 [+0.55, +0.73] | −0.36 [−0.41, −0.31] | **−1.80 [−2.01, −1.59]** | −0.75 [−0.99, −0.51] |
+| paired Δ \|s\| | −0.165 [−0.194, −0.137] | +0.108 [+0.072, +0.146] | −0.294 [−0.341, −0.245] | −0.868 [−1.070, −0.669] | −1.812 [−2.045, −1.580] |
+| sign(s)-vs-length agreement | 0.491 → 0.476 | 0.622 → **0.408** | 0.571 → 0.522 | 0.547 → 0.549 | 0.489 → 0.481 |
+| compliance, minimal → detailed | 1.000 → 1.000 | 0.512 → **0.275** | 1.000 → 1.000 | 1.000 → 1.000 | 1.000 → 1.000 |
 
 - **Finding 36 — the symmetrized verdict is rubric-fragile at small scale:
   30–43% of debiased verdicts change with the rubric text alone, an order
@@ -1447,22 +1454,72 @@ committed summary is
   prompt alone. Per category everything is quiet (all Δ sym null, flips
   0.09–0.12 everywhere): at 3B the rubric is a global geometry change,
   not a category treatment.
+- **Finding 44 — the fragility arc closes its fifth point on the model's
+  prediction, and the coherent-movement deviation peaks at 3B rather than
+  growing with judge quality.** The 7B's rubric flip rate is 0.068
+  [0.050, 0.090] at median \|s\| 9.08 — the five-judge arc
+  0.303 / 0.432 / 0.190 / 0.102 / 0.068 stays ordered by the reference
+  \|s\| (0.235 / 0.144 / 0.503 / 3.64 / 9.08) from end to end, and the
+  day-11 registered prediction ("≈ 0.05 or lower") lands at the CI's edge:
+  close, slightly conservative-optimistic, and the fitted model's own
+  quartile aggregate (~0.079) is nearer the observation than the guess
+  was. The fit's trajectory bends in an informative way: λ plateaus
+  (0.522 → 0.767 → **0.777**) — past 3B the detailed rubric stops
+  *proportionally* compressing preferences — while the absolute
+  contraction is the audit's largest (Δ\|s\| −1.81 [−2.05, −1.58],
+  median 9.08 → 7.00) because σ keeps pace (2.577). And finding 42's
+  extrapolation breaks, honestly: with r(s) essentially tied
+  (0.916 vs 0.912), the weak-\|s\| over-prediction *narrows* at 7B
+  (Q1 observed 0.240 vs predicted 0.283, ratio 0.85, against 3B's
+  0.287 vs 0.394, ratio 0.73; Q2 0.027 vs 0.033 against 0.087 vs 0.201).
+  The coherent-movement residual is not a monotone function of judge
+  quality — it peaks at 3B, and at the family's top the two-parameter
+  Gaussian model very nearly suffices.
+- **Finding 45 — at the family's top the prompt-side lever stops paying:
+  it re-signs a balanced bias rather than shrinking a large one, and for
+  the first time in the audit nothing else moves.** The 7B's
+  minimal-rubric position bias is the audit's most *balanced* — mean b
+  +0.15, median +0.23, 52.0% of items leaning A — though individual items
+  still carry median \|b\| 2.78. The detailed rubric does not shrink that
+  bias; it pushes it through zero into a B-lean: mean b → −1.30, median
+  → −1.25, A-leaning items → 37.0% (Δb −1.45 [−1.73, −1.18], negative in
+  all four categories), with only a modest magnitude contraction
+  (Δ\|b\| −0.75 [−0.99, −0.51], median \|b\| 2.78 → 2.48). This
+  replicates finding 40's boundary at the opposite end of the family:
+  the rubric reverses net bias direction exactly where the net lean sits
+  at the perturbation's own scale (1B median −0.34, 7B median +0.23; the
+  3B's −5.55 merely shrinks). And where the 3B at least bought raw
+  accuracy and order balance (finding 43), at 7B every purchase is null:
+  raw +0.011 [−0.009, +0.030], sym +0.008 [−0.013, +0.030], positional
+  flip rate 0.732 → 0.750 (Δ +0.018 [−0.020, +0.055]) — still the
+  audit's highest, per finding 29's inversion — sign(s)-vs-length
+  agreement 0.489 → 0.481, compliance 1.000 → 1.000 (fourth Qwen point).
+  The only significant category movements cancel: Safety +0.047
+  [+0.014, +0.088] against a borderline Chat Hard loss of −0.065
+  [−0.130, 0.000] — and Chat Hard is also where the rubric flips most
+  verdicts (0.109 vs 0.04–0.07 elsewhere), the adversarial category
+  living at the smallest \|s\|. A practitioner reading this row gets the
+  audit's bluntest verdict on prompt-side debiasing: by the time a judge
+  is good enough to trust, the rubric text changes *which* bias you have,
+  not *whether* you have one — and buys nothing the two-call symmetrized
+  verdict didn't already own.
 
 ![rubric flip rate vs preference magnitude](results/figures/rubric_fragility__minimal_vs_detailed.png)
 
 *Observed rubric flip rate per quartile of the minimal-rubric \|s\| (points,
 95% bootstrap CIs) against each judge's fitted Φ(−λ\|s\|/σ) curve (lines) —
-findings 39 and 42 drawn directly. All four judges decay from near
+findings 39, 42 and 44 drawn directly. All five judges decay from near
 coin-flip at weak preference toward zero; the small Qwen curves nearly
 coincide despite a 3x parameter gap, while the 1B Llama's larger σ keeps it
-fragile out to \|s\| ≈ 2 and the 3B's curve stretches across its much wider
-\|s\| range. The 1.5B's and 3B's observed points sitting below their own
-curves in the weak-\|s\| quartiles is the coherent-movement residual
-described in findings 39 and 42 — it deepens as r(s) grows.*
+fragile out to \|s\| ≈ 2 and the 3B and 7B curves stretch across their much
+wider \|s\| ranges. The mid-size judges' observed points sitting below
+their own curves in the weak-\|s\| quartiles is the coherent-movement
+residual described in findings 39 and 42 — deepest at 3B, then narrowing
+again at 7B (finding 44), so it tracks neither size nor r(s) monotonically.*
 
 ![cross-rubric identity panels](results/figures/rubric_pair__minimal_vs_detailed.png)
 
-*Item-paired log-odds across rubrics (rows: 0.5B, 1B, 1.5B, 3B; left:
+*Item-paired log-odds across rubrics (rows: 0.5B, 1B, 1.5B, 3B, 7B; left:
 preference s, right: position bias b; dashed line = rubric-invariant). The
 0.5B bias cloud sits uniformly below the identity in the far positive
 region — contraction without structural change (finding 37) — while the 1B
@@ -1472,7 +1529,9 @@ finding 36 drawn directly — where the 1.5B's hugs a flattened identity
 line: the contracted-but-coherent regime of findings 39–40. The 3B row is
 that regime at full strength: a tight preference cloud along the identity
 (r(s) 0.912) beside a bias cloud shifted bodily toward zero from deep in
-the negative region (finding 43).*
+the negative region (finding 43). The 7B row shows the endpoint — the
+tightest preference cloud yet, beside a balanced bias cloud pushed bodily
+*through* zero into a B-lean rather than shrunk (finding 45).*
 
 ## Planned experiments
 
@@ -1490,9 +1549,9 @@ the negative region (finding 43).*
    vs. log length ratio. *(Done above — findings 12–14; reruns automatically
    as new grids complete.)*
 5. **Prompt sensitivity** — minimal vs. detailed rubric as a paired
-   comparison in log-odds space. *(Started 2026-08-27 — findings 36–38 on
-   the two smallest judges; the larger judges' rubric grids are budgeted
-   one per session as compute allows.)*
+   comparison in log-odds space. *(Started 2026-08-27 — findings 36–45:
+   the full Qwen line plus the 1B Llama are done; the Llama 3B/8B rubric
+   grids are budgeted one per session as compute allows.)*
 
 ## Feasibility pilot (2026-07-17, real measurements, anecdote scale)
 
@@ -1554,14 +1613,16 @@ Recorded as they were hit, not reconstructed afterwards (dated entries in
 - **Deterministic readout, two rubrics so far.** Temperature-0 single-token
   readout removes sampling noise by construction — reliability here means
   bias/validity structure, not decode variance. The rubric axis is measured
-  at two rubrics × the four smallest judges (findings 36–43); the
-  perturbation model's falling-flip-rate extrapolation has now held
-  in-family through 3B, but the signal-dominant tier (7B/8B) remains
-  a prediction until those `detailed` grids run, and two
-  templates cannot separate "rubric wording" from "prompt length" as the
-  perturbation that matters. The fragility model itself is deliberately
-  minimal — homoskedastic Gaussian ε — and its 1.5B mid-quartile misses
-  show where that assumption bends.
+  at two rubrics × five judges (findings 36–45); the perturbation model's
+  falling-flip-rate extrapolation has now held in-family through the full
+  Qwen line including the signal-dominant 7B, but the Llama 3B/8B points
+  remain predictions until those `detailed` grids run — in particular
+  whether the 1B's family-scaled σ and its compliance collapse under the
+  longer rubric replicate at scale. Two templates also cannot separate
+  "rubric wording" from "prompt length" as the perturbation that matters.
+  The fragility model itself is deliberately minimal — homoskedastic
+  Gaussian ε — and its mid-size misses (deepest at 3B, finding 44) show
+  where that assumption bends.
 
 ## Repository layout
 

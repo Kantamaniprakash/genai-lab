@@ -4,7 +4,7 @@ This lab runs one flagship research project at a time, worked daily until it wou
 survive review by a demanding referee. Everything here is real: every number in a
 writeup comes from an experiment actually run in this repo.
 
-## Current flagship: `slm-judge-audit` — started 2026-07-17, phase 3 (rubric-sensitivity axis underway: four of seven judges done; writeup restructure done 2026-08-27)
+## Current flagship: `slm-judge-audit` — started 2026-07-17, phase 3 (rubric-sensitivity axis: five of seven judges done, Qwen line closed 2026-08-29; writeup restructure done 2026-08-27)
 
 **Question.** How reliable are small open-weight LLMs (0.5B–8B, the sizes people
 actually deploy for cheap large-scale evaluation) as zero-shot pairwise judges —
@@ -143,8 +143,18 @@ instruction-following axis for free. Pinned revision + SHA256, verified at load.
    deviation deepening as r(s) rises, and prompt-side debiasing posts its
    largest reduction (Δ|b| −1.80 on the audit's largest bias) while buying
    only raw accuracy and order balance — never symmetrized quality — and
-   un-saturating the positional flip rate. Remaining: detailed grids for
-   Qwen-7B and Llama 3B/8B, one per session.)*
+   un-saturating the positional flip rate.
+   2026-08-29: the 7B detailed grid closed the Qwen line in one 514-minute
+   session — findings 44–45: the five-point arc 0.303/0.432/0.190/0.102/0.068
+   stays ordered by |s| and lands on the day-11 registered prediction, λ
+   plateaus (0.767 → 0.777) while the coherent-movement deviation proves
+   non-monotone (peaks at 3B, narrows at 7B where the Gaussian model nearly
+   suffices); and the prompt-side lever stops paying at the top — it pushes
+   the 7B's balanced bias through zero into a B-lean (median b
+   +0.23 → −1.25) while raw, symmetrized, positional-flip, length and
+   compliance metrics all sit still, with the only significant category
+   movements (Safety +0.047, Chat Hard −0.065) canceling. Remaining:
+   detailed grids for Llama 3B/8B, one per session.)*
 4. **Writeup** — README as a research report with real tables, figures, and
    limitations; reproduction audit in the `rag-chunking-bench` style.
 
