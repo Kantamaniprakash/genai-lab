@@ -1692,3 +1692,42 @@ remain), findings index +44–45. Root README and ROADMAP refreshed.
    regenerate all committed artifacts; update README tables/captions.
 4. **Then phase 4**: the writeup coherence pass and the
    `rag-chunking-bench`-style clean-environment reproduction audit.
+
+## 2026-08-30 — Day 13: the Llama-3.2-3B detailed grid (pre-registration first)
+
+Fresh container: `uv sync --group judge` (llama-cpp-python 0.3.34 from the
+lock), 127 tests green, GGUF re-downloaded and SHA256-verified against the
+pin. `llama-3.2-3b__detailed` (n=600, seed 0, threads 4) launched under the
+deficit scheduler; this section's predictions were written and committed
+while the store held under a dozen items, before any paired analysis was
+possible.
+
+**Correction to the day-12 plan, logged before results.** The day-12 next-steps
+note called Llama-3B minimal "an always-A machine (median b +10.85)" with
+"median |s| 1.79 slotting between 1.5B and 3B." Both numbers are miscitations
+— finding 21 and the committed summary
+(`results/summary/llama-3.2-3b__minimal.json`) say **median b +2.34**
+(b > 0 on 99.8% — saturated in *share*, not magnitude; the +10.85 belongs to
+no store in this audit) and **median |s| 0.445**, which slots between the
+0.5B (0.235) and the 1.5B (0.503), not above them. The corrected
+pre-registrations:
+
+1. **Flip rate.** The arc is ordered by reference median |s|
+   (0.235→0.303, 0.144→0.432, 0.503→0.190, 3.64→0.102, 9.08→0.068). At
+   |s| = 0.445 the arc predicts a flip rate **between 0.190 and 0.303**,
+   i.e. Llama-3B should be the second- or third-most fragile judge — not
+   the mid-pack ~0.15 the day-12 note implied. A flip rate well outside
+   [0.19, 0.30] falsifies |s|-ordering as the cross-family law.
+2. **Bias direction.** Median b +2.34 with SD 1.01 sits well above the
+   perturbation scale that re-signed the 1B (|b| ≈ 0.34) and the 7B
+   (+0.23): the boundary from findings 40/45 predicts **shrinkage without
+   reversal**.
+3. **Compliance.** Minimal-store compliance is 0.863 (not 1.000 — that is
+   a Qwen property). The open cross-family question stands: the 1B
+   collapsed 0.512 → 0.275 under the detailed rubric, with the Safety
+   migration (finding 35) the suspected mechanism. Replication at 3B in
+   either direction is informative.
+4. **σ (perturbation scale).** Day-11's family question: Llama-1B fit
+   σ = 0.532 against Qwen-0.5B's 0.236 at comparable |s|. If Llama-3B's σ
+   again exceeds the |s|-matched Qwen fits, perturbation sensitivity is
+   family-scaled, not size-scaled.
