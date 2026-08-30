@@ -5,15 +5,16 @@ position bias measured in log-odds, calibration, and value over trivial
 baselines, with paired bootstrap confidence intervals.**
 
 *Status: **the scaling grid is complete** (phase 2 closed 2026-08-26) and
-the rubric-sensitivity axis is underway — rubric grids for the full Qwen
-line and the 1B Llama, findings 36–45, landed 2026-08-27/29, alongside the
-results-narrative restructure ([The scaling arc](#the-scaling-arc)).
+the rubric-sensitivity axis is one grid from closing — rubric grids for
+the full Qwen line plus the 1B and 3B Llamas, findings 36–47, landed
+2026-08-27/30, alongside the results-narrative restructure
+([The scaling arc](#the-scaling-arc)).
 Harness: runner, analysis core, floors, value-over-length probe, calibration,
 bias-structure test, per-subset view, cross-judge table, coverage-balanced
 scheduler, paired rubric analysis with a fragility model; 132 tests. Seven
 full grids on the same 600-item stratified sample × both orders (Qwen2.5
-0.5B/1.5B/3B/7B and Llama-3 1B/3B/8B) plus five `detailed`-rubric grids —
-findings 1–45 below, cross-cut in
+0.5B/1.5B/3B/7B and Llama-3 1B/3B/8B) plus six `detailed`-rubric grids —
+findings 1–47 below, cross-cut in
 [Results at a glance](#results-at-a-glance). Headlines:
 debiased judge quality is non-monotone in scale (0.568 → 0.502 → 0.742 →
 0.837 within the Qwen family — a 1.5B valley where the emergent preference is
@@ -474,6 +475,8 @@ one's evidence, dated.
 | 43 | Prompt-side debiasing works hardest where the bias is largest, but it buys raw accuracy and order balance, never symmetrized quality — and it un-saturates the flip rate. | [The rubric axis](#the-rubric-axis--the-same-judges-under-a-different-prompt) |
 | 44 | The fragility arc closes its fifth point on the model's prediction, and the coherent-movement deviation peaks at 3B rather than growing with judge quality. | [The rubric axis](#the-rubric-axis--the-same-judges-under-a-different-prompt) |
 | 45 | At the family's top the prompt-side lever stops paying: it re-signs a balanced bias rather than shrinking a large one, and nothing else moves. | [The rubric axis](#the-rubric-axis--the-same-judges-under-a-different-prompt) |
+| 46 | The \|s\|-ordering law bends exactly where the model says it should: fragility is λ\|s\|/σ, not \|s\| — and the fitted ratio orders all six judges strictly. | [The rubric axis](#the-rubric-axis--the-same-judges-under-a-different-prompt) |
+| 47 | At Llama-3B the detailed rubric is a null lever with the family's fingerprints: no compliance collapse, shrinkage without reversal, and the only borderline purchase sits in the adversarial hole. | [The rubric axis](#the-rubric-axis--the-same-judges-under-a-different-prompt) |
 
 ## The per-grid record
 
@@ -1299,23 +1302,27 @@ above-the-valley judge and the first with a large-magnitude bias to test
 prompt-side debiasing against; the fifth is the 7B — the audit's best and
 most signal-dominant judge, closing the Qwen line and asking whether any
 of the rubric's effects survive where the content signal dwarfs the
-perturbation. Deltas read detailed − minimal; the
+perturbation; the sixth is the Llama-3B — the cross-family counterpart at
+the 3B scale, an always-A machine under the minimal rubric (finding 21)
+and the first test of whether the arc's ordering and the 1B's compliance
+collapse are Llama properties or small-judge properties. Deltas read
+detailed − minimal; the
 committed summary is
 `results/summary/rubric_pair__minimal_vs_detailed.{json,md}`.
 
-| | Qwen2.5-0.5B | Llama-3.2-1B | Qwen2.5-1.5B | Qwen2.5-3B | Qwen2.5-7B |
-|---|---|---|---|---|---|
-| sym acc, minimal → detailed | 0.568 → 0.592 | 0.555 → 0.627 | 0.502 → 0.495 | 0.742 → 0.763 | 0.837 → 0.845 |
-| paired Δ sym acc | +0.023 [−0.020, +0.067] | **+0.072 [+0.018, +0.123]** | −0.007 [−0.042, +0.028] | +0.022 [−0.003, +0.047] | +0.008 [−0.013, +0.030] |
-| **rubric flip rate** | **0.303 [0.268, 0.340]** | **0.432 [0.393, 0.472]** | **0.190 [0.160, 0.222]** | **0.102 [0.078, 0.127]** | **0.068 [0.050, 0.090]** |
-| positional flip rate (detailed) | 0.000 | 0.168 | 0.298 | 0.438 | 0.750 |
-| r(s) across rubrics | 0.610 [0.553, 0.663] | 0.257 [0.140, 0.379] | 0.834 [0.798, 0.863] | 0.912 [0.893, 0.928] | 0.916 [0.900, 0.929] |
-| r(b) across rubrics | 0.735 [0.686, 0.778] | 0.527 [0.444, 0.600] | 0.879 [0.855, 0.898] | 0.845 [0.815, 0.870] | 0.702 [0.656, 0.743] |
-| median b, minimal → detailed | +3.65 → +3.03 | −0.34 → **+0.62** | +0.83 → +0.23 | −5.55 → −3.51 | +0.23 → **−1.25** |
-| paired Δ \|b\| | −0.63 [−0.69, −0.57] | +0.64 [+0.55, +0.73] | −0.36 [−0.41, −0.31] | **−1.80 [−2.01, −1.59]** | −0.75 [−0.99, −0.51] |
-| paired Δ \|s\| | −0.165 [−0.194, −0.137] | +0.108 [+0.072, +0.146] | −0.294 [−0.341, −0.245] | −0.868 [−1.070, −0.669] | −1.812 [−2.045, −1.580] |
-| sign(s)-vs-length agreement | 0.491 → 0.476 | 0.622 → **0.408** | 0.571 → 0.522 | 0.547 → 0.549 | 0.489 → 0.481 |
-| compliance, minimal → detailed | 1.000 → 1.000 | 0.512 → **0.275** | 1.000 → 1.000 | 1.000 → 1.000 | 1.000 → 1.000 |
+| | Qwen2.5-0.5B | Llama-3.2-1B | Qwen2.5-1.5B | Llama-3.2-3B | Qwen2.5-3B | Qwen2.5-7B |
+|---|---|---|---|---|---|---|
+| sym acc, minimal → detailed | 0.568 → 0.592 | 0.555 → 0.627 | 0.502 → 0.495 | 0.652 → 0.663 | 0.742 → 0.763 | 0.837 → 0.845 |
+| paired Δ sym acc | +0.023 [−0.020, +0.067] | **+0.072 [+0.018, +0.123]** | −0.007 [−0.042, +0.028] | +0.012 [−0.022, +0.045] | +0.022 [−0.003, +0.047] | +0.008 [−0.013, +0.030] |
+| **rubric flip rate** | **0.303 [0.268, 0.340]** | **0.432 [0.393, 0.472]** | **0.190 [0.160, 0.222]** | **0.172 [0.142, 0.202]** | **0.102 [0.078, 0.127]** | **0.068 [0.050, 0.090]** |
+| positional flip rate (detailed) | 0.000 | 0.168 | 0.298 | 0.068 | 0.438 | 0.750 |
+| r(s) across rubrics | 0.610 [0.553, 0.663] | 0.257 [0.140, 0.379] | 0.834 [0.798, 0.863] | 0.857 [0.825, 0.886] | 0.912 [0.893, 0.928] | 0.916 [0.900, 0.929] |
+| r(b) across rubrics | 0.735 [0.686, 0.778] | 0.527 [0.444, 0.600] | 0.879 [0.855, 0.898] | 0.720 [0.664, 0.767] | 0.845 [0.815, 0.870] | 0.702 [0.656, 0.743] |
+| median b, minimal → detailed | +3.65 → +3.03 | −0.34 → **+0.62** | +0.83 → +0.23 | +2.34 → +1.96 | −5.55 → −3.51 | +0.23 → **−1.25** |
+| paired Δ \|b\| | −0.63 [−0.69, −0.57] | +0.64 [+0.55, +0.73] | −0.36 [−0.41, −0.31] | −0.47 [−0.53, −0.41] | **−1.80 [−2.01, −1.59]** | −0.75 [−0.99, −0.51] |
+| paired Δ \|s\| | −0.165 [−0.194, −0.137] | +0.108 [+0.072, +0.146] | −0.294 [−0.341, −0.245] | −0.070 [−0.101, −0.040] | −0.868 [−1.070, −0.669] | −1.812 [−2.045, −1.580] |
+| sign(s)-vs-length agreement | 0.491 → 0.476 | 0.622 → **0.408** | 0.571 → 0.522 | 0.596 → 0.569 | 0.547 → 0.549 | 0.489 → 0.481 |
+| compliance, minimal → detailed | 1.000 → 1.000 | 0.512 → **0.275** | 1.000 → 1.000 | 0.863 → 0.818 | 1.000 → 1.000 | 1.000 → 1.000 |
 
 - **Finding 36 — the symmetrized verdict is rubric-fragile at small scale:
   30–43% of debiased verdicts change with the rubric text alone, an order
@@ -1503,33 +1510,85 @@ committed summary is
   is good enough to trust, the rubric text changes *which* bias you have,
   not *whether* you have one — and buys nothing the two-call symmetrized
   verdict didn't already own.
+- **Finding 46 — the \|s\|-ordering law bends exactly where the model says
+  it should: fragility is λ\|s\|/σ, not \|s\| — and the fitted ratio orders
+  all six judges strictly.** Llama-3B flips 0.172 [0.142, 0.202] at
+  reference median \|s\| 0.445 — *below* the 1.5B's 0.190 at \|s\| 0.503,
+  the first adjacent pair out of order by reference preference strength
+  (the CIs overlap, so the raw-\|s\| arc bends rather than breaks; this
+  outcome sat outside the pre-registered [0.19, 0.30] band, logged in the
+  morning's commit before the grid ran). The fragility model itself
+  supplies the refinement: ordering the six judges by the fitted
+  signal-to-perturbation ratio λ·med\|s\|/σ (0.101 / 0.344 / 0.628 /
+  0.925 / 1.284 / 2.738) reproduces the observed flip-rate ordering
+  exactly (0.432 / 0.303 / 0.190 / 0.172 / 0.102 / 0.068), and the model's
+  own predicted overall flip rates are monotone in it too. Llama-3B is
+  less fragile than its preference strength alone predicts because its
+  λ = 0.781 is the audit's largest — above the Qwen plateau (0.767/0.777)
+  that Qwen only reaches at 3B — while σ = 0.376 undercuts the
+  \|s\|-matched Qwen-1.5B's 0.418, answering day 11's family question:
+  the 1B's large σ is not a Llama property. Day 11's "ordered by median
+  \|s\|" was the coarse shadow of Φ(−λ\|s\|/σ), legible only while λ/σ
+  happened to be similar across the judges measured so far.
+- **Finding 47 — at Llama-3B the detailed rubric is a null lever with the
+  family's fingerprints: no compliance collapse, shrinkage without
+  reversal, and the only (borderline) purchase sits in the adversarial
+  hole.** Compliance 0.863 → 0.818 (Δ −0.045 [−0.063, −0.028]) — a real
+  but modest decline concentrated where compliance was already broken
+  (Safety 0.480 → 0.439, the finding-35 migration target; every other
+  category ≥ 0.917) — so the 1B's halving (0.512 → 0.275) reads as a 1B
+  phenomenon, not a Llama-under-long-rubric phenomenon. The always-A
+  bias shrinks with its sign intact (median b +2.34 → +1.96, Δ\|b\| −0.47
+  [−0.53, −0.41], b > 0 on 99.5% of items), exactly as the findings-40/45
+  boundary predicts at \|b\| ≫ perturbation scale — pre-registered and
+  confirmed. Both accuracies are null (Δ sym +0.012 [−0.022, +0.045],
+  Δ raw +0.008 [−0.002, +0.017]): where Qwen-3B's prompt-side lever at
+  least bought raw accuracy and un-saturated its flip rate (finding 43),
+  the same lever at the same scale in Llama buys nothing — though the
+  positional flip rate moves the same direction at a tenth the bias
+  magnitude (0.033 → 0.068, Δ +0.035 [+0.017, +0.053]). Length
+  orientation weakens without re-aiming (sign(s)-vs-length 0.596 → 0.569;
+  the 1B's reversal stays unique). The one category movement is the
+  interesting one: Chat Hard — the audit's only below-chance adversarial
+  hole (finding 22) — improves 0.348 → 0.424 (Δ +0.076 [−0.011, +0.163],
+  borderline), narrowing but not escaping below-chance under either
+  rubric, and echoing Qwen-7B's finding-45 pattern of Chat Hard carrying
+  the largest rubric sensitivity in both directions.
 
 ![rubric flip rate vs preference magnitude](results/figures/rubric_fragility__minimal_vs_detailed.png)
 
 *Observed rubric flip rate per quartile of the minimal-rubric \|s\| (points,
 95% bootstrap CIs) against each judge's fitted Φ(−λ\|s\|/σ) curve (lines) —
-findings 39, 42 and 44 drawn directly. All five judges decay from near
+findings 39, 42, 44 and 46 drawn directly. All six judges decay from near
 coin-flip at weak preference toward zero; the small Qwen curves nearly
 coincide despite a 3x parameter gap, while the 1B Llama's larger σ keeps it
-fragile out to \|s\| ≈ 2 and the 3B and 7B curves stretch across their much
-wider \|s\| ranges. The mid-size judges' observed points sitting below
+fragile out to \|s\| ≈ 2 and the 3B and 7B Qwen curves stretch across their
+much wider \|s\| ranges. The Llama-3B curve drops fastest of the small-\|s\|
+judges — its λ/σ ratio is the audit's steepest below the two big Qwens
+(finding 46). The mid-size judges' observed points sitting below
 their own curves in the weak-\|s\| quartiles is the coherent-movement
-residual described in findings 39 and 42 — deepest at 3B, then narrowing
-again at 7B (finding 44), so it tracks neither size nor r(s) monotonically.*
+residual described in findings 39 and 42 — deepest at Qwen-3B, then
+narrowing again at 7B (finding 44), so it tracks neither size nor r(s)
+monotonically.*
 
 ![cross-rubric identity panels](results/figures/rubric_pair__minimal_vs_detailed.png)
 
-*Item-paired log-odds across rubrics (rows: 0.5B, 1B, 1.5B, 3B, 7B; left:
-preference s, right: position bias b; dashed line = rubric-invariant). The
+*Item-paired log-odds across rubrics (rows: Qwen-0.5B, Llama-1B, Qwen-1.5B,
+Llama-3B, Qwen-3B, Qwen-7B; left: preference s, right: position bias b;
+dashed line = rubric-invariant). The
 0.5B bias cloud sits uniformly below the identity in the far positive
 region — contraction without structural change (finding 37) — while the 1B
 bias cloud crosses zero upward: the rubric reverses the lean (finding 38).
 The two small judges' preference panels are near-blobs around the origin —
 finding 36 drawn directly — where the 1.5B's hugs a flattened identity
-line: the contracted-but-coherent regime of findings 39–40. The 3B row is
-that regime at full strength: a tight preference cloud along the identity
-(r(s) 0.912) beside a bias cloud shifted bodily toward zero from deep in
-the negative region (finding 43). The 7B row shows the endpoint — the
+line: the contracted-but-coherent regime of findings 39–40. The Llama-3B
+row is the near-identity version of that regime — the steepest small-\|s\|
+λ in the audit (0.781, finding 46) beside an all-positive bias cloud that
+shrinks without crossing zero (finding 47). The Qwen-3B row is the
+contracted-but-coherent regime at full strength: a tight preference cloud
+along the identity (r(s) 0.912) beside a bias cloud shifted bodily toward
+zero from deep in the negative region (finding 43). The 7B row shows the
+endpoint — the
 tightest preference cloud yet, beside a balanced bias cloud pushed bodily
 *through* zero into a B-lean rather than shrunk (finding 45).*
 
@@ -1549,9 +1608,9 @@ tightest preference cloud yet, beside a balanced bias cloud pushed bodily
    vs. log length ratio. *(Done above — findings 12–14; reruns automatically
    as new grids complete.)*
 5. **Prompt sensitivity** — minimal vs. detailed rubric as a paired
-   comparison in log-odds space. *(Started 2026-08-27 — findings 36–45:
-   the full Qwen line plus the 1B Llama are done; the Llama 3B/8B rubric
-   grids are budgeted one per session as compute allows.)*
+   comparison in log-odds space. *(Started 2026-08-27 — findings 36–47:
+   the full Qwen line plus the 1B and 3B Llamas are done; the final
+   Llama-8B rubric grid is budgeted for the next session.)*
 
 ## Feasibility pilot (2026-07-17, real measurements, anecdote scale)
 
@@ -1613,16 +1672,18 @@ Recorded as they were hit, not reconstructed afterwards (dated entries in
 - **Deterministic readout, two rubrics so far.** Temperature-0 single-token
   readout removes sampling noise by construction — reliability here means
   bias/validity structure, not decode variance. The rubric axis is measured
-  at two rubrics × five judges (findings 36–45); the perturbation model's
-  falling-flip-rate extrapolation has now held in-family through the full
-  Qwen line including the signal-dominant 7B, but the Llama 3B/8B points
-  remain predictions until those `detailed` grids run — in particular
-  whether the 1B's family-scaled σ and its compliance collapse under the
-  longer rubric replicate at scale. Two templates also cannot separate
-  "rubric wording" from "prompt length" as the perturbation that matters.
-  The fragility model itself is deliberately minimal — homoskedastic
-  Gaussian ε — and its mid-size misses (deepest at 3B, finding 44) show
-  where that assumption bends.
+  at two rubrics × six judges (findings 36–47); the raw "ordered by median
+  \|s\|" arc bent at the first cross-family test (Llama-3B, finding 46) and
+  the surviving law is the fitted ratio λ·med\|s\|/σ — strictly monotone
+  across all six judges, but a within-sample refinement until the Llama-8B
+  `detailed` grid tests it out of sample. The 1B's compliance collapse and
+  its large σ both failed to replicate at Llama-3B (finding 47), so they
+  read as 1B properties, not family properties, pending the 8B point. Two
+  templates also cannot separate "rubric wording" from "prompt length" as
+  the perturbation that matters. The fragility model itself is
+  deliberately minimal — homoskedastic Gaussian ε — and its mid-size
+  misses (deepest at Qwen-3B, finding 44) show where that assumption
+  bends.
 
 ## Repository layout
 

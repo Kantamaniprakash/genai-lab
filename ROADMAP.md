@@ -4,7 +4,7 @@ This lab runs one flagship research project at a time, worked daily until it wou
 survive review by a demanding referee. Everything here is real: every number in a
 writeup comes from an experiment actually run in this repo.
 
-## Current flagship: `slm-judge-audit` — started 2026-07-17, phase 3 (rubric-sensitivity axis: five of seven judges done, Qwen line closed 2026-08-29; writeup restructure done 2026-08-27)
+## Current flagship: `slm-judge-audit` — started 2026-07-17, phase 3 (rubric-sensitivity axis: six of seven judges done, Llama-3B added 2026-08-30; writeup restructure done 2026-08-27)
 
 **Question.** How reliable are small open-weight LLMs (0.5B–8B, the sizes people
 actually deploy for cheap large-scale evaluation) as zero-shot pairwise judges —
@@ -153,8 +153,18 @@ instruction-following axis for free. Pinned revision + SHA256, verified at load.
    the 7B's balanced bias through zero into a B-lean (median b
    +0.23 → −1.25) while raw, symmetrized, positional-flip, length and
    compliance metrics all sit still, with the only significant category
-   movements (Safety +0.047, Chat Hard −0.065) canceling. Remaining:
-   detailed grids for Llama 3B/8B, one per session.)*
+   movements (Safety +0.047, Chat Hard −0.065) canceling.
+   2026-08-30: the Llama-3.2-3B detailed grid, pre-registered in the
+   morning commit before results existed — findings 46–47: the raw
+   |s|-ordering law bends at its first cross-family test (flip rate 0.172
+   at |s| 0.445, below the 1.5B's 0.190 at 0.503) and the surviving law is
+   the model's own ratio λ·|s|/σ, strictly monotone across all six judges;
+   the 1B's compliance collapse and large σ both fail to replicate at 3B
+   (0.863 → 0.818 vs 0.512 → 0.275; σ 0.376 under the |s|-matched Qwen's
+   0.418), the always-A bias shrinks without re-signing exactly on the
+   findings-40/45 boundary prediction, and the only borderline purchase is
+   a narrowed (still below-chance) adversarial Chat Hard hole. Remaining:
+   the Llama-8B detailed grid — an out-of-sample test of the λ|s|/σ law.)*
 4. **Writeup** — README as a research report with real tables, figures, and
    limitations; reproduction audit in the `rag-chunking-bench` style.
 

@@ -1731,3 +1731,98 @@ pre-registrations:
    σ = 0.532 against Qwen-0.5B's 0.236 at comparable |s|. If Llama-3B's σ
    again exceeds the |s|-matched Qwen fits, perturbation sensitivity is
    family-scaled, not size-scaled.
+
+### The grid and the pre-registration, resolved
+
+`llama-3.2-3b__detailed`: 1200/1200 in 235.7 min (0.08 judg/s, the day-9
+Llama-3B rate), TV 0.000 at close, checkpointed to main throughout. All
+rubric analyses regenerated over six judges (`rubric_view`,
+`rubric_fragility`, per-store `summarize`); the length-orientation numbers
+below were recomputed with the same store-join used on days 10–12 and the
+script reproduces the committed 1B values (0.622 / 0.408) exactly.
+
+Scoring the morning's four pre-registrations:
+
+1. **Flip rate — outside the band, and diagnostically so.** Observed 0.172
+   [0.142, 0.202] against the registered [0.190, 0.303]. The point estimate
+   sits *below* the 1.5B's 0.190 despite a smaller reference |s|
+   (0.445 vs 0.503) — the first adjacent pair out of order by |s| (the CIs
+   overlap, so the raw-|s| law bends rather than breaks). Finding 46 below:
+   the fragility model itself says why.
+2. **Direction — confirmed.** Median b +2.34 → +1.96, shrinkage with the
+   sign intact, exactly as the findings-40/45 boundary predicts at
+   |b| ≫ perturbation scale.
+3. **Compliance — the collapse does not replicate.** 0.863 → 0.818
+   (Δ −0.045 [−0.063, −0.028]), against the 1B's 0.512 → 0.275 halving.
+4. **σ — the family hypothesis dies.** σ = 0.376, *below* the |s|-matched
+   Qwen-1.5B's 0.418. Llama's large σ at 1B was not a family property.
+
+### Findings (paired on all 600 items)
+
+**Finding 46 — the |s|-ordering law bends exactly where the model says it
+should: fragility is λ|s|/σ, not |s| — and the ordering by the fitted
+ratio is strictly monotone across all six judges.** Llama-3B flips 0.172
+[0.142, 0.202] at median |s| 0.445 — below the 1.5B's 0.190 at |s| 0.503.
+Ordering the six judges by the fitted signal-to-perturbation ratio
+λ·med|s|/σ (0.101 / 0.344 / 0.628 / 0.925 / 1.284 / 2.738) orders the
+observed flip rates exactly (0.432 / 0.303 / 0.190 / 0.172 / 0.102 /
+0.068) — and the model's own predicted overall flip rates are monotone in
+it too. Llama-3B is less fragile than its preference strength alone
+predicts because λ = 0.781 is the audit's *largest* — above the Qwen
+plateau (0.767/0.777) that took Qwen until 3B to reach — while σ = 0.376
+undercuts the |s|-matched Qwen point. The refinement was always implicit
+in Φ(−λ|s|/σ); day 11's "ordered by median |s|" was the coarse shadow of
+it, legible only while λ/σ happened to be similar across judges. r(s) =
+0.857, and the coherent-movement deviation shows the family signature at
+mid-|s| (Q2 observed 0.160 vs predicted 0.267) — present at a cross-rubric
+correlation where Qwen-1.5B (r(s) 0.834) also showed it.
+
+**Finding 47 — at Llama-3B the detailed rubric is a null lever with the
+family's fingerprints: no compliance collapse, shrinkage without reversal,
+and the only borderline purchase sits in the adversarial hole.**
+Compliance 0.863 → 0.818: a real but modest decline, concentrated where
+compliance was already broken (Safety 0.480 → 0.439, the finding-35
+migration target; every other category ≥ 0.917) — the 1B's collapse is a
+1B phenomenon, not a Llama-under-detailed-rubric phenomenon. Δ|b| −0.47
+[−0.53, −0.41] with b > 0 on 99.5% of items; Δ sym +0.012 [−0.022,
++0.045] and Δ raw +0.008 [−0.002, +0.017] both null — the prompt-side
+lever buys the always-A machine nothing (contrast Qwen-3B: raw +0.033,
+flips un-saturated +0.058). Positional flip rate 0.033 → 0.068
+(Δ +0.035 [+0.017, +0.053]) — the un-saturation direction, at a tenth of
+Qwen-3B's bias magnitude. sign(s)-vs-length 0.596 → 0.569 — weakened, not
+re-aimed (the 1B's reversal stays unique). The one category movement:
+Chat Hard sym 0.348 → 0.424 (Δ +0.076 [−0.011, +0.163], borderline) — the
+audit's only below-chance adversarial hole narrows under the detailed
+rubric but stays below chance under both, while Chat (0.889 → 0.931) and
+Safety (0.750 → 0.723) hold. Cross-family picture at 3B: same-scale
+judges, same-direction |b| shrinkage, opposite compliance texture (Qwen
+1.000 throughout; Llama pays its compliance where Safety already bled).
+
+### Writeup
+
+README: Llama-3B column in the rubric table (sixth), findings 46–47,
+rubric-section intro extended to six grids, both figure captions to six
+judges/rows, status header, limitations (rubric axis now five of seven
+judges plus both 3B points cross-family; Llama-8B remains), findings
+index +46–47. Root README leaderboard: Llama-3B rubric-flip cell filled
+(0.172). ROADMAP phase-3 line updated.
+
+### Next steps (Day 14)
+
+1. **The Llama-3.1-8B detailed grid** — the final rubric point:
+   `uv run python -m experiments.run_grid --model llama-3.1-8b --rubric
+   detailed --n 600 --seed 0 --threads 4` (~3.2 h at day-9 rates; GGUF
+   4.9 GB — delete the Llama-3B GGUF first, and mind the ~30 GB disk).
+   Pre-registrations to write before it closes, from the committed
+   minimal store: median |s| = 1.17, median b = −0.59 (mean −0.71 — a modest net
+   lean, nearer the findings-40/45 re-signing boundary than the 3B's
+   +2.34 but larger than the two re-signed cases, 1B −0.34 and 7B +0.23); the λ|s|/σ law (finding 46) predicts
+   the flip rate once λ and σ are fitted — a genuine out-of-sample test
+   of the refined ordering; and the finding-35 Safety compliance
+   migration (8B minimal compliance 0.910 overall) should show whether the
+   detailed rubric re-opens the Safety hole at a size where minimal
+   closed it.
+2. **After the grid**: `rubric_view` + `rubric_fragility` + `summarize`;
+   the rubric axis closes at seven judges and phase 3 is complete.
+3. **Then phase 4**: the writeup coherence pass and the
+   `rag-chunking-bench`-style clean-environment reproduction audit.
