@@ -22,12 +22,16 @@ per-item results, everything measured on 4 CPU cores.
 
 <!-- auto-generated from research/NOTES.md by scripts/sync_latest.py; do not hand-edit -->
 
-**2026-08-29 — Day 12: the 7B closes the Qwen rubric line — the lever stops paying at the top (findings 44–45)**
+**2026-08-30 — Day 13: the Llama-3.2-3B detailed grid (pre-registration first)**
+
+Fresh container: `uv sync --group judge` (llama-cpp-python 0.3.34 from the lock), 127 tests green, GGUF re-downloaded and SHA256-verified against the pin. `llama-3.2-3b__detailed` (n=600, seed 0, threads 4) launched under the deficit scheduler; this section's predictions were written and committed while the store held under a dozen items, before any paired analysis was possible.
+
+[Full entry →](slm-judge-audit/research/NOTES.md#2026-08-30--day-13-the-llama-32-3b-detailed-grid-pre-registration-first)
+
+**Most recent findings** ([2026-08-29 — Day 12: the 7B closes the Qwen rubric line — the lever stops paying at the top (findings 44–45)](slm-judge-audit/research/NOTES.md#2026-08-29--day-12-the-7b-closes-the-qwen-rubric-line--the-lever-stops-paying-at-the-top-findings-4445)):
 
 - Finding 44 — the arc closes at five points, λ plateaus, and the coherent-movement deviation peaks at 3B.
 - Finding 45 — at the family's top, prompt-side debiasing re-signs a balanced bias and buys nothing at all.
-
-[Full entry →](slm-judge-audit/research/NOTES.md#2026-08-29--day-12-the-7b-closes-the-qwen-rubric-line--the-lever-stops-paying-at-the-top-findings-4445)
 <!-- latest-end -->
 
 ## Current flagship — `slm-judge-audit`
