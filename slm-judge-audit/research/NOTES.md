@@ -1826,3 +1826,68 @@ index +46–47. Root README leaderboard: Llama-3B rubric-flip cell filled
    the rubric axis closes at seven judges and phase 3 is complete.
 3. **Then phase 4**: the writeup coherence pass and the
    `rag-chunking-bench`-style clean-environment reproduction audit.
+
+## 2026-08-31 — Day 14: the Llama-3.1-8B detailed grid closes the rubric axis (pre-registration first)
+
+Fresh container: `uv sync --group judge` (llama-cpp-python 0.3.34 from the
+lock), 127 tests green. The 8B GGUF re-downloaded against the pinned
+revision and SHA256-verified before the run. `llama-3.1-8b__detailed`
+(n=600, seed 0, threads 4) goes out under the deficit scheduler; this
+section's predictions were written and committed before the store held a
+single judgment.
+
+**Reference numbers, read from the committed minimal store**
+(`results/summary/llama-3.1-8b__minimal.json`): median |s| = 1.169
+(mean s 1.177, SD 2.333), median b = −0.594 (mean −0.711, SD 1.305,
+b > 0 on only 29.0% — the audit's only net *B*-leaning minimal store),
+item-level median |b| = 0.808, compliance 0.910 overall with every one of
+the 54 non-compliant items in Safety (Safety compliance 0.635, all other
+categories 1.000 — finding 35's migration endpoint), positional flip rate
+0.665, raw 0.683, sym 0.723.
+
+Pre-registrations:
+
+1. **Flip rate — both laws, registered separately.** The raw-|s| ordering
+   (day 11) slots med|s| 1.169 between Qwen-1.5B (0.503 → 0.190) and
+   Qwen-3B (3.64 → 0.102): predicted band **[0.102, 0.190]**. The refined
+   λ|s|/σ law (finding 46) is fitted post hoc, so its registered form is
+   structural: once λ and σ are fitted on the paired stores, the ratio
+   λ·med|s|/σ must slot the observed flip rate into the strictly monotone
+   seven-judge ordering — the first genuinely out-of-sample test of
+   finding 46. A numerical guess under it, taking λ at the top-size
+   plateau (~0.78) and σ log-interpolated on the Qwen σ-vs-|s| trend
+   (~0.84 at |s| 1.17): ratio ≈ 1.08, between Llama-3B (0.925 → 0.172)
+   and Qwen-3B (1.284 → 0.102) — band **[0.102, 0.172]**, slightly
+   tighter than and inside the raw-|s| band. A flip rate above 0.190
+   breaks both laws at once; one in (0.172, 0.190] breaks only the
+   ratio guess.
+2. **Bias direction — the boundary's sharpest probe yet.** Findings 40/45:
+   the detailed rubric re-signs the net lean only where |median b| sits at
+   the perturbation's own scale (re-signed: 1B −0.34, 7B +0.23; shrunk
+   only: Llama-3B +2.34, Qwen-3B −5.55). The 8B's −0.594 lies between the
+   re-signed cases and the shrunk-only cases — closer to the boundary than
+   any previous judge. Taken literally (reversal only at |b| ≲ 0.35), the
+   registered prediction is **shrinkage without reversal**, but a reversal
+   here would tighten the boundary rather than break it; the informative
+   quantity is where the re-sign threshold lands relative to the fitted σ.
+3. **Compliance — the Safety hole under the detailed rubric.** The 1B
+   collapsed 0.512 → 0.275; the 3B declined modestly and paid it where
+   Safety already bled (0.863 → 0.818, Safety 0.480 → 0.439). At 8B the
+   minimal store's *only* non-compliance is Safety (0.635). Registered
+   prediction: the Llama-3B pattern, not the 1B collapse — a modest
+   overall decline concentrated in Safety, other categories staying at or
+   near 1.000. Whether the detailed rubric re-opens the Safety hole (down
+   toward the 3B's 0.44) or leaves it (~0.6) is the open finding-35
+   question; no direction registered.
+4. **σ — after the family hypothesis died.** Day 13 killed "Llama has
+   larger σ" (3B: 0.376 vs Qwen-1.5B's 0.418). The remaining structure in
+   the six fits is σ growing sublinearly with med|s| within Qwen. If the
+   8B fit lands near the interpolated ~0.84, σ is |s|-scaled, not
+   family-scaled; a σ far above ~1.3 (the SD of its own b) would instead
+   say perturbation scale tracks bias dispersion. λ: the plateau
+   hypothesis (0.767/0.777/0.781 at the three ≥3B points) predicts
+   **λ ≈ 0.78**.
+5. **Purchases — the null-lever trend at the top.** Qwen's purchases died
+   with scale (3B: raw +0.033, flips un-saturated; 7B: all null) and
+   Llama-3B was already null. Registered: Δ raw and Δ sym both null at 8B
+   (CIs covering zero); the only movement, if any, in category texture.
