@@ -22,12 +22,16 @@ per-item results, everything measured on 4 CPU cores.
 
 <!-- auto-generated from research/NOTES.md by scripts/sync_latest.py; do not hand-edit -->
 
-**2026-08-30 — Day 13: the Llama-3.2-3B detailed grid (pre-registration first)**
+**2026-08-31 — Day 14: the Llama-3.1-8B detailed grid closes the rubric axis (pre-registration first)**
+
+Fresh container: `uv sync --group judge` (llama-cpp-python 0.3.34 from the lock), 127 tests green. The 8B GGUF re-downloaded against the pinned revision and SHA256-verified before the run. `llama-3.1-8b__detailed` (n=600, seed 0, threads 4) goes out under the deficit scheduler; this section's predictions were written and committed before the store held a single judgment.
+
+[Full entry →](slm-judge-audit/research/NOTES.md#2026-08-31--day-14-the-llama-31-8b-detailed-grid-closes-the-rubric-axis-pre-registration-first)
+
+**Most recent findings** ([2026-08-30 — Day 13: the Llama-3.2-3B detailed grid (pre-registration first)](slm-judge-audit/research/NOTES.md#2026-08-30--day-13-the-llama-32-3b-detailed-grid-pre-registration-first)):
 
 - Finding 46 — the |s|-ordering law bends exactly where the model says it should: fragility is λ|s|/σ, not |s| — and the ordering by the fitted ratio is strictly monotone across all six judges.
 - Finding 47 — at Llama-3B the detailed rubric is a null lever with the family's fingerprints: no compliance collapse, shrinkage without reversal, and the only borderline purchase sits in the adversarial hole.
-
-[Full entry →](slm-judge-audit/research/NOTES.md#2026-08-30--day-13-the-llama-32-3b-detailed-grid-pre-registration-first)
 <!-- latest-end -->
 
 ## Current flagship — `slm-judge-audit`
