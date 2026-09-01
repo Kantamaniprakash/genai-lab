@@ -66,7 +66,7 @@ the share of items where position bias outweighs the content signal.
 |---|---|---|---|---|---|---|
 | **Qwen2.5-7B** | **0.837 [0.807, 0.867]** | 0.781 | 0.068 | +0.23 | 26.8% | ✅ largest margin, every category |
 | Qwen2.5-3B | 0.742 [0.707, 0.777] | 0.617 | 0.102 | −5.55 | 62.0% | ✅ |
-| Llama-3.1-8B | 0.723 [0.688, 0.758] | 0.682 | — | −0.59 | 33.5% | ✅ |
+| Llama-3.1-8B | 0.723 [0.688, 0.758] | 0.682 | 0.082 | −0.59 | 33.5% | ✅ |
 | Llama-3.2-3B | 0.652 [0.613, 0.690] | 0.507 | 0.172 | +2.34 | 96.7% | ✅ |
 | Qwen2.5-0.5B | 0.568 [0.528, 0.608] | 0.501 | 0.303 | +3.65 | 99.8% | ❌ |
 | Llama-3.2-1B | 0.555 [0.517, 0.595] | 0.520 | 0.432 | −0.34 | 81.7% | ❌ |
@@ -102,13 +102,16 @@ Full table with per-order accuracies, compliance, and flip rates:
    ahead — and Llama's below-chance hole on adversarial Chat Hard persists
    to 8B (0.522 vs Qwen-7B's 0.696 on identical items).
 6. **The verdict is rubric-fragile exactly where the signal is small — and
-   a two-parameter model predicts it.** Rewording the rubric (same items,
-   same orders) flips 30% / 43% / 19% / 10% / 7% of debiased verdicts
-   across the five judges measured — ordered by preference strength, not
-   size, with a fitted Φ(−λ|s|/σ) reproducing each judge's flip profile. At
-   7B the prompt-side lever stops paying entirely: it pushes a balanced
-   bias through zero into the opposite lean while every accuracy metric
-   sits still. The symmetrized verdict never moves at any scale.
+   a two-parameter model orders it.** Rewording the rubric (same items,
+   same orders) flips 7–43% of debiased verdicts across the seven judges —
+   ordered strictly by the fitted signal-to-perturbation ratio λ|s|/σ,
+   confirmed out of sample on the pre-registered Llama-8B grid, while raw
+   preference strength, size, a λ plateau, and |s|-scaled σ all fail
+   cross-family. The prompt-side lever stops paying at 7B (it pushes a
+   balanced bias through zero into the opposite lean) and turns *harmful*
+   at 8B: the rubric contracts signal faster than bias, costing a one-call
+   deployment 4.5 points of raw accuracy. The symmetrized verdict never
+   moves at any scale.
 
 <table>
 <tr>
@@ -117,7 +120,7 @@ Full table with per-order accuracies, compliance, and flip rates:
 ![Rubric flip rate vs preference magnitude](slm-judge-audit/results/figures/rubric_fragility__minimal_vs_detailed.png)
 
 *Rubric fragility is predictable: observed flip rates per \|s\| quartile
-(points) against each judge's fitted Φ(−λ\|s\|/σ) curve (lines), five
+(points) against each judge's fitted Φ(−λ\|s\|/σ) curve (lines), seven
 judges.*
 
 </td>

@@ -1891,3 +1891,119 @@ Pre-registrations:
    with scale (3B: raw +0.033, flips un-saturated; 7B: all null) and
    Llama-3B was already null. Registered: Δ raw and Δ sym both null at 8B
    (CIs covering zero); the only movement, if any, in category texture.
+
+### The grid and the pre-registration, resolved
+
+`llama-3.1-8b__detailed`: 1200/1200 in 573.7 min (0.03 judg/s — the
+detailed rubric's longer prefill cost ~3x the minimal-rubric session on
+this judge), TV 0.000 at close, checkpointed to main throughout. All
+rubric analyses regenerated over seven judges (`rubric_view`,
+`rubric_fragility`, per-store `summarize`); the sign(s)-vs-length numbers
+below come from the same store-join used on days 10–13, and the script
+reproduces the committed 1B/3B values (0.622/0.408, 0.596/0.569) exactly.
+
+Scoring the morning's five pre-registrations:
+
+1. **Flip rate — both numerical bands miss high; the structural test
+   passes exactly.** Observed 0.082 [0.060, 0.105]: below the raw-|s|
+   band [0.102, 0.190] *and* below the ratio-law numerical guess
+   [0.102, 0.172]. The raw-|s| law is now broken twice (the 8B sits under
+   both of its smaller-|s| neighbors). The guess missed because neither
+   fit parameter was predictable a priori — λ came out 0.583, not the
+   registered ~0.78 plateau, and σ 0.497, not the ~0.84 interpolation.
+   But the registered structural form of finding 46 passes out-of-sample:
+   the fitted ratio λ·med|s|/σ = 1.370 slots between Qwen-3B (1.284) and
+   Qwen-7B (2.738), and the observed flip rate lands exactly between
+   their 0.102 and 0.068 — strict monotonicity at seven of seven judges.
+2. **Direction — confirmed.** Median b −0.594 → −0.505, mean Δb +0.169
+   [+0.107, +0.230] toward zero with the sign intact, Δ|b| −0.266
+   [−0.322, −0.210]. Shrinkage without reversal at |b| = 0.59: the
+   re-signing boundary is now bracketed in (0.34, 0.59) — tighter than
+   any previous grid left it.
+3. **Compliance — the Llama-3B pattern, confirmed.** 0.910 → 0.880
+   (Δ −0.030 [−0.045, −0.017]), paid where Safety already bled
+   (0.635 → 0.601) plus a small new Reasoning leak (1.000 → 0.955);
+   Chat and Chat Hard hold 1.000. No collapse; the finding-35 Safety
+   hole stays open at 8B under both rubrics.
+4. **σ — both registered alternatives die; the surviving structure is
+   family-shaped.** σ = 0.497: not the |s|-interpolated ~0.84, and
+   nowhere near SD(b) = 1.30. Across the axis, Llama's σ sits in a
+   narrow band (0.532 / 0.376 / 0.497 at 1B/3B/8B) while Qwen's grows
+   11-fold with its |s| (0.236 / 0.418 / 2.171 / 2.577). λ likewise:
+   Qwen rises monotonically (0.345 → 0.777) but Llama is non-monotone
+   (0.374 / 0.781 / 0.583) — the "λ plateau at the top" was a Qwen-line
+   property, not a law.
+5. **Purchases — null on sym as registered, but the raw purchase is
+   *negative*, a first.** Δ sym −0.002 [−0.025, +0.022], null as
+   predicted. Δ raw −0.045 [−0.065, −0.025] — the audit's first
+   significant negative raw-accuracy movement under the detailed rubric.
+
+### Findings (paired on all 600 items)
+
+**Finding 48 — the rubric axis closes at seven judges: the λ|s|/σ
+ordering survives its out-of-sample test, while every simpler regularity
+around it fails cross-family.** The fitted ratios order the observed flip
+rates strictly at seven of seven (0.101/0.344/0.628/0.925/1.284/1.370/
+2.738 against 0.432/0.303/0.190/0.172/0.102/0.082/0.068), with the 8B's
+1.370 — fitted after the registered prediction, on data that did not
+exist that morning — slotting its 0.082 exactly into the gap the law
+assigned it. Nothing weaker survives: raw |s| mis-orders the 8B against
+both neighbors; λ is not a scale plateau (0.583 at 8B, under the three
+≥3B fits at 0.767–0.781); σ is not |s|-scaled (Llama holds 0.38–0.53
+across 1B→8B while Qwen grows 0.24→2.58). And the model's *calibration*
+degrades even as its ordering holds: predicted overall flip 0.151 vs
+observed 0.082 — the audit's largest over-prediction (ratio 0.54), with
+the weak-|s| quartile over-predicted 0.387 vs 0.247 at the audit's
+highest cross-rubric coherence (r(s) 0.941 [0.930, 0.951]). The
+coherent-movement deviation is therefore not "peaks at 3B" (finding 44's
+correction of finding 42) but family-shaped like everything else in the
+fit: the law orders judges; it does not yet predict any one of them.
+
+**Finding 49 — at 8B the detailed rubric contracts signal faster than
+bias, and for the first time the lever's purchase is negative: single-call
+accuracy falls while the symmetrized verdict doesn't move.** λ = 0.583
+means the rubric compresses the 8B's preferences by 42% (median |s|
+1.169 → 0.682) while the bias barely narrows (median |b| 0.808 → 0.714,
+−12%); bias-dominance share rises 0.335 → 0.455, and mean s toward gold
+halves (1.177 → 0.643). The bill lands entirely in the bias-opposed
+order: chosen-first raw accuracy falls 0.613 → 0.518 while
+rejected-first holds (0.752 → 0.757), netting Δ raw −0.045
+[−0.065, −0.025] — the audit's first significantly harmful rubric effect
+— while Δ sym is null (−0.002): the two-call verdict shrugs off a prompt
+change that costs a one-call deployment 4.5 points. Two more one-call
+metrics move the "wrong" way relative to the Qwen story: the positional
+flip rate *falls* 0.665 → 0.545 (Δ −0.120 [−0.157, −0.082] — the
+opposite of the un-saturation at Qwen-3B/Llama-3B), and the length
+orientation *strengthens* (sign(s)-vs-length 0.633 → 0.650, where every
+prior judge weakened or reversed) — consistent with finding 34's length
+lean surviving the rubric that dampens everything else. Category texture
+is flat (all Δ sym null; the only borderline movements cancel), and Chat
+Hard again carries the highest rubric flip rate (0.109) — adversarial
+items live at small |s| for every judge in the audit, right through its
+most coherent one.
+
+### Writeup
+
+README: 8B column in the rubric table (seventh), findings 48–49,
+rubric-section intro extended to seven grids, both figure captions to
+seven judges/rows, status header (rubric axis complete — phase 3 closed),
+limitations, findings index +48–49, planned-experiments item updated to
+phase 4. Root README leaderboard: Llama-8B rubric-flip cell filled
+(0.082). ROADMAP: phase 3 marked complete.
+
+### Next steps (Day 15)
+
+1. **Phase 4 begins: the writeup coherence pass.** Read the README end to
+   end against the store of 47+2 findings: fix arc numbers that predate
+   later grids, make the scaling-arc and rubric-axis narratives agree
+   with the final seven-judge tables, verify every inline number against
+   the committed summaries (the `master_table` and `rubric_view` JSONs
+   are the source of truth), and tighten the abstract + headlines to the
+   completed-audit story (the finding-48 "orders but does not predict"
+   framing belongs there).
+2. **Then the reproduction audit**, `rag-chunking-bench` style: an
+   `experiments/reproduce.py` manifest that regenerates every committed
+   table and figure from the committed raw stores in a clean environment,
+   plus a NOTES entry recording the audit result.
+3. **Disk note**: the 8B GGUF (4.6 GB) can be deleted — no further grids
+   are planned; all seven minimal + seven detailed stores are committed.

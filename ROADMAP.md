@@ -4,7 +4,7 @@ This lab runs one flagship research project at a time, worked daily until it wou
 survive review by a demanding referee. Everything here is real: every number in a
 writeup comes from an experiment actually run in this repo.
 
-## Current flagship: `slm-judge-audit` — started 2026-07-17, phase 3 (rubric-sensitivity axis: six of seven judges done, Llama-3B added 2026-08-30; writeup restructure done 2026-08-27)
+## Current flagship: `slm-judge-audit` — started 2026-07-17, phase 4 (writeup: coherence pass + reproduction audit; data collection complete — phase 2 closed 2026-08-26, phase 3 closed 2026-08-31)
 
 **Question.** How reliable are small open-weight LLMs (0.5B–8B, the sizes people
 actually deploy for cheap large-scale evaluation) as zero-shot pairwise judges —
@@ -163,8 +163,21 @@ instruction-following axis for free. Pinned revision + SHA256, verified at load.
    (0.863 → 0.818 vs 0.512 → 0.275; σ 0.376 under the |s|-matched Qwen's
    0.418), the always-A bias shrinks without re-signing exactly on the
    findings-40/45 boundary prediction, and the only borderline purchase is
-   a narrowed (still below-chance) adversarial Chat Hard hole. Remaining:
-   the Llama-8B detailed grid — an out-of-sample test of the λ|s|/σ law.)*
+   a narrowed (still below-chance) adversarial Chat Hard hole.
+   2026-08-31: the Llama-3.1-8B detailed grid closed the axis at seven
+   judges (1200/1200 in 573.7 min, pre-registered in the morning commit) —
+   findings 48–49: the λ|s|/σ ordering survives its out-of-sample test
+   (fitted ratio 1.370 slots the observed 0.082 flip rate exactly between
+   Qwen-3B and Qwen-7B; seven of seven strictly monotone) while the raw-|s|
+   law breaks a second time and both the λ-plateau and |s|-scaled-σ
+   regularities die cross-family (λ 0.583, σ 0.497 — Llama's σ is
+   family-stable at 0.38–0.53 while Qwen's grows 11-fold); and at 8B the
+   detailed rubric turns harmful for the first time — signal contracts 42%
+   against bias's 12%, chosen-first raw accuracy pays the full −0.045
+   [−0.065, −0.025] while the symmetrized verdict is exactly null, the
+   re-signing boundary tightens into (0.34, 0.59), and compliance follows
+   the Llama-3B Safety-concentrated pattern, not the 1B collapse.
+   **Phase 3 is complete.**)*
 4. **Writeup** — README as a research report with real tables, figures, and
    limitations; reproduction audit in the `rag-chunking-bench` style.
 

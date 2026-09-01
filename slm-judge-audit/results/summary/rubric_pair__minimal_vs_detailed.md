@@ -6,5 +6,6 @@
 | llama-3.2-3b | 600 | 0.652 | 0.663 | +0.012 [-0.022, +0.045] | -0.47 | -0.47 [-0.53, -0.41] | 0.172 | 0.857 |
 | qwen2.5-3b | 600 | 0.742 | 0.763 | +0.022 [-0.003, +0.047] | +1.42 | -1.80 [-2.01, -1.59] | 0.102 | 0.912 |
 | qwen2.5-7b | 600 | 0.837 | 0.845 | +0.008 [-0.013, +0.030] | -1.45 | -0.75 [-0.99, -0.51] | 0.068 | 0.916 |
+| llama-3.1-8b | 600 | 0.723 | 0.722 | -0.002 [-0.025, +0.022] | +0.17 | -0.27 [-0.32, -0.21] | 0.082 | 0.941 |
 
 Paired per item over the matched sample; deltas read detailed - minimal. 'rubric flip' is the fraction of items whose symmetrized verdict changes with the rubric text alone; r(s) is the cross-rubric Pearson correlation of the order-invariant preference.
