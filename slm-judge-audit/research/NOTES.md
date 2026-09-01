@@ -2007,3 +2007,114 @@ phase 4. Root README leaderboard: Llama-8B rubric-flip cell filled
    plus a NOTES entry recording the audit result.
 3. **Disk note**: the 8B GGUF (4.6 GB) can be deleted — no further grids
    are planned; all seven minimal + seven detailed stores are committed.
+
+## 2026-09-01 — Day 15: phase 4 opens with the coherence pass — every number verified, one caption caught stale, one uncommitted join promoted
+
+No new judgments; no GGUF on disk (the day-14 cleanup already happened) and
+none needed. `uv sync` (analysis deps only), 132 tests green at session
+start. The day's brief was the day-14 plan: read the README end to end
+against the store of 49 findings and verify every inline number against the
+committed summaries.
+
+### Verification protocol
+
+Rather than eyeballing the README against itself, the pass regenerated the
+source of truth first: `summarize` (all 14 stores), `master_table`,
+`rubric_view`, and `rubric_fragility` re-run from the committed raw stores
+on a clean tree, then `git diff` as the drift detector. Result: everything
+byte-identical **except one file** — see below. On top of that, every table
+in the README was checked cell-by-cell against its JSON:
+
+- master table: all 7 rows × 13 columns against
+  `master_table__minimal.json` — exact, including every CI;
+- rubric table: all 12 rows against `rubric_pair__minimal_vs_detailed.md`
+  and the per-model `rubric_view` JSON (Δ raw, positional flips, r(b),
+  compliance and category splits for the 8B checked to full precision);
+- fragility: λ/σ/ratios/quartile profiles for all seven judges against
+  `rubric_fragility__minimal_vs_detailed.md` — the seven ratios
+  0.101/0.344/0.628/0.925/1.284/1.370/2.738 all recompute from the table's
+  own λ, med|s|, σ;
+- subset view: the five README rows rebuilt verbatim from
+  `subset_view__minimal.json`;
+- calibration: all raw/sym ECE + confidence/accuracy/gap numbers for seven
+  judges (the 0.5B's CI-above-point-estimate oddity is real and stays
+  documented as the nonnegative-statistic artifact it is);
+- bias model: R² blocks, residual SDs, all six ladder rungs per judge,
+  category bias means (the finding-19 "+3.40 to +3.91" spread checks out);
+- length probe: β_s / β_len / joint−length deltas / the 0.575 fitted floor;
+- median |b|: not stored anywhere until today — recomputed from all 14 raw
+  stores; every quoted value matches (0.49 / 1.09→0.67 / 6.21→4.07 /
+  2.78→2.48 / 2.34→1.96 / 0.81→0.71 / 3.65→3.03);
+- compliance view: strata, category compliance fractions, mass-bin
+  accuracies for the 1B.
+
+### What the pass caught
+
+1. **A stale committed artifact.** `master_table__minimal.md`'s caption
+   said "Of the 6 judges measured, only llama-3.2-3b, qwen2.5-3b,
+   qwen2.5-7b beat" the fitted length floor — generated before the
+   Llama-8B probe summary existed and never re-run. The README's own
+   caption had been updated by hand on day 12 and was right; the committed
+   generated file lagged it. Regeneration fixes it (now "Of the 7 judges…"
+   including `llama-3.1-8b`). Lesson for tomorrow's reproduce audit: the
+   audit must diff *every* generated artifact, exactly because the README
+   copy and the generated copy can drift independently.
+2. **One wrong claim in the status header.** "Llama's below-chance hole
+   persists to 8B" — false as written: 8B Chat Hard is 0.522, back to
+   chance (finding 33's own wording). Reworded to "below chance at 3B,
+   back to chance and no further at 8B". The findings themselves were
+   consistent; only the header compression overshot.
+3. **A reproducibility hole, now closed.** The sign(s)-vs-length agreement
+   numbers quoted throughout (findings 10/17/24/30/34 and the rubric
+   table's row) came from a tie-excluded store-join re-written ad hoc in
+   each session and never committed — the probe's `sign_agree_chars` is
+   tie-*included* and does not reproduce them. Promoted the join into the
+   codebase: `src.analysis.sign_length_agreement` (ties in either sign
+   excluded, rationale in the docstring) + a `sign_length_agreement` block
+   (overall / per category / per subset) in every per-store summary via
+   `experiments.summarize`, with `bias_b.median_abs` added alongside.
+   Verified against every quoted number before committing: all 14 overall
+   values (0.491/0.622/0.571/0.596/0.547/0.489/0.633 minimal,
+   0.476/0.408/0.522/0.569/0.549/0.481/0.650 detailed, n_used 534
+   everywhere — 66 of 600 items have equal response lengths), math-prm
+   0.233/0.756/0.433/0.233 (yes, the 0.5B and 7B coincide at 0.233 — both
+   anti-length, checked twice), Reasoning 0.628/0.538. One new test
+   (tie-exclusion semantics both ways, None on all-tie input); 133 tests.
+4. **Small stale text.** "Reproducing" said 130 tests (was 132 before
+   today, drifted twice); missing `rubric_view` / `rubric_fragility`
+   commands; the layout section's summary-dir line predated the rubric
+   artifacts. All fixed. (Also observed: with no parquet fetched, 5 tests
+   skip rather than the documented 1 — but the README's reproduce sequence
+   fetches the data before pytest, so "1 skipped" is correct as-written.)
+
+### Writeup
+
+Abstract extended to the completed-audit story: question (6) — stability
+of the measurement under the evaluation prompt; the audit's final scope
+(seven judges, two families, 600 items × both orders × both rubrics =
+16,800 judgments); and a headline block ending on finding 48's honest
+framing — the fragility law strictly orders all seven judges, confirmed
+out of sample, but forecasts none of them. Status header updated (phase 4
+in progress, coherence pass done); rubric-axis intro now points at the
+committed provenance of the sign-length row. ROADMAP phase-4 line updated.
+
+### Next steps (Day 16)
+
+1. **The reproduction audit**, `rag-chunking-bench` style:
+   `experiments/reproduce.py` — a manifest that regenerates every
+   committed summary, markdown table, and figure from the committed raw
+   stores in a clean environment and reports byte-level identity (with
+   the day-15 lesson: generated artifacts, not just README numbers, are
+   what drift). Today's pass already proved the four regenerated summary
+   families reproduce; the audit must add `length_probe`, `calibration`,
+   `bias_model`, `subset_view`, `compliance_view`, `scaling_curve`,
+   `prefix_skew`, `schedule_coverage`, `make_figures`, and the figures'
+   byte-identity (matplotlib version pinned in the lock; the
+   `rag-chunking-bench` audit's SOURCE_DATE_EPOCH trick applies if PNG
+   metadata varies).
+2. Note for the audit design: `summarize` now needs the pinned parquet
+   (the length join) — the audit's clean-environment step must run
+   `src.data.fetch` first, same as the README sequence.
+3. After the audit passes: release polish (the `rag-chunking-bench`
+   closing-day checklist), then the flagship is done and the next project
+   comes off the ROADMAP backlog.

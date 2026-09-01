@@ -11,7 +11,7 @@ done; findings 36–49 landed 2026-08-27/31, alongside the
 results-narrative restructure ([The scaling arc](#the-scaling-arc)).
 Harness: runner, analysis core, floors, value-over-length probe, calibration,
 bias-structure test, per-subset view, cross-judge table, coverage-balanced
-scheduler, paired rubric analysis with a fragility model; 132 tests. Seven
+scheduler, paired rubric analysis with a fragility model; 133 tests. Seven
 full grids on the same 600-item stratified sample × both orders (Qwen2.5
 0.5B/1.5B/3B/7B and Llama-3 1B/3B/8B) plus seven `detailed`-rubric grids —
 findings 1–49 below, cross-cut in
@@ -29,7 +29,8 @@ extremes now belong to the worst-biased judges and the best ones; both
 families reverse bias *direction* with scale; four judges beat a fitted
 one-parameter length baseline (both 3Bs, 8B, and 7B by the largest margin —
 the only one significant in every category including adversarial Chat Hard,
-where Llama's below-chance hole persists to 8B); the additive-shift
+where Llama's hole persists to 8B: below chance at 3B, back to chance and
+no further at 8B); the additive-shift
 hypothesis behind cheap debiasing is rejected at every scale, and the share
 of the symmetrization gain a fitted one-call correction can recover *falls*
 as judges improve (68% at 0.5B → 47% at 3B → ~25% at 7B and 8B); and
@@ -49,8 +50,10 @@ re-signs a balanced bias while everything else sits still), and at
 Llama-8B turns *harmful* for the first time: the rubric contracts signal
 faster than bias and costs a one-call deployment 4.5 points of raw
 accuracy while the two-call symmetrized verdict doesn't move.
-Next: phase 4 — the writeup coherence pass and the clean-environment
-reproduction audit.*
+Phase 4 is in progress: the coherence pass is done (2026-09-01 — every
+inline number in this report verified against the committed summaries, and
+the quoted-but-uncommitted sign(s)-vs-length join promoted into the
+per-store summary); next is the clean-environment reproduction audit.*
 
 ## Abstract
 
@@ -69,10 +72,23 @@ position-bias component. On top of this decomposition the audit measures:
 scale; (2) whether position bias behaves as an additive shift (a hypothesis
 prior work assumes implicitly when it "debiases by swapping" — here it is
 tested); (3) how much accuracy symmetrization actually recovers;
-(4) whether verdict probabilities are calibrated; and (5) whether small
-judges add signal beyond a pick-the-longer-response heuristic. All
-comparisons use gold human-verified labels and paired bootstrap confidence
-intervals.
+(4) whether verdict probabilities are calibrated; (5) whether small
+judges add signal beyond a pick-the-longer-response heuristic; and
+(6) how stable the measurement itself is under the evaluation prompt — the
+same judgments re-collected under a second rubric and paired per item in
+log-odds. All comparisons use gold human-verified labels and paired
+bootstrap confidence intervals. The completed audit covers seven judges
+from two families (Qwen2.5 0.5B–7B, Llama-3 1B–8B) on the same 600
+stratified RewardBench items, both orders × both rubrics — 16,800
+judgments. Headlines: debiased judge quality is non-monotone in scale and
+family beats scale at the top tier; flip-rate "consistency" is
+anti-correlated with the truth at both of its extremes; the additive-shift
+hypothesis behind one-call debiasing fails at every scale, and the share
+of the symmetrization gain a fitted correction recovers *falls* as judges
+improve; and verdict fragility under rubric change follows a fitted
+signal-to-perturbation ratio λ·med\|s\|/σ that strictly orders all seven
+judges — confirmed out of sample on a pre-registered grid — but predicts
+none of them: the law ranks judges without forecasting any one.
 
 ## Motivation
 
@@ -1316,7 +1332,11 @@ out-of-sample test of the finding-46 ratio law (predictions committed the
 morning of 2026-08-31, before the store held a single judgment). Deltas
 read detailed − minimal; the
 committed summary is
-`results/summary/rubric_pair__minimal_vs_detailed.{json,md}`.
+`results/summary/rubric_pair__minimal_vs_detailed.{json,md}`, and the
+sign(s)-vs-length row is the tie-excluded join each store's summary now
+carries (`sign_length_agreement` in
+`results/summary/{model}__{rubric}.json` — overall, per category, and per
+subset; findings 10/17/24/30/34 quote the same numbers).
 
 | | Qwen2.5-0.5B | Llama-3.2-1B | Qwen2.5-1.5B | Llama-3.2-3B | Qwen2.5-3B | Qwen2.5-7B | Llama-3.1-8B |
 |---|---|---|---|---|---|---|---|
@@ -1780,15 +1800,17 @@ experiments/      run_grid, summarize, master_table, prefix_skew,
                   subset_view, rubric_view, rubric_fragility
 results/raw/      one JSONL store per (model, rubric) + provenance sidecar
 results/summary/  quick-look JSON per store (+ __compliance, length_probe,
-                  calibration, bias_model, subset_view, master_table —
-                  the last also rendered as the markdown the README embeds)
+                  calibration, bias_model, subset_view, rubric_pair,
+                  rubric_fragility, master_table — the last three also
+                  rendered as the markdown tables the README embeds)
 results/figures/  committed PNGs, regenerable from raw stores
-tests/            132 tests, 1 skipped without a pinned GGUF present
+tests/            133 tests, 1 skipped without a pinned GGUF present
                   (schema, templates, readout arithmetic, store
                   resume, execution-order proportionality, decomposition,
                   bootstrap, floors, compliance view, length probe,
                   calibration, bias model, subset view, cross-judge table,
-                  figure layout, model smoke)
+                  rubric pairing and fragility fit, figure layout,
+                  model smoke)
 research/NOTES.md living research log
 ```
 
@@ -1797,7 +1819,7 @@ research/NOTES.md living research log
 ```bash
 uv sync                      # analysis deps (numpy, pyarrow, matplotlib)
 uv run python -m src.data    # fetch pinned parquet, print composition
-uv run --group dev pytest    # 130 tests (1 skipped without a GGUF)
+uv run --group dev pytest    # 133 tests (1 skipped without a GGUF)
 uv sync --group judge        # llama-cpp-python (compiles ~5 min on 4 cores)
 # download the pinned GGUF named in src/judge.py MODELS into models/, then:
 uv run python -m experiments.run_grid --model qwen2.5-0.5b --rubric minimal --n 600 --seed 0
@@ -1813,6 +1835,8 @@ uv run python -m experiments.length_probe      # value-over-length probe + fores
 uv run python -m experiments.calibration       # reliability diagrams + ECE
 uv run python -m experiments.bias_model        # additive-shift test + correction ladder
 uv run python -m experiments.subset_view       # per-subset heterogeneity forest
+uv run python -m experiments.rubric_view       # paired rubric-sensitivity view (needs both rubrics)
+uv run python -m experiments.rubric_fragility  # perturbation-model fit + fragility figure
 ```
 
 ## References

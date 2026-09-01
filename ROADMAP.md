@@ -4,7 +4,7 @@ This lab runs one flagship research project at a time, worked daily until it wou
 survive review by a demanding referee. Everything here is real: every number in a
 writeup comes from an experiment actually run in this repo.
 
-## Current flagship: `slm-judge-audit` — started 2026-07-17, phase 4 (writeup: coherence pass + reproduction audit; data collection complete — phase 2 closed 2026-08-26, phase 3 closed 2026-08-31)
+## Current flagship: `slm-judge-audit` — started 2026-07-17, phase 4 (writeup: coherence pass done 2026-09-01, reproduction audit next; data collection complete — phase 2 closed 2026-08-26, phase 3 closed 2026-08-31)
 
 **Question.** How reliable are small open-weight LLMs (0.5B–8B, the sizes people
 actually deploy for cheap large-scale evaluation) as zero-shot pairwise judges —
@@ -180,6 +180,13 @@ instruction-following axis for free. Pinned revision + SHA256, verified at load.
    **Phase 3 is complete.**)*
 4. **Writeup** — README as a research report with real tables, figures, and
    limitations; reproduction audit in the `rag-chunking-bench` style.
+   *(Started 2026-09-01: full coherence pass — every inline number verified
+   against the committed summaries or recomputed from the raw stores, the
+   uncommitted sign(s)-vs-length store-join promoted into the per-store
+   summary (`sign_length_agreement`, with `bias_b.median_abs` alongside),
+   the stale master-table caption regenerated, and the abstract extended to
+   the completed-audit story. Remaining: the clean-environment
+   `experiments/reproduce.py` audit.)*
 
 ## Completed flagships
 
