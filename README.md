@@ -22,12 +22,16 @@ per-item results, everything measured on 4 CPU cores.
 
 <!-- auto-generated from research/NOTES.md by scripts/sync_latest.py; do not hand-edit -->
 
-**2026-08-31 — Day 14: the Llama-3.1-8B detailed grid closes the rubric axis (pre-registration first)**
+**2026-09-01 — Day 15: phase 4 opens with the coherence pass — every number verified, one caption caught stale, one uncommitted join promoted**
+
+No new judgments; no GGUF on disk (the day-14 cleanup already happened) and none needed. `uv sync` (analysis deps only), 132 tests green at session start. The day's brief was the day-14 plan: read the README end to end against the store of 49 findings and verify every inline number against the committed summaries.
+
+[Full entry →](slm-judge-audit/research/NOTES.md#2026-09-01--day-15-phase-4-opens-with-the-coherence-pass--every-number-verified-one-caption-caught-stale-one-uncommitted-join-promoted)
+
+**Most recent findings** ([2026-08-31 — Day 14: the Llama-3.1-8B detailed grid closes the rubric axis (pre-registration first)](slm-judge-audit/research/NOTES.md#2026-08-31--day-14-the-llama-31-8b-detailed-grid-closes-the-rubric-axis-pre-registration-first)):
 
 - Finding 48 — the rubric axis closes at seven judges: the λ|s|/σ ordering survives its out-of-sample test, while every simpler regularity around it fails cross-family.
 - Finding 49 — at 8B the detailed rubric contracts signal faster than bias, and for the first time the lever's purchase is negative: single-call accuracy falls while the symmetrized verdict doesn't move.
-
-[Full entry →](slm-judge-audit/research/NOTES.md#2026-08-31--day-14-the-llama-31-8b-detailed-grid-closes-the-rubric-axis-pre-registration-first)
 <!-- latest-end -->
 
 ## Current flagship — `slm-judge-audit`
