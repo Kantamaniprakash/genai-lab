@@ -46,6 +46,7 @@
     ],
     "mean": 2.048119835853577,
     "median": 1.9576897621154785,
+    "median_abs": 1.9576897621154785,
     "sd": 0.9178907463488181
   },
   "bootstrap_seed": 0,
@@ -100,6 +101,152 @@
   },
   "raw_acc_chosen_first": 0.9783333333333334,
   "raw_acc_rejected_first": 0.05,
+  "sign_length_agreement": {
+    "by_category": {
+      "Chat": {
+        "agree": 0.8611111111111112,
+        "n_excluded": 0,
+        "n_used": 72
+      },
+      "Chat Hard": {
+        "agree": 0.6813186813186813,
+        "n_excluded": 1,
+        "n_used": 91
+      },
+      "Reasoning": {
+        "agree": 0.484304932735426,
+        "n_excluded": 65,
+        "n_used": 223
+      },
+      "Safety": {
+        "agree": 0.4864864864864865,
+        "n_excluded": 0,
+        "n_used": 148
+      }
+    },
+    "by_subset": {
+      "alpacaeval-easy": {
+        "agree": 1.0,
+        "n_excluded": 0,
+        "n_used": 20
+      },
+      "alpacaeval-hard": {
+        "agree": 1.0,
+        "n_excluded": 0,
+        "n_used": 19
+      },
+      "alpacaeval-length": {
+        "agree": 0.8947368421052632,
+        "n_excluded": 0,
+        "n_used": 19
+      },
+      "donotanswer": {
+        "agree": 0.5555555555555556,
+        "n_excluded": 0,
+        "n_used": 27
+      },
+      "hep-cpp": {
+        "agree": 0.44,
+        "n_excluded": 8,
+        "n_used": 25
+      },
+      "hep-go": {
+        "agree": 0.4090909090909091,
+        "n_excluded": 11,
+        "n_used": 22
+      },
+      "hep-java": {
+        "agree": 0.42857142857142855,
+        "n_excluded": 12,
+        "n_used": 21
+      },
+      "hep-js": {
+        "agree": 0.38095238095238093,
+        "n_excluded": 12,
+        "n_used": 21
+      },
+      "hep-python": {
+        "agree": 0.64,
+        "n_excluded": 8,
+        "n_used": 25
+      },
+      "hep-rust": {
+        "agree": 0.3684210526315789,
+        "n_excluded": 14,
+        "n_used": 19
+      },
+      "llmbar-adver-GPTInst": {
+        "agree": 0.8421052631578947,
+        "n_excluded": 0,
+        "n_used": 19
+      },
+      "llmbar-adver-GPTOut": {
+        "agree": 0.3,
+        "n_excluded": 0,
+        "n_used": 10
+      },
+      "llmbar-adver-manual": {
+        "agree": 0.7777777777777778,
+        "n_excluded": 0,
+        "n_used": 9
+      },
+      "llmbar-adver-neighbor": {
+        "agree": 0.7777777777777778,
+        "n_excluded": 0,
+        "n_used": 27
+      },
+      "llmbar-natural": {
+        "agree": 0.47368421052631576,
+        "n_excluded": 1,
+        "n_used": 19
+      },
+      "math-prm": {
+        "agree": 0.5333333333333333,
+        "n_excluded": 0,
+        "n_used": 90
+      },
+      "mt-bench-easy": {
+        "agree": 0.5,
+        "n_excluded": 0,
+        "n_used": 6
+      },
+      "mt-bench-hard": {
+        "agree": 0.8571428571428571,
+        "n_excluded": 0,
+        "n_used": 7
+      },
+      "mt-bench-med": {
+        "agree": 0.375,
+        "n_excluded": 0,
+        "n_used": 8
+      },
+      "refusals-dangerous": {
+        "agree": 0.25,
+        "n_excluded": 0,
+        "n_used": 20
+      },
+      "refusals-offensive": {
+        "agree": 0.4,
+        "n_excluded": 0,
+        "n_used": 20
+      },
+      "xstest-should-refuse": {
+        "agree": 0.3548387096774194,
+        "n_excluded": 0,
+        "n_used": 31
+      },
+      "xstest-should-respond": {
+        "agree": 0.66,
+        "n_excluded": 0,
+        "n_used": 50
+      }
+    },
+    "overall": {
+      "agree": 0.5692883895131086,
+      "n_excluded": 66,
+      "n_used": 534
+    }
+  },
   "store": "llama-3.2-3b__detailed",
   "sym_acc": {
     "ci95": [

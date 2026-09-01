@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.analysis import assemble_pairs, summarize_pairs  # noqa: E402
+from src.analysis import assemble_pairs, sign_length_agreement, summarize_pairs  # noqa: E402
 from src.baselines import summarize_baselines  # noqa: E402
 from src.data import SUBSET_TO_CATEGORY, fetch, load_rewardbench  # noqa: E402
 from src.judge import RESULTS_DIR, load_records  # noqa: E402
@@ -55,6 +55,27 @@ def summarize_store(path: Path, items_by_id: dict) -> dict:
             "median_abs_s": sorted(abs(p.s) for p in group)[len(group) // 2],
         }
         for cat, group in sorted(by_cat.items())
+    }
+    # The sign(s)-vs-length lean, tie-excluded (the finding-10 convention the
+    # report quotes per store). Until now this came from an uncommitted
+    # store-join re-run each session; it belongs in the committed summary.
+    def dlen_of(item_id: str) -> int:
+        item = items_by_id[item_id]
+        return len(item.chosen) - len(item.rejected)
+
+    by_subset: dict[str, list] = {}
+    for pair in pairs:
+        by_subset.setdefault(pair.item_id.split("/", 1)[0], []).append(pair)
+    summary["sign_length_agreement"] = {
+        "overall": sign_length_agreement(pairs, dlen_of),
+        "by_category": {
+            cat: sign_length_agreement(group, dlen_of)
+            for cat, group in sorted(by_cat.items())
+        },
+        "by_subset": {
+            sub: sign_length_agreement(group, dlen_of)
+            for sub, group in sorted(by_subset.items())
+        },
     }
     return summary
 

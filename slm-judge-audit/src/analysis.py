@@ -366,6 +366,32 @@ def subset_view(
     }
 
 
+def sign_length_agreement(
+    pairs: Sequence[SwapPair], dlen_of: Callable[[str], int]
+) -> dict:
+    """Tie-excluded agreement between the preference sign and the length sign.
+
+    The audit's sign(s)-vs-length convention (finding 10): over items whose
+    two responses differ in length and whose preference is nonzero, the
+    fraction where the order-invariant preference points at the longer
+    response. Both kinds of tie are *excluded*, not scored half — the number
+    answers "when the judge expresses a preference between unequal-length
+    responses, how often is it for the longer one?", and a half-credit tie
+    term would dilute exactly the lean it measures. ``dlen_of`` maps
+    item_id -> (len(chosen) − len(rejected)); sign(s) > 0 prefers chosen, so
+    agreement is sign(s) == sign(dlen).
+    """
+    signs = np.array([np.sign(p.s) for p in pairs])
+    dlens = np.array([np.sign(dlen_of(p.item_id)) for p in pairs])
+    used = (signs != 0) & (dlens != 0)
+    n_used = int(used.sum())
+    return {
+        "agree": float(np.mean(signs[used] == dlens[used])) if n_used else None,
+        "n_used": n_used,
+        "n_excluded": int(len(pairs) - n_used),
+    }
+
+
 def summarize_pairs(pairs: Sequence[SwapPair], n_boot: int = 10_000, seed: int = 0) -> dict:
     """The standard quick-look block for one (model, rubric) store."""
     if not pairs:
@@ -398,6 +424,7 @@ def summarize_pairs(pairs: Sequence[SwapPair], n_boot: int = 10_000, seed: int =
         "bias_b": {
             "mean": float(b_values.mean()),
             "median": float(np.median(b_values)),
+            "median_abs": float(np.median(np.abs(b_values))),
             "sd": float(b_values.std(ddof=1)),
             "iqr": [float(np.quantile(b_values, 0.25)), float(np.quantile(b_values, 0.75))],
             "frac_positive": float(np.mean(b_values > 0)),

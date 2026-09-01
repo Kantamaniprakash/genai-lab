@@ -46,6 +46,7 @@
     ],
     "mean": 0.15136083285013835,
     "median": 0.23435735702514648,
+    "median_abs": 2.7755231857299805,
     "sd": 4.889996441873601
   },
   "bootstrap_seed": 0,
@@ -100,6 +101,152 @@
   },
   "raw_acc_chosen_first": 0.7616666666666667,
   "raw_acc_rejected_first": 0.8,
+  "sign_length_agreement": {
+    "by_category": {
+      "Chat": {
+        "agree": 0.8194444444444444,
+        "n_excluded": 0,
+        "n_used": 72
+      },
+      "Chat Hard": {
+        "agree": 0.4835164835164835,
+        "n_excluded": 1,
+        "n_used": 91
+      },
+      "Reasoning": {
+        "agree": 0.4170403587443946,
+        "n_excluded": 65,
+        "n_used": 223
+      },
+      "Safety": {
+        "agree": 0.4391891891891892,
+        "n_excluded": 0,
+        "n_used": 148
+      }
+    },
+    "by_subset": {
+      "alpacaeval-easy": {
+        "agree": 0.95,
+        "n_excluded": 0,
+        "n_used": 20
+      },
+      "alpacaeval-hard": {
+        "agree": 1.0,
+        "n_excluded": 0,
+        "n_used": 19
+      },
+      "alpacaeval-length": {
+        "agree": 0.8421052631578947,
+        "n_excluded": 0,
+        "n_used": 19
+      },
+      "donotanswer": {
+        "agree": 0.6296296296296297,
+        "n_excluded": 0,
+        "n_used": 27
+      },
+      "hep-cpp": {
+        "agree": 0.64,
+        "n_excluded": 8,
+        "n_used": 25
+      },
+      "hep-go": {
+        "agree": 0.5454545454545454,
+        "n_excluded": 11,
+        "n_used": 22
+      },
+      "hep-java": {
+        "agree": 0.6666666666666666,
+        "n_excluded": 12,
+        "n_used": 21
+      },
+      "hep-js": {
+        "agree": 0.38095238095238093,
+        "n_excluded": 12,
+        "n_used": 21
+      },
+      "hep-python": {
+        "agree": 0.52,
+        "n_excluded": 8,
+        "n_used": 25
+      },
+      "hep-rust": {
+        "agree": 0.47368421052631576,
+        "n_excluded": 14,
+        "n_used": 19
+      },
+      "llmbar-adver-GPTInst": {
+        "agree": 0.3684210526315789,
+        "n_excluded": 0,
+        "n_used": 19
+      },
+      "llmbar-adver-GPTOut": {
+        "agree": 0.4,
+        "n_excluded": 0,
+        "n_used": 10
+      },
+      "llmbar-adver-manual": {
+        "agree": 0.3333333333333333,
+        "n_excluded": 0,
+        "n_used": 9
+      },
+      "llmbar-adver-neighbor": {
+        "agree": 0.5925925925925926,
+        "n_excluded": 0,
+        "n_used": 27
+      },
+      "llmbar-natural": {
+        "agree": 0.47368421052631576,
+        "n_excluded": 1,
+        "n_used": 19
+      },
+      "math-prm": {
+        "agree": 0.23333333333333334,
+        "n_excluded": 0,
+        "n_used": 90
+      },
+      "mt-bench-easy": {
+        "agree": 0.5,
+        "n_excluded": 0,
+        "n_used": 6
+      },
+      "mt-bench-hard": {
+        "agree": 0.7142857142857143,
+        "n_excluded": 0,
+        "n_used": 7
+      },
+      "mt-bench-med": {
+        "agree": 0.25,
+        "n_excluded": 0,
+        "n_used": 8
+      },
+      "refusals-dangerous": {
+        "agree": 0.0,
+        "n_excluded": 0,
+        "n_used": 20
+      },
+      "refusals-offensive": {
+        "agree": 0.35,
+        "n_excluded": 0,
+        "n_used": 20
+      },
+      "xstest-should-refuse": {
+        "agree": 0.2903225806451613,
+        "n_excluded": 0,
+        "n_used": 31
+      },
+      "xstest-should-respond": {
+        "agree": 0.64,
+        "n_excluded": 0,
+        "n_used": 50
+      }
+    },
+    "overall": {
+      "agree": 0.4887640449438202,
+      "n_excluded": 66,
+      "n_used": 534
+    }
+  },
   "store": "qwen2.5-7b__minimal",
   "sym_acc": {
     "ci95": [

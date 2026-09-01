@@ -125,6 +125,7 @@ def test_summarize_pairs_block():
     assert summary["compliance_rate"] == pytest.approx(2 / 3)
     # b values: 2.0, 0.0, 0.5; s values: 1.0, 0.5, -1.5
     assert summary["bias_b"]["mean"] == pytest.approx((2.0 + 0.0 + 0.5) / 3)
+    assert summary["bias_b"]["median_abs"] == pytest.approx(0.5)
     assert summary["preference_s"]["median_abs"] == pytest.approx(1.0)
     assert summary["raw_acc_chosen_first"] == pytest.approx(2 / 3)
     assert summary["raw_acc_rejected_first"] == pytest.approx(1 / 3)
@@ -133,6 +134,32 @@ def test_summarize_pairs_block():
     assert summary["frac_bias_dominates"] == pytest.approx(1 / 3)
     with pytest.raises(ValueError):
         summarize_pairs([])
+
+
+def test_sign_length_agreement_excludes_both_tie_kinds():
+    from src.analysis import sign_length_agreement
+
+    pairs = [
+        SwapPair(item_id="i/1", z_cf=2.0, z_rf=0.0, compliant_both=True, mass_min=0.9),   # s=+1
+        SwapPair(item_id="i/2", z_cf=0.0, z_rf=2.0, compliant_both=True, mass_min=0.9),   # s=-1
+        SwapPair(item_id="i/3", z_cf=1.0, z_rf=-1.0, compliant_both=True, mass_min=0.9),  # s=+1
+        SwapPair(item_id="i/4", z_cf=1.0, z_rf=1.0, compliant_both=True, mass_min=0.9),   # s=0: excluded
+        SwapPair(item_id="i/5", z_cf=3.0, z_rf=-3.0, compliant_both=True, mass_min=0.9),  # dlen=0: excluded
+    ]
+    dlens = {"i/1": 40, "i/2": 25, "i/3": -10, "i/4": 5, "i/5": 0}
+    view = sign_length_agreement(pairs, dlens.__getitem__)
+    # Used items: i/1 prefers chosen and chosen is longer (agree); i/2
+    # prefers rejected while chosen is longer (disagree); i/3 prefers chosen
+    # while chosen is shorter (disagree).
+    assert view["n_used"] == 3
+    assert view["n_excluded"] == 2
+    assert view["agree"] == pytest.approx(1 / 3)
+    # All-tie input reports no agreement number rather than a fabricated one.
+    empty = sign_length_agreement(
+        [SwapPair(item_id="i/6", z_cf=1.0, z_rf=1.0, compliant_both=True, mass_min=0.9)],
+        {"i/6": 12}.__getitem__,
+    )
+    assert empty["agree"] is None and empty["n_used"] == 0
 
 
 def test_two_sample_delta_ci_detects_group_gap():
