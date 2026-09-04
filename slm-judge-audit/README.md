@@ -11,7 +11,8 @@ done; findings 36–49 landed 2026-08-27/31, alongside the
 results-narrative restructure ([The scaling arc](#the-scaling-arc)).
 Harness: runner, analysis core, floors, value-over-length probe, calibration,
 bias-structure test, per-subset view, cross-judge table, coverage-balanced
-scheduler, paired rubric analysis with a fragility model; 133 tests. Seven
+scheduler, paired rubric analysis with a fragility model, clean-tree
+reproduction audit; 140 tests. Seven
 full grids on the same 600-item stratified sample × both orders (Qwen2.5
 0.5B/1.5B/3B/7B and Llama-3 1B/3B/8B) plus seven `detailed`-rubric grids —
 findings 1–49 below, cross-cut in
@@ -53,7 +54,10 @@ accuracy while the two-call symmetrized verdict doesn't move.
 Phase 4 is in progress: the coherence pass is done (2026-09-01 — every
 inline number in this report verified against the committed summaries, and
 the quoted-but-uncommitted sign(s)-vs-length join promoted into the
-per-store summary); next is the clean-environment reproduction audit.*
+per-store summary), and the reproduction audit landed 2026-09-03
+(`experiments/reproduce.py` regenerates all 61 regenerable artifacts from
+a clean copy of HEAD and byte-compares; its first run reproduced 62/63 and
+caught one stale figure, re-rendered below); next is release polish.*
 
 ## Abstract
 
@@ -354,15 +358,19 @@ different benchmarks.
 
 ![what the item prefix does to every judge](results/figures/prefix_skew__minimal.png)
 
-*Every judge's symmetrized accuracy on the full sample and on the 45 items the
-in-flight 7B grid had finished, same items on both sides. The restriction is
-not a uniform optimism: it moves Llama-3.2-3B by +0.259 and Qwen2.5-0.5B by
-−0.013, reordering the field. The dashed line is the trivial
+*Symmetrized accuracy on the full sample and on the 45 items the in-flight 7B
+grid had finished, same items on both sides, for every judge in the day-9
+interim read (Llama-3.1-8B postdates it). The restriction is not a uniform
+optimism: it moves Llama-3.2-3B by +0.259 and Qwen2.5-0.5B by −0.013,
+reordering the field. The dashed line is the trivial
 pick-the-longer-response floor, which swings further than any judge — from
-0.425, far below chance, to 0.978 — where it outscores all six judges.
-Qwen2.5-7B has only a right-hand point because, at the time of this snapshot,
-its full-sample row did not exist yet (the grid completed 2026-08-26; its
-full-sample numbers are in the table above).*
+0.425, far below chance, to 0.978 — where it outscores all six judges in
+the panel. Qwen2.5-7B's own left-hand point postdates the snapshot (its grid completed
+2026-08-26): +0.119, from 0.837 on the full sample to 0.956 on its own
+prefix. The first rendering of this panel predated that completion and
+showed 7B as a right-hand point only; the 2026-09-03 reproduction audit
+caught the stale figure and this is the re-render from the same pinned
+interim read.*
 
 The first remedy was in the reading rather than the running:
 `python -m experiments.master_table --restrict-to qwen2.5-7b` cuts every judge
@@ -1797,20 +1805,21 @@ src/rubric_pair.py   paired rubric-sensitivity analysis: per-item deltas,
 experiments/      run_grid, summarize, master_table, prefix_skew,
                   schedule_coverage, make_figures, compliance_view,
                   scaling_curve, length_probe, calibration, bias_model,
-                  subset_view, rubric_view, rubric_fragility
+                  subset_view, rubric_view, rubric_fragility, reproduce
+                  (the clean-tree reproduction audit)
 results/raw/      one JSONL store per (model, rubric) + provenance sidecar
 results/summary/  quick-look JSON per store (+ __compliance, length_probe,
                   calibration, bias_model, subset_view, rubric_pair,
                   rubric_fragility, master_table — the last three also
                   rendered as the markdown tables the README embeds)
 results/figures/  committed PNGs, regenerable from raw stores
-tests/            133 tests, 1 skipped without a pinned GGUF present
+tests/            140 tests, 1 skipped without a pinned GGUF present
                   (schema, templates, readout arithmetic, store
                   resume, execution-order proportionality, decomposition,
                   bootstrap, floors, compliance view, length probe,
                   calibration, bias model, subset view, cross-judge table,
                   rubric pairing and fragility fit, figure layout,
-                  model smoke)
+                  model smoke, reproduction-audit manifest coverage)
 research/NOTES.md living research log
 ```
 
@@ -1819,7 +1828,9 @@ research/NOTES.md living research log
 ```bash
 uv sync                      # analysis deps (numpy, pyarrow, matplotlib)
 uv run python -m src.data    # fetch pinned parquet, print composition
-uv run --group dev pytest    # 133 tests (1 skipped without a GGUF)
+uv run --group dev pytest    # 140 tests (1 skipped without a GGUF)
+uv run python -m experiments.reproduce   # reproduction audit: regenerate all 61 regenerable
+                                         # artifacts from a clean copy of HEAD, byte-compare
 uv sync --group judge        # llama-cpp-python (compiles ~5 min on 4 cores)
 # download the pinned GGUF named in src/judge.py MODELS into models/, then:
 uv run python -m experiments.run_grid --model qwen2.5-0.5b --rubric minimal --n 600 --seed 0
@@ -1838,6 +1849,27 @@ uv run python -m experiments.subset_view       # per-subset heterogeneity forest
 uv run python -m experiments.rubric_view       # paired rubric-sensitivity view (needs both rubrics)
 uv run python -m experiments.rubric_fragility  # perturbation-model fit + fragility figure
 ```
+
+`experiments/reproduce.py` is the reproduction audit: it extracts
+`git archive HEAD` into a scratch directory, deletes every regenerable
+artifact under `results/summary/` and `results/figures/`, seeds the pinned
+parquet (whose SHA256 every generator re-verifies), replays the manifest of
+25 generator invocations against the committed raw stores, and
+byte-compares all 63 committed artifacts — 61 regenerated, plus the two
+day-9 interim master-table files verified as untouched pinned history. The
+manifest is enforced in both directions (an uncovered committed artifact
+fails the audit exactly like a drifted one), and
+`tests/test_reproduce.py` pins it to the committed artifact set so it
+cannot rot silently. Tables are deterministic end-to-end (fixed bootstrap
+seeds) and must reproduce byte-identically on any machine running the
+locked dependency set; figure PNG bytes additionally depend on the font
+stack beneath the pinned matplotlib, so on a different OS figure drift
+means "re-render and compare visually" (`--tables-only` restricts the
+audit to the tables). The audit's first full run (2026-09-03) reproduced
+62 of 63 artifacts byte-for-byte and caught the one that didn't: the
+prefix-skew panel (finding 26's figure), rendered while the 7B grid was in flight and
+never re-rendered after the grid completed — fixed by re-rendering from
+the same pinned inputs, which is the panel now committed.
 
 ## References
 

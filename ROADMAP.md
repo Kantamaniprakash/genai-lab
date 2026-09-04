@@ -4,7 +4,7 @@ This lab runs one flagship research project at a time, worked daily until it wou
 survive review by a demanding referee. Everything here is real: every number in a
 writeup comes from an experiment actually run in this repo.
 
-## Current flagship: `slm-judge-audit` — started 2026-07-17, phase 4 (writeup: coherence pass done 2026-09-01, reproduction audit next; data collection complete — phase 2 closed 2026-08-26, phase 3 closed 2026-08-31)
+## Current flagship: `slm-judge-audit` — started 2026-07-17, phase 4 (writeup: coherence pass done 2026-09-01, reproduction audit done 2026-09-03, release polish next; data collection complete — phase 2 closed 2026-08-26, phase 3 closed 2026-08-31)
 
 **Question.** How reliable are small open-weight LLMs (0.5B–8B, the sizes people
 actually deploy for cheap large-scale evaluation) as zero-shot pairwise judges —
@@ -185,8 +185,17 @@ instruction-following axis for free. Pinned revision + SHA256, verified at load.
    uncommitted sign(s)-vs-length store-join promoted into the per-store
    summary (`sign_length_agreement`, with `bias_b.median_abs` alongside),
    the stale master-table caption regenerated, and the abstract extended to
-   the completed-audit story. Remaining: the clean-environment
-   `experiments/reproduce.py` audit.)*
+   the completed-audit story. 2026-09-03: the reproduction audit landed —
+   `experiments/reproduce.py` extracts `git archive HEAD` into a scratch
+   tree, wipes and regenerates all 61 regenerable artifacts from the
+   committed raw stores, and byte-compares with two-way manifest coverage
+   (the two day-9 interim master-table files verified as pinned history);
+   its first run reproduced 62/63 and caught the stale prefix-skew panel,
+   rendered day 12 while the 7B grid was in flight and never re-rendered
+   after the grid closed — re-rendered from the same pinned inputs, with
+   the README caption corrected to match. 140 tests. Remaining: release
+   polish (the `rag-chunking-bench` closing-day checklist), then the
+   flagship closes and the next project comes off the backlog.)*
 
 ## Completed flagships
 

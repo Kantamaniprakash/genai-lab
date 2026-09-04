@@ -2118,3 +2118,130 @@ committed provenance of the sign-length row. ROADMAP phase-4 line updated.
 3. After the audit passes: release polish (the `rag-chunking-bench`
    closing-day checklist), then the flagship is done and the next project
    comes off the ROADMAP backlog.
+
+## 2026-09-03 — Day 16: the reproduction audit lands — 62/63 byte-identical, and the one drift is the tool earning its keep
+
+Fresh environment (`uv sync`, `src.data` fetch with the SHA256 pin
+passing, 132 passed + 1 skipped at session start). The day's brief was the
+day-15 plan: `experiments/reproduce.py`, the clean-environment
+reproduction audit, in the `rag-chunking-bench` mold.
+
+### Design: clean-tree subprocess replay, not an `--out-dir` redirect
+
+The `rag-chunking-bench` audit redirected each generator's output
+directory and ran them in-process. That shape does not transfer here:
+none of the 13 generators takes `--out-dir`, several *read* what earlier
+generators *write* into `results/summary/` (`master_table` reads
+`length_probe__minimal.json` for its caption verdict; `prefix_skew` reads
+the master-table JSON plus the pinned interim JSON), and retrofitting a
+redirect into 13 modules is a wide diff that still would not test what
+actually needs testing — that the *committed* code produces the committed
+artifacts. So the audit makes the stronger claim directly:
+
+1. extract `git archive HEAD` into a scratch tree (so an uncommitted
+   working-tree edit can never sneak into the regeneration; the audit
+   warns if `src/` or `experiments/` is dirty);
+2. snapshot the bytes of all 63 committed artifacts, then delete the 61
+   regenerable ones from the scratch tree — a generator that silently
+   writes nothing surfaces as MISSING instead of passing on the stale
+   copy it would otherwise find in place;
+3. seed the pinned parquet (every generator's `fetch()` re-verifies the
+   SHA256 either way, so seeding is integrity-equivalent to downloading —
+   the day-15 note about `summarize` needing the length join is covered);
+4. replay the manifest — 25 generator invocations — as subprocesses
+   inside the scratch tree;
+5. byte-compare, with coverage enforced in *both* directions: DRIFT and
+   MISSING as usual, UNCOVERED for a committed artifact no manifest step
+   claims, UNEXPECTED for a generated file no step claims, and TOUCHED
+   for pinned history a step overwrote. UNCOVERED is the day-15 lesson
+   (the stale `master_table__minimal.md` caption) made structural: an
+   artifact cannot be committed here without the audit knowing how to
+   regenerate it.
+
+Two files are pinned history rather than regenerable outputs:
+`master_table__minimal__interim_qwen2.5-7b.{json,md}` are the day-9
+matched interim read taken at 134/1200 judgments; the completed 7B store
+cannot re-produce that restriction set, so the audit verifies the pair
+survives untouched, and `prefix_skew` consumes the JSON as its pinned
+input. Two ordering decisions are load-bearing and now tested:
+`compliance_view` and `make_figures` run per-store over the seven minimal
+stores (a bare sweep would emit the never-committed detailed-rubric
+views and fail as UNEXPECTED — which is correct, and the manifest should
+say so rather than trip on it), and `length_probe` runs *before*
+`master_table`, the reverse of the README's listing order, because the
+caption verdict reads the probe summary — regenerating in README order
+rebuilds the exact staleness day 15 caught by hand.
+`tests/test_reproduce.py` pins the manifest to the committed artifact set
+(claimed ∪ pinned must equal the on-disk listing, each artifact claimed
+exactly once, every module importable, the ordering constraint explicit);
+140 tests.
+
+### First run: FAIL — and the failure is a real catch
+
+The first full audit reproduced **62 of 63 artifacts byte-for-byte** —
+every summary JSON, every markdown table, and 27 of 28 figures, across
+subprocess replays of all 25 steps (~35 min, the 10,000-resample
+bootstrap steps dominate). The one failure:
+
+    DRIFT  results/figures/prefix_skew__minimal.png
+           (committed 166600 B, regenerated 173912 B)
+
+Diagnosis, in elimination order. Nondeterminism: ruled out — two renders
+in fresh interpreters hash identically (SHA256
+`ce78e79d…c58ec`), equal to the audit's regeneration. Inputs: ruled
+out — the full master-table JSON it reads reproduces byte-identically and
+the interim JSON is pinned. Code: ruled out — `prefix_skew.py` is
+unchanged since the commit carrying the PNG. What remains is staleness:
+the committed panel was rendered on day 12, while the 7B grid stood
+in flight, so it drew Qwen2.5-7B as a right-hand "(in flight)" point
+with no full-sample partner and no shift annotation. The grid closed
+2026-08-26 — and the panel was never re-rendered. The corrected render
+draws the completed 7B pair: 0.837 on the full sample → 0.956 on its own
+45-item prefix, a +0.119 shift, labeled like every other judge. Same
+data story as before (the prefix is composition, not information), but
+the figure now agrees with the tables beside it. Re-rendered in place
+from the same pinned inputs; the README caption — which had documented
+the missing point as a property of the snapshot — is rewritten to match,
+and notes the audit catch.
+
+Worth recording for the cross-OS caveat: all 27 other PNGs reproduced
+byte-identically in a fresh container, so on this locked stack
+(matplotlib from `uv.lock`, DejaVu fonts) the font-stack concern is
+dormant; `--tables-only` remains the honest mode on any other OS.
+
+### Second run, after the fix
+
+A DRIFT line for an artifact whose working-tree copy already matches the
+regeneration now says so explicitly ("working tree already matches the
+regeneration; commit it") — the audit distinguishes "stale and unfixed"
+from "fixed, awaiting commit". The second full run confirms exactly that
+state: the prefix-skew DRIFT with the working-tree annotation and no
+other failure, i.e. the audit will report `OK: all 63` on the first run
+after this session's changes are committed — the working-tree panel's
+SHA256 equals the audit's own regeneration, and the other 62 artifacts
+already match HEAD.
+
+### Writeup deltas
+
+README: `Reproducing` gains the audit command and a paragraph on what
+the audit proves (and what it caught); the prefix-skew caption corrected
+as above; status header, layout section, and test counts updated
+(133 → 140). ROADMAP: phase-4 line updated (audit done 2026-09-03,
+release polish next).
+
+### Next steps (Day 17 — closing day)
+
+1. **Post-commit gate**: run `uv run python -m experiments.reproduce`
+   once on the committed tree; it must print `OK: all 63 artifacts
+   reproduce byte-for-byte from HEAD`. That line closes phase 4's audit
+   item for good.
+2. **Release polish**, the `rag-chunking-bench` closing-day checklist:
+   final end-to-end read of the README (abstract → limitations →
+   references) for coherence with the corrected figure; CHANGELOG entry
+   for the flagship (the 0.2.0 pattern: findings digest + tooling
+   digest); `scripts/sync_latest.py` for the landing page; verify the
+   Reproducing sequence verbatim in a clean shell.
+3. Then the flagship closes — 49 findings, seven judges, two rubrics,
+   16,800 judgments, a replayable byte-level audit — and the next
+   project comes off the ROADMAP backlog (hallucination measurement in
+   RAG answers is the standing front-runner).

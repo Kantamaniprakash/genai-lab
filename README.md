@@ -22,11 +22,11 @@ per-item results, everything measured on 4 CPU cores.
 
 <!-- auto-generated from research/NOTES.md by scripts/sync_latest.py; do not hand-edit -->
 
-**2026-09-01 — Day 15: phase 4 opens with the coherence pass — every number verified, one caption caught stale, one uncommitted join promoted**
+**2026-09-03 — Day 16: the reproduction audit lands — 62/63 byte-identical, and the one drift is the tool earning its keep**
 
-No new judgments; no GGUF on disk (the day-14 cleanup already happened) and none needed. `uv sync` (analysis deps only), 132 tests green at session start. The day's brief was the day-14 plan: read the README end to end against the store of 49 findings and verify every inline number against the committed summaries.
+Fresh environment (`uv sync`, `src.data` fetch with the SHA256 pin passing, 132 passed + 1 skipped at session start). The day's brief was the day-15 plan: `experiments/reproduce.py`, the clean-environment reproduction audit, in the `rag-chunking-bench` mold.
 
-[Full entry →](slm-judge-audit/research/NOTES.md#2026-09-01--day-15-phase-4-opens-with-the-coherence-pass--every-number-verified-one-caption-caught-stale-one-uncommitted-join-promoted)
+[Full entry →](slm-judge-audit/research/NOTES.md#2026-09-03--day-16-the-reproduction-audit-lands--6263-byte-identical-and-the-one-drift-is-the-tool-earning-its-keep)
 
 **Most recent findings** ([2026-08-31 — Day 14: the Llama-3.1-8B detailed grid closes the rubric axis (pre-registration first)](slm-judge-audit/research/NOTES.md#2026-08-31--day-14-the-llama-31-8b-detailed-grid-closes-the-rubric-axis-pre-registration-first)):
 
