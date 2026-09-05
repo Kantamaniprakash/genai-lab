@@ -7,12 +7,12 @@
 Hands-on experiments with current Gen AI techniques — RAG, agents, evals, fine-tuning and whatever's moving the field this week
 
 One flagship research project at a time, worked daily until it would survive a
-demanding referee: **71 numbered findings**, **497 tests**, and **50 committed
+demanding referee: **75 numbered findings**, **505 tests**, and **49 committed
 figures** across two studies so far — every number regenerable from committed
 per-item results, everything measured on 4 CPU cores.
 
 **Jump to:** [Latest](#latest-from-the-lab) ·
-[Current flagship](#current-flagship--slm-judge-audit) ·
+[Completed: SLM judge audit](#completed-flagship--slm-judge-audit) ·
 [Judge leaderboard](#the-judge-leaderboard) ·
 [Completed: RAG chunking](#completed-flagship--rag-chunking-bench) ·
 [How the lab works](#how-the-lab-works)
@@ -34,14 +34,16 @@ Fresh container: `uv sync` from the lock; suite green at session start (135 pass
 - Finding 49 — at 8B the detailed rubric contracts signal faster than bias, and for the first time the lever's purchase is negative: single-call accuracy falls while the symmetrized verdict doesn't move.
 <!-- latest-end -->
 
-## Current flagship — `slm-judge-audit`
+## Completed flagship — `slm-judge-audit`
 
 **[`slm-judge-audit`](slm-judge-audit/)** — a white-box reliability audit of
 small open-weight LLMs as pairwise judges. Every judgment is read out as verdict
 log-odds at a single token position, so each item's swap pair decomposes exactly
 into an order-invariant preference and a position-bias term — which turns
 position bias, debiasing gains, and calibration into things you can measure
-rather than assume. Findings 1–45 live in the
+rather than assume. Closed 2026-09-04 at **49 findings, 140 tests, and a
+release reproduction audit** that regenerates all 63 committed artifacts
+byte-for-byte; findings 1–49 live in the
 [project README](slm-judge-audit/README.md#results-at-a-glance); the
 day-by-day log is
 [`slm-judge-audit/research/NOTES.md`](slm-judge-audit/research/NOTES.md).
@@ -294,9 +296,10 @@ sampling seeds, both budget-boundary rules, two token units), and an honest
   checked against outcomes in the log.
 - **Reproducible by construction.** Pinned requirements and lockfiles, run
   scripts for every grid, committed per-item raw results, and figures that
-  regenerate from committed data (`rag-chunking-bench` closed with a
-  byte-level clean-environment reproduction audit; `slm-judge-audit` gets the
-  same treatment at close).
+  regenerate from committed data (both flagships closed with a byte-level
+  clean-environment reproduction audit — `rag-chunking-bench` on 2026-07-16,
+  `slm-judge-audit` on 2026-09-04 with all 63 artifacts reproducing
+  byte-for-byte from HEAD).
 - **Honest about scale.** Everything runs on 4 CPU cores and 16 GB RAM —
   models are audited in the Q4_K_M quantization people actually deploy at
   this scale, and what the hardware can't test is written down in
@@ -306,7 +309,7 @@ sampling seeds, both budget-boundary rules, two token units), and an honest
 
 | Path | What it is |
 |---|---|
-| [`slm-judge-audit/`](slm-judge-audit/) | **Current flagship** — white-box reliability audit of small LLM judges (findings 1–45, 132 tests) |
+| [`slm-judge-audit/`](slm-judge-audit/) | **Completed flagship** — white-box reliability audit of small LLM judges (49 findings, 140 tests, reproduction-audited) |
 | [`rag-chunking-bench/`](rag-chunking-bench/) | **Completed flagship** — budget-controlled RAG chunking benchmark (26 findings, 365 tests, reproduction-audited) |
 | [`ROADMAP.md`](ROADMAP.md) | Flagship phase plans, project rationale, and the research backlog |
 | [`scripts/`](scripts/) | Lab automation (README digest sync) |
