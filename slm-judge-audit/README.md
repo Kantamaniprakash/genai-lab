@@ -4,60 +4,18 @@
 position bias measured in log-odds, calibration, and value over trivial
 baselines, with paired bootstrap confidence intervals.**
 
-*Status: **data collection is complete** — the scaling grid (phase 2,
-closed 2026-08-26) and the rubric-sensitivity axis (phase 3, closed
-2026-08-31 with the pre-registered Llama-8B out-of-sample test) are both
-done; findings 36–49 landed 2026-08-27/31, alongside the
-results-narrative restructure ([The scaling arc](#the-scaling-arc)).
-Harness: runner, analysis core, floors, value-over-length probe, calibration,
-bias-structure test, per-subset view, cross-judge table, coverage-balanced
-scheduler, paired rubric analysis with a fragility model, clean-tree
-reproduction audit; 140 tests. Seven
-full grids on the same 600-item stratified sample × both orders (Qwen2.5
-0.5B/1.5B/3B/7B and Llama-3 1B/3B/8B) plus seven `detailed`-rubric grids —
-findings 1–49 below, cross-cut in
-[Results at a glance](#results-at-a-glance). Headlines:
-debiased judge quality is non-monotone in scale (0.568 → 0.502 → 0.742 →
-0.837 within the Qwen family — a 1.5B valley where the emergent preference is
-a verbosity preference that RewardBench punishes, then a monotone climb;
-Llama runs 0.555 → 0.652 → 0.723 with no valley), and at the top tier
-**family beats scale**: Llama-3.1-8B is statistically indistinguishable from
-Qwen2.5-3B at 2.7x the parameters and significantly below Qwen2.5-7B; the two
-judges whose content signal dominates their position bias (Qwen-7B at 26.8%
-|b| > |s|, Llama-8B at 33.5%) post the audit's two *highest* flip rates
-(0.732, 0.665), completing the demolition of flip-rate "consistency" — its
-extremes now belong to the worst-biased judges and the best ones; both
-families reverse bias *direction* with scale; four judges beat a fitted
-one-parameter length baseline (both 3Bs, 8B, and 7B by the largest margin —
-the only one significant in every category including adversarial Chat Hard,
-where Llama's hole persists to 8B: below chance at 3B, back to chance and
-no further at 8B); the additive-shift
-hypothesis behind cheap debiasing is rejected at every scale, and the share
-of the symmetrization gain a fitted one-call correction can recover *falls*
-as judges improve (68% at 0.5B → 47% at 3B → ~25% at 7B and 8B); and
-post-debiasing calibration remains a family property (Qwen overconfident at
-every size above 0.5B; Llama at worst mildly so at 8B). And on the new
-rubric axis, now closed at seven judges: at the two smallest scales,
-30–43% of symmetrized verdicts flip when only the rubric text changes —
-the prompt is a noise source of the same order as the content signal — at
-1B the rubric reverses the judge's bias direction and length orientation
-outright, and the fitted signal-to-perturbation ratio λ·med\|s\|/σ orders
-all seven observed flip rates strictly (0.432 → 0.068), surviving a
-pre-registered out-of-sample test at Llama-8B where every simpler
-regularity — raw \|s\| ordering, a λ plateau, \|s\|-scaled σ — fails
-cross-family; prompt-side debiasing peaks at Qwen-3B (Δ\|b\| −1.80,
-buying raw accuracy but no symmetrized gain), stops paying at 7B (it
-re-signs a balanced bias while everything else sits still), and at
-Llama-8B turns *harmful* for the first time: the rubric contracts signal
-faster than bias and costs a one-call deployment 4.5 points of raw
-accuracy while the two-call symmetrized verdict doesn't move.
-Phase 4 is in progress: the coherence pass is done (2026-09-01 — every
-inline number in this report verified against the committed summaries, and
-the quoted-but-uncommitted sign(s)-vs-length join promoted into the
-per-store summary), and the reproduction audit landed 2026-09-03
-(`experiments/reproduce.py` regenerates all 61 regenerable artifacts from
-a clean copy of HEAD and byte-compares; its first run reproduced 62/63 and
-caught one stale figure, re-rendered below); next is release polish.*
+*Status: **COMPLETE** — worked 2026-07-17 → 2026-09-04. Seven judges
+(Qwen2.5 0.5B/1.5B/3B/7B, Llama-3 1B/3B/8B) × two rubrics × both
+presentation orders, every grid on the same 600-item stratified RewardBench
+sample: 16,800 judgments, 49 findings
+([index](#findings-index)), cross-cut in
+[Results at a glance](#results-at-a-glance) and synthesized in
+[The scaling arc](#the-scaling-arc) and
+[The rubric axis](#the-rubric-axis--the-same-judges-under-a-different-prompt);
+the headline claims are in the [Abstract](#abstract) directly below. Every
+committed table and figure regenerates byte-for-byte from the committed raw
+stores in a clean copy of HEAD (`experiments/reproduce.py` — the release
+audit passed 2026-09-04: all 63 artifacts); 140 tests.*
 
 ## Abstract
 
@@ -1823,7 +1781,7 @@ tests/            140 tests, 1 skipped without a pinned GGUF present
 research/NOTES.md living research log
 ```
 
-## Reproducing (current state)
+## Reproducing
 
 ```bash
 uv sync                      # analysis deps (numpy, pyarrow, matplotlib)
@@ -1869,7 +1827,9 @@ audit to the tables). The audit's first full run (2026-09-03) reproduced
 62 of 63 artifacts byte-for-byte and caught the one that didn't: the
 prefix-skew panel (finding 26's figure), rendered while the 7B grid was in flight and
 never re-rendered after the grid completed — fixed by re-rendering from
-the same pinned inputs, which is the panel now committed.
+the same pinned inputs, which is the panel now committed. The release
+audit on the corrected tree (2026-09-04, fresh container, refetched data)
+passed: all 63 artifacts reproduce byte-for-byte from HEAD.
 
 ## References
 

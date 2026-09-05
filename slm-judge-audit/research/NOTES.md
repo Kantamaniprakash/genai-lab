@@ -2245,3 +2245,92 @@ release polish next).
    16,800 judgments, a replayable byte-level audit — and the next
    project comes off the ROADMAP backlog (hallucination measurement in
    RAG answers is the standing front-runner).
+
+## 2026-09-04 — Day 17: release — the audit gate is green and the flagship closes
+
+Fresh container: `uv sync` from the lock; suite green at session start
+(135 passed + 5 skipped — four of the skips are parquet-gated and run
+once `src.data` has fetched; after the fetch it is 139 passed + 1
+skipped, the GGUF-gated model smoke test). `src.data` refetched the
+pinned parquet with the SHA256 pin passing. The brief was day 16's
+closing-day list.
+
+### The gate
+
+`uv run python -m experiments.reproduce` against the committed tree
+(`e99bdbe`, the day-16 commit):
+
+    OK: all 63 artifacts reproduce byte-for-byte from HEAD
+
+All 25 manifest steps replayed as subprocesses inside a clean
+`git archive` extraction with a refetched parquet — the audit's first
+fully green run (day 16's two runs were the catch, 62/63 with the stale
+prefix-skew panel, and the fixed-awaiting-commit confirmation). The
+committed stores, code, and artifacts are now a fixed point of the
+pipeline, and phase 4's audit item closes. One caveat recorded rather
+than a wall-clock number: this container's clock stepped across midnight
+UTC mid-session, so the run's file timestamps are unusable for timing —
+a single bootstrap-heavy step (`length_probe`) measures 2m09s here, so
+the full replay again sits in the tens of minutes, consistent with
+day 16. (Re-running `length_probe` in the working tree afterwards left
+`git status` empty — the in-place regeneration is byte-identical, a free
+second witness to table determinism on this host.)
+
+### Release polish
+
+- **Final end-to-end read** of the README (abstract → limitations →
+  references) against the corrected figure. The archival record and both
+  synthesis sections read clean (their numbers were verified in the
+  day-15 coherence pass); the one genuinely stale element was the
+  *status header* — still a phase bulletin carrying its own headline
+  digest, duplicating the abstract at greater length. Rewritten as a
+  final status block (dates, scale, findings count, audit verdict, test
+  count) with the headline claims left to the abstract, which day 15
+  extended for exactly this. `## Reproducing (current state)` →
+  `## Reproducing`, its closing paragraph now recording the green
+  release audit alongside day 16's catch.
+- **CHANGELOG 0.3.0** in the 0.2.0 pattern: one digest per axis —
+  harness, scaling grid, flip-rate demolition, additive-shift test and
+  correction ladder, length probe, calibration/compliance signatures,
+  rubric axis with the fragility law, the coverage-balanced scheduler,
+  and the reproduction audit — each with its finding numbers.
+- **ROADMAP**: the flagship record moved under Completed flagships with
+  a new Outcome digest mirroring `rag-chunking-bench`'s (33 tables and
+  summaries + 30 figures = the 63 audited artifacts). The
+  `## Current flagship:` line stays pointed at `slm-judge-audit`, marked
+  COMPLETE, until selection day rewrites it — `scripts/sync_latest.py`
+  resolves the landing-page digest through that line, and the next
+  flagship does not exist yet.
+- **Landing page** synced from this entry with `scripts/sync_latest.py`
+  run locally, so the push carries the digest instead of leaving a
+  follow-up commit to the workflow.
+
+### The flagship closes
+
+2026-07-17 → 2026-09-04: 49 findings, seven judges × two rubrics × both
+orders on one pinned 600-item stratified sample — 16,800 judgments, all
+collected on 4 CPU cores; 140 tests; 63 committed artifacts that
+reproduce byte-for-byte from HEAD. The record also keeps what staying
+honest cost: one mid-run peek published and retracted (finding 26), one
+false resume-compatibility objection found and reversed (finding 27),
+and one stale committed figure caught by the audit that was built to
+catch exactly that (day 16).
+
+### Next steps (Day 18 — selection day)
+
+1. **Selection scan** for the next flagship, the protocol that opened
+   this one (2026-07-17): web-scan arXiv / Papers with Code / model
+   release notes for what the field genuinely cares about right now,
+   test each candidate against what this hardware can execute honestly,
+   and record the rationale in ROADMAP.md. The standing front-runner is
+   **hallucination measurement in RAG answers** (span-attribution
+   faithfulness scoring — the natural sequel to `rag-chunking-bench`,
+   and this audit's judge-reliability results bear directly on any
+   LLM-judge faithfulness scorer such a project would need as a
+   baseline). The backlog's other candidates (agent tool-call
+   reliability, retriever robustness to query noise, TSFM-vs-classical
+   backtesting) get a fresh look against the scan, not a default pass.
+2. If the scan confirms a topic, day 18 also lays the project skeleton:
+   directory, README (question, why-now, related work with
+   web-verified citations, planned phases), `research/NOTES.md` opened
+   with the selection rationale as entry one.

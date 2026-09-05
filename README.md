@@ -22,11 +22,11 @@ per-item results, everything measured on 4 CPU cores.
 
 <!-- auto-generated from research/NOTES.md by scripts/sync_latest.py; do not hand-edit -->
 
-**2026-09-03 — Day 16: the reproduction audit lands — 62/63 byte-identical, and the one drift is the tool earning its keep**
+**2026-09-04 — Day 17: release — the audit gate is green and the flagship closes**
 
-Fresh environment (`uv sync`, `src.data` fetch with the SHA256 pin passing, 132 passed + 1 skipped at session start). The day's brief was the day-15 plan: `experiments/reproduce.py`, the clean-environment reproduction audit, in the `rag-chunking-bench` mold.
+Fresh container: `uv sync` from the lock; suite green at session start (135 passed + 5 skipped — four of the skips are parquet-gated and run once `src.data` has fetched; after the fetch it is 139 passed + 1 skipped, the GGUF-gated model smoke test). `src.data` refetched the pinned parquet with the SHA256 pin passing. The brief was day 16's closing-day list.
 
-[Full entry →](slm-judge-audit/research/NOTES.md#2026-09-03--day-16-the-reproduction-audit-lands--6263-byte-identical-and-the-one-drift-is-the-tool-earning-its-keep)
+[Full entry →](slm-judge-audit/research/NOTES.md#2026-09-04--day-17-release--the-audit-gate-is-green-and-the-flagship-closes)
 
 **Most recent findings** ([2026-08-31 — Day 14: the Llama-3.1-8B detailed grid closes the rubric axis (pre-registration first)](slm-judge-audit/research/NOTES.md#2026-08-31--day-14-the-llama-31-8b-detailed-grid-closes-the-rubric-axis-pre-registration-first)):
 

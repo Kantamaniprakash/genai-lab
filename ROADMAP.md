@@ -4,7 +4,21 @@ This lab runs one flagship research project at a time, worked daily until it wou
 survive review by a demanding referee. Everything here is real: every number in a
 writeup comes from an experiment actually run in this repo.
 
-## Current flagship: `slm-judge-audit` — started 2026-07-17, phase 4 (writeup: coherence pass done 2026-09-01, reproduction audit done 2026-09-03, release polish next; data collection complete — phase 2 closed 2026-08-26, phase 3 closed 2026-08-31)
+## Current flagship: `slm-judge-audit` — COMPLETE (2026-07-17 → 2026-09-04); next-flagship selection is the next session's first task
+
+The audit closed 2026-09-04: 49 findings, seven judges, two rubrics, 16,800
+judgments, and a release reproduction audit that regenerates all 63 committed
+artifacts byte-for-byte from a clean copy of HEAD. Full report:
+`slm-judge-audit/README.md`; day-by-day log:
+`slm-judge-audit/research/NOTES.md`; complete record below under Completed
+flagships. The next session runs the same selection scan that opened this
+flagship (arXiv / Papers with Code / release notes, rationale recorded here)
+against the backlog; the standing front-runner is hallucination measurement
+in RAG answers.
+
+## Completed flagships
+
+### `slm-judge-audit` — 2026-07-17 to 2026-09-04, COMPLETE
 
 **Question.** How reliable are small open-weight LLMs (0.5B–8B, the sizes people
 actually deploy for cheap large-scale evaluation) as zero-shot pairwise judges —
@@ -37,6 +51,26 @@ human-verified chosen/rejected pairs across 23 subsets in 4 categories — which
 embeds the complete LLMBar meta-evaluation set (Zeng et al., ICLR 2024,
 arXiv:2310.07641) as its llmbar-* subsets, giving an adversarial
 instruction-following axis for free. Pinned revision + SHA256, verified at load.
+
+**Outcome.** 49 findings across the seven-judge scaling grid, five analysis
+axes, and the rubric-sensitivity axis — 16,800 judgments on one pinned
+600-item stratified sample. Headlines: debiased judge quality is
+non-monotone in scale (a 1.5B valley where the emergent preference is a
+verbosity preference the benchmark punishes) and the two family arcs never
+cross — family beats scale at the top tier; black-box flip-rate
+"consistency" is anti-correlated with the truth at both of its extremes;
+position bias is never an additive constant, and the share of the
+symmetrization gain a fitted one-call correction recovers falls as judges
+improve (68% → ~25%); a fitted one-parameter length baseline outscores
+every sub-3B judge; post-debiasing calibration is a family property; and
+verdict fragility under rubric change follows a fitted ratio λ·med|s|/σ
+that strictly orders all seven judges — confirmed out of sample on a
+pre-registered grid — while prompt-side debiasing never buys symmetrized
+quality and turns harmful at 8B. 140 tests; all 63 committed artifacts
+(33 tables and summaries, 30 figures) reproduce byte-for-byte from the committed
+raw stores in a clean copy of HEAD (`experiments/reproduce.py`, release
+audit green 2026-09-04). Full report: `slm-judge-audit/README.md`;
+day-by-day log: `slm-judge-audit/research/NOTES.md`.
 
 **Phases.**
 1. **Harness** — pinned data layer with category mapping and stratified
@@ -193,11 +227,13 @@ instruction-following axis for free. Pinned revision + SHA256, verified at load.
    its first run reproduced 62/63 and caught the stale prefix-skew panel,
    rendered day 12 while the 7B grid was in flight and never re-rendered
    after the grid closed — re-rendered from the same pinned inputs, with
-   the README caption corrected to match. 140 tests. Remaining: release
-   polish (the `rag-chunking-bench` closing-day checklist), then the
-   flagship closes and the next project comes off the backlog.)*
-
-## Completed flagships
+   the README caption corrected to match. 140 tests. 2026-09-04: release —
+   the post-commit audit gate passed on the committed tree (`OK: all 63
+   artifacts reproduce byte-for-byte from HEAD`, replaying all 25 manifest
+   steps in a fresh container with refetched data), final end-to-end read
+   of the report, status header rewritten to the completed-audit story,
+   CHANGELOG 0.3.0 entry, landing-page sync. **Phase 4 complete — flagship
+   closed.**)*
 
 ### `rag-chunking-bench` — 2026-07-03 to 2026-07-16, COMPLETE
 
