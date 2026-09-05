@@ -22,16 +22,11 @@ per-item results, everything measured on 4 CPU cores.
 
 <!-- auto-generated from research/NOTES.md by scripts/sync_latest.py; do not hand-edit -->
 
-**2026-09-04 — Day 17: release — the audit gate is green and the flagship closes**
+**2026-09-05 — Day 1: flagship selection, data reconnaissance, project skeleton**
 
-Fresh container: `uv sync` from the lock; suite green at session start (135 passed + 5 skipped — four of the skips are parquet-gated and run once `src.data` has fetched; after the fetch it is 139 passed + 1 skipped, the GGUF-gated model smoke test). `src.data` refetched the pinned parquet with the SHA256 pin passing. The brief was day 16's closing-day list.
+Selection day: the landscape scan picked the new flagship — a statistically careful, span-level audit of zero-training hallucination detectors for RAG answers on RAGTruth — over the backlog's other candidates (agent-reliability dropped: its gap closed in the 2026 benchmark wave). The corpus is pinned and verified, the reconnaissance numbers below fix the design's shape (spans are sub-sentence; base rates vary 6× by task and generator), and the skeleton — proposal README with verified citations, pinned fetch script, this log — is committed.
 
-[Full entry →](slm-judge-audit/research/NOTES.md#2026-09-04--day-17-release--the-audit-gate-is-green-and-the-flagship-closes)
-
-**Most recent findings** ([2026-08-31 — Day 14: the Llama-3.1-8B detailed grid closes the rubric axis (pre-registration first)](slm-judge-audit/research/NOTES.md#2026-08-31--day-14-the-llama-31-8b-detailed-grid-closes-the-rubric-axis-pre-registration-first)):
-
-- Finding 48 — the rubric axis closes at seven judges: the λ|s|/σ ordering survives its out-of-sample test, while every simpler regularity around it fails cross-family.
-- Finding 49 — at 8B the detailed rubric contracts signal faster than bias, and for the first time the lever's purchase is negative: single-call accuracy falls while the symmetrized verdict doesn't move.
+[Full entry →](rag-faithfulness-audit/research/NOTES.md#2026-09-05--day-1-flagship-selection-data-reconnaissance-project-skeleton)
 <!-- latest-end -->
 
 ## Completed flagship — `slm-judge-audit`
@@ -309,6 +304,7 @@ sampling seeds, both budget-boundary rules, two token units), and an honest
 
 | Path | What it is |
 |---|---|
+| [`rag-faithfulness-audit/`](rag-faithfulness-audit/) | **Current flagship** — statistically careful audit of zero-training hallucination detectors for RAG answers, span-level on RAGTruth (opened 2026-09-05) |
 | [`slm-judge-audit/`](slm-judge-audit/) | **Completed flagship** — white-box reliability audit of small LLM judges (49 findings, 140 tests, reproduction-audited) |
 | [`rag-chunking-bench/`](rag-chunking-bench/) | **Completed flagship** — budget-controlled RAG chunking benchmark (26 findings, 365 tests, reproduction-audited) |
 | [`ROADMAP.md`](ROADMAP.md) | Flagship phase plans, project rationale, and the research backlog |

@@ -4,17 +4,48 @@ This lab runs one flagship research project at a time, worked daily until it wou
 survive review by a demanding referee. Everything here is real: every number in a
 writeup comes from an experiment actually run in this repo.
 
-## Current flagship: `slm-judge-audit` — COMPLETE (2026-07-17 → 2026-09-04); next-flagship selection is the next session's first task
+## Current flagship: `rag-faithfulness-audit` — phase 1 (harness), started 2026-09-05
 
-The audit closed 2026-09-04: 49 findings, seven judges, two rubrics, 16,800
-judgments, and a release reproduction audit that regenerates all 63 committed
-artifacts byte-for-byte from a clean copy of HEAD. Full report:
-`slm-judge-audit/README.md`; day-by-day log:
-`slm-judge-audit/research/NOTES.md`; complete record below under Completed
-flagships. The next session runs the same selection scan that opened this
-flagship (arXiv / Papers with Code / release notes, rationale recorded here)
-against the backlog; the standing front-runner is hallucination measurement
-in RAG answers.
+**Question.** How well can *zero-training* detectors (lexical floors, small
+NLI cross-encoders, small open-weight LLM judges read white-box as verdict
+log-odds) flag hallucinated content in RAG answers at the span level — and
+how much of any published detector ranking survives protocol
+(example/span/char-level scoring) and statistical (paired bootstrap,
+trivial floors, calibration) scrutiny?
+
+**Why this, why now (selection scan 2026-09-05).** Faithfulness measurement
+is among the densest eval topics of 2026 — FaithJudge/Vectara leaderboard
+(arXiv:2505.04847), TRIVIA+ on detection-evaluation desiderata
+(arXiv:2605.11330), retromorphic claim verification (arXiv:2603.27752),
+token-level detection via internals (arXiv:2606.31033) — yet every published
+comparison is black-box point-estimate F1: no floors, no CIs, no
+calibration, and mutually incompatible scoring protocols. RAGTruth (ACL
+2024, arXiv:2401.00396) supplies human-annotated char-level hallucination
+spans, so ground truth needs no LLM; LettuceDetect (arXiv:2502.17125) is a
+CPU-runnable trained ceiling. White-box + small-scale + statistically
+careful is the same unclaimed corner the last audit owned, now aimed at
+grounding instead of preference — and both prior flagships feed it directly
+(span algebra + cluster bootstrap from `rag-chunking-bench`; single-token
+log-odds readout, calibration tooling, and the judge grid from
+`slm-judge-audit`). Day-1 reconnaissance (2,700-response test split, 943
+hallucinating, spans median 35 chars — sub-sentence, making the protocol
+axis structural) and the full rationale: `rag-faithfulness-audit/README.md`
+and `research/NOTES.md`.
+
+**Phases.**
+1. **Harness** — pinned data layer (fetch + SHA256 landed 2026-09-05);
+   offset-preserving sentence segmentation; span↔sentence alignment with
+   explicit matching rules; scoring protocols; result store; bootstrap.
+2. **Floors + lexical baselines** — flag-nothing/all/random + lexical
+   unsupported-content floors, with CIs.
+3. **NLI + small-judge grids** — the zero-training grid, scaling curve,
+   calibration; train-split thresholding.
+4. **Protocol-sensitivity axis** — all detectors × all protocols; ranking
+   stability; the sub-sentence granularity ceiling quantified.
+5. **Ceiling + error analysis** — LettuceDetect under the identical
+   protocol; stratified error anatomy (task, generator, label type).
+6. **Writeup + reproduction audit** — house style, byte-identical
+   regeneration from a clean tree.
 
 ## Completed flagships
 
@@ -334,14 +365,20 @@ rerankers remain out of scope on this hardware and are listed as limitations.
 
 ## Backlog (next flagships, roughly prioritized)
 
-- **Hallucination measurement in RAG answers** — span-attribution based
-  faithfulness scoring; natural sequel to the chunking bench.
-- **Agent tool-call reliability harness** — inject tool failures/latency and
-  measure recovery behavior of agent loops; ties into `data-analysis-agent`.
+- **Time-series foundation models vs. classical baselines** — evaluate on the
+  `Bitcoin-Price-Forecasting` data with proper backtesting protocol. Demoted
+  2026-09-05: feasible (small Chronos-family checkpoints run on CPU) and the
+  selection-bias methodology angle is live (arXiv:2510.13654), but community
+  pull is far below the faithfulness topic and a single-asset series is a
+  weak substrate for methodology claims.
 - **Retriever robustness to query noise** — typos, paraphrase, and entity-swap
   perturbations vs. retrieval degradation curves.
-- **Time-series foundation models vs. classical baselines** — evaluate on the
-  `Bitcoin-Price-Forecasting` data with proper backtesting protocol.
+- ~~**Agent tool-call reliability harness**~~ — dropped 2026-09-05: the gap
+  closed while it sat here. ReliabilityBench (arXiv:2601.06112),
+  ToolFailBench (arXiv:2607.04686), and ToolGym now cover
+  failure-injection reliability testing for agent loops, and honest
+  execution would need API-scale agents this environment can't run.
+  Record in `rag-faithfulness-audit/research/NOTES.md`, day 1.
 
 ## Weekly rhythm
 
