@@ -1,10 +1,13 @@
 version: 2
 updates:
+  # rag-chunking-bench is a completed, reproduction-audited flagship: its
+  # pins are frozen for reproducibility, so version-update PRs are disabled
+  # (limit 0). Security updates are unaffected and still open PRs.
   - package-ecosystem: "pip"
     directory: "/rag-chunking-bench"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
